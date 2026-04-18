@@ -1,0 +1,29 @@
+{
+  "name": "shiftscheduler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently --names \"backend,frontend\" --prefix-colors \"cyan,magenta\" \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "lint": "eslint backend/src frontend/src --ext .ts,.tsx",
+    "lint:fix": "eslint backend/src frontend/src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,cjs,mjs,json,css,md}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "prettier": "^3.3.0",
+    "typescript-eslint": "^8.58.0"
+  }
+}
