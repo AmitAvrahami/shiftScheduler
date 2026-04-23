@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
+import ConstraintPage from './pages/ConstraintPage';
 
 function App() {
   return (
@@ -27,6 +28,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="manager">
                 <UsersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/constraints"
+            element={
+              <ProtectedRoute>
+                <ConstraintPage />
               </ProtectedRoute>
             }
           />

@@ -1,4 +1,5 @@
 import type { AuthResponse, User } from '../types/auth';
+import type { Constraint, ConstraintEntry, ShiftDefinition } from '../types/constraint';
 
 const BASE = '/api/v1';
 
@@ -52,6 +53,33 @@ export const userApi = {
     return request(`/users/${id}/fixed-morning`, {
       method: 'PATCH',
       body: JSON.stringify({ isFixedMorningEmployee }),
+    });
+  },
+};
+
+export const shiftDefinitionApi = {
+  getActive(): Promise<{ success: boolean; definitions: ShiftDefinition[] }> {
+    return request('/shift-definitions');
+  },
+};
+
+export const constraintApi = {
+  getConstraints(weekId: string): Promise<{
+    success: boolean;
+    constraint: Constraint | null;
+    deadline: string;
+    isLocked: boolean;
+  }> {
+    return request(`/constraints/${weekId}`);
+  },
+
+  upsertConstraints(
+    weekId: string,
+    entries: ConstraintEntry[]
+  ): Promise<{ success: boolean; constraint: Constraint }> {
+    return request(`/constraints/${weekId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ entries }),
     });
   },
 };
