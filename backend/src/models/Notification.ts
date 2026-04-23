@@ -1,6 +1,10 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 
-export type NotificationType = 'schedule_published' | 'schedule_updated' | 'schedule_deleted';
+export type NotificationType =
+  | 'schedule_published'
+  | 'schedule_updated'
+  | 'schedule_deleted'
+  | 'constraint_updated';
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
@@ -19,7 +23,7 @@ const notificationSchema = new Schema<INotification>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: {
       type: String,
-      enum: ['schedule_published', 'schedule_updated', 'schedule_deleted'],
+      enum: ['schedule_published', 'schedule_updated', 'schedule_deleted', 'constraint_updated'],
       required: true,
     },
     title: { type: String, required: true, trim: true },

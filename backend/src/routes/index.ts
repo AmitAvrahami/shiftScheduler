@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import AppError from '../utils/AppError';
 import authRouter from './auth.routes';
 import userRouter from './user.routes';
+import constraintsRouter from './constraint.routes';
+import shiftDefinitionsRouter from './shiftDefinition.routes';
 
 const router = Router();
 
@@ -15,9 +17,9 @@ router.get('/health', (_req: Request, res: Response) => {
 
 router.use('/auth', authRouter);
 router.use('/users', userRouter);
-// router.use('/constraints', constraintsRouter)
+router.use('/constraints', constraintsRouter);
+router.use('/shift-definitions', shiftDefinitionsRouter);
 // router.use('/schedules', schedulesRouter)
-// router.use('/shift-definitions', shiftDefinitionsRouter)
 // router.use('/assignments', assignmentsRouter)
 // router.use('/notifications', notificationsRouter)
 // router.use('/audit-logs', auditLogsRouter)
