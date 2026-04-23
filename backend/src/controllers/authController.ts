@@ -26,6 +26,10 @@ const updateFixedMorningSchema = z.object({
   isFixedMorningEmployee: z.boolean(),
 });
 
+const resetPasswordSchema = z.object({
+  password: z.string().min(8),
+});
+
 function signToken(payload: { _id: string; email: string; role: string }): string {
   const secret = process.env.JWT_SECRET!;
   const expiresIn = (process.env.JWT_EXPIRES_IN ?? '24h') as jwt.SignOptions['expiresIn'];
@@ -80,7 +84,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
   }
 }
 
-export async function getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getUsers(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const users = await User.find({}).sort({ name: 1 });
     res.json({ success: true, users });
@@ -108,6 +112,31 @@ export async function updateUserStatus(
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetPassword(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new AppError(parsed.error.errors[0].message, 400));
+    }
+
+    // Must use findById + save() to trigger the pre-save bcrypt hook.
+    // findByIdAndUpdate() bypasses it and would store a plaintext password.
+    const user = await User.findById(req.params.id);
+    if (!user) return next(new AppError('משתמש לא נמצא', 404));
+
+    user.password = parsed.data.password;
+    await user.save(); // triggers pre-save hash
+
+    res.json({ success: true, user }); // password excluded by toJSON transform
   } catch (err) {
     next(err);
   }
