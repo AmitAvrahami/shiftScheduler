@@ -8,6 +8,7 @@ import AppError from '../utils/AppError';
 import {
   getConstraintDeadline,
   isConstraintDeadlinePassed,
+  getAllowedWeekId,
   parseWeekId,
 } from '../utils/weekUtils';
 
@@ -72,8 +73,11 @@ export async function upsertMyConstraints(
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
 
-    if (req.user!.role === 'employee' && isConstraintDeadlinePassed(weekId)) {
-      return next(new AppError('הגשת האילוצים נסגרה — הדדליין עבר', 403));
+    if (req.user!.role === 'employee') {
+      const allowed = getAllowedWeekId();
+      if (weekId !== allowed) {
+        return next(new AppError(`ניתן להגיש אילוצים רק לשבוע ${allowed}`, 403));
+      }
     }
 
     const parsed = upsertSchema.safeParse(req.body);

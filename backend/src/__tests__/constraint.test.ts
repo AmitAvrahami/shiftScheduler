@@ -18,6 +18,13 @@ const TEST_WEEK = '2026-W16';
 const BEFORE_DEADLINE = new Date('2026-04-13T18:00:00.000Z').getTime(); // Mon 21:00 IST
 const AFTER_DEADLINE = new Date('2026-04-13T21:00:00.000Z').getTime(); // Tue 00:00 IST
 
+// Allowed-week enforcement constants
+const NEXT_WEEK = '2026-W17'; // ISO Monday = 2026-04-20
+const PAST_WEEK = '2026-W15'; // ISO Monday = 2026-04-06
+const FUTURE_WEEK_PLUS2 = '2026-W18'; // ISO Monday = 2026-04-27
+const ONE_MS_BEFORE_DEADLINE = new Date('2026-04-13T20:59:59.998Z').getTime(); // 1ms before
+const ONE_MS_AFTER_DEADLINE = new Date('2026-04-13T21:00:00.000Z').getTime(); // 1ms after
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   await mongoose.connect(mongoServer.getUri());
@@ -335,5 +342,109 @@ describe('GET /api/v1/constraints/:weekId/users/:userId', () => {
       .set('Authorization', `Bearer ${employeeToken}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+// ── PUT /api/v1/constraints/:weekId — allowed-week enforcement ────────────────
+
+describe('PUT /api/v1/constraints/:weekId — allowed-week enforcement', () => {
+  it('200 — employee submits for NEXT week after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${NEXT_WEEK}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-19', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.constraint.submittedVia).toBe('self');
+  });
+
+  it('403 — employee submits for past week (W15) before deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(BEFORE_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${PAST_WEEK}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-05', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('403 — employee submits two weeks ahead (W18) after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${FUTURE_WEEK_PLUS2}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-26', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('403 — employee submits two weeks ahead (W18) before deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(BEFORE_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${FUTURE_WEEK_PLUS2}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-26', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('200 — boundary: 1ms before deadline, current week allowed', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(ONE_MS_BEFORE_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('403 — boundary: 1ms after deadline, current week (W16) blocked', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(ONE_MS_AFTER_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('200 — boundary: 1ms after deadline, next week (W17) allowed', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(ONE_MS_AFTER_DEADLINE);
+    const { manager } = await seedManager();
+    const { token } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${NEXT_WEEK}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entries: [{ date: '2026-04-19', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.constraint.submittedVia).toBe('self');
   });
 });

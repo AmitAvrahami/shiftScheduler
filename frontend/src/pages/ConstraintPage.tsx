@@ -39,12 +39,55 @@ function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Returns the deadline timestamp (ms) for a given weekId: Monday 20:59:59.999 UTC = 23:59:59.999 IST
+function getConstraintDeadlineMs(weekId: string): number {
+  const [yearStr, weekStr] = weekId.split('-W');
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = jan4.getTime() - (jan4Day - 1) * 86_400_000;
+  const monday = new Date(week1Monday + (week - 1) * 7 * 86_400_000);
+  return Date.UTC(
+    monday.getUTCFullYear(),
+    monday.getUTCMonth(),
+    monday.getUTCDate(),
+    20,
+    59,
+    59,
+    999,
+  );
+}
+
+function getNextWeekId(weekId: string): string {
+  const [yearStr, weekStr] = weekId.split('-W');
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = jan4.getTime() - (jan4Day - 1) * 86_400_000;
+  const mondayMs = week1Monday + (week - 1) * 7 * 86_400_000;
+  // next Monday + 3 days = Thursday of next ISO week
+  const thursday = new Date(mondayMs + 10 * 86_400_000);
+  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(
+    ((thursday.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7,
+  );
+  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+// Before Monday 23:59:59.999 IST → current week; after → next week.
+function getAllowedWeekId(): string {
+  const current = getCurrentWeekId();
+  return Date.now() > getConstraintDeadlineMs(current) ? getNextWeekId(current) : current;
+}
+
 const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function ConstraintPage() {
-  const weekId = getCurrentWeekId();
+  const weekId = getAllowedWeekId();
   const weekDates = getWeekDates(weekId);
 
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
