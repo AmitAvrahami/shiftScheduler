@@ -11,6 +11,8 @@ import notificationsRouter from './notification.routes';
 import auditLogsRouter from './auditLog.routes';
 import settingsRouter from './settings.routes';
 import swapRequestsRouter from './swapRequest.routes';
+import workflowRouter from './workflow.routes';
+import constraintExceptionsRouter from './constraintException.routes';
 
 const router = Router();
 
@@ -33,6 +35,8 @@ router.use('/notifications', notificationsRouter);
 router.use('/audit-logs', auditLogsRouter);
 router.use('/settings', settingsRouter);
 router.use('/swap-requests', swapRequestsRouter);
+router.use('/workflow', workflowRouter);
+router.use('/constraint-exceptions', constraintExceptionsRouter);
 
 router.use((_req: Request, _res: Response, next: NextFunction) => {
   next(new AppError('Route not found', 404));

@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import WeeklySchedule from '../models/WeeklySchedule';
 import Shift from '../models/Shift';
 import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import SystemSettings from '../models/SystemSettings';
 import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
@@ -20,6 +22,13 @@ const updateSchema = z.object({
   status: z.enum(['draft', 'published', 'archived']).optional(),
   generatedBy: z.enum(['auto', 'manual']).optional(),
 });
+
+async function cascadeDeleteSchedule(scheduleId: mongoose.Types.ObjectId): Promise<void> {
+  const shiftIds = await Shift.find({ scheduleId }, '_id').lean();
+  await Assignment.deleteMany({ shiftId: { $in: shiftIds.map((s) => s._id) } });
+  await Shift.deleteMany({ scheduleId });
+  await WeeklySchedule.findByIdAndDelete(scheduleId);
+}
 
 function validateWeekId(weekId: string, next: NextFunction): boolean {
   try {
@@ -55,7 +64,21 @@ export async function createSchedule(
     if (!validateWeekId(weekId, next)) return;
 
     const existing = await WeeklySchedule.findOne({ weekId });
-    if (existing) return next(new AppError(`Schedule for week ${weekId} already exists`, 409));
+    if (existing) {
+      if (existing.status !== 'draft') {
+        return next(new AppError(`Schedule for week ${weekId} already exists`, 409));
+      }
+      const before = existing.toObject();
+      await cascadeDeleteSchedule(existing._id as mongoose.Types.ObjectId);
+      await AuditLog.create({
+        performedBy: req.user!._id,
+        action: 'schedule_regenerated',
+        refModel: 'WeeklySchedule',
+        refId: existing._id,
+        before,
+        ip: req.ip,
+      });
+    }
 
     const dates = getWeekDates(weekId);
     const schedule = await WeeklySchedule.create({
@@ -148,6 +171,12 @@ export async function updateSchedule(
             }))
           );
         }
+
+        await SystemSettings.findOneAndUpdate(
+          { key: 'workflow_state' },
+          { $set: { value: 'schedule_published', updatedAt: new Date() } },
+          { upsert: true }
+        );
       }
 
       schedule.status = newStatus;
@@ -188,12 +217,7 @@ export async function deleteSchedule(
       return next(new AppError('Only draft schedules can be deleted', 422));
     }
 
-    const shiftIds = await Shift.find({ scheduleId: schedule._id }, '_id').lean();
-    const shiftIdList = shiftIds.map((s) => s._id);
-
-    await Assignment.deleteMany({ shiftId: { $in: shiftIdList } });
-    await Shift.deleteMany({ scheduleId: schedule._id });
-    await WeeklySchedule.findByIdAndDelete(schedule._id);
+    await cascadeDeleteSchedule(schedule._id as mongoose.Types.ObjectId);
 
     await AuditLog.create({
       performedBy: req.user!._id,

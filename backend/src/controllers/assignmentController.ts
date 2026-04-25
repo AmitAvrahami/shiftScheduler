@@ -144,6 +144,19 @@ export async function updateAssignment(
       ip: req.ip,
     });
 
+    if (isManagerOrAdmin && before.assignedBy === 'algorithm') {
+      await AuditLog.create({
+        performedBy: req.user!._id,
+        action: 'assignment_override',
+        targetUserId: String(assignment.userId),
+        refModel: 'Assignment',
+        refId: assignment._id,
+        before,
+        after: parsed.data,
+        ip: req.ip,
+      });
+    }
+
     res.json({ success: true, assignment: updated });
   } catch (err) {
     next(err);
