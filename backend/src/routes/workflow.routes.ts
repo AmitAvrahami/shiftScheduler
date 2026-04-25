@@ -4,6 +4,6 @@ import { getWorkflowStatus } from '../controllers/workflowController';
 
 const router = Router();
 
-router.get('/', verifyToken, getWorkflowStatus);
+router.get('/status', verifyToken, getWorkflowStatus);
 
 export default router;

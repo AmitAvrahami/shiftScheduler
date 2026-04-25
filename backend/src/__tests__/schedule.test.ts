@@ -114,11 +114,26 @@ describe('POST /api/v1/schedules', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 409 if schedule for week already exists', async () => {
+  it('returns 409 if a published schedule already exists for the week', async () => {
     const { token } = await seedManager();
-    await seedDraftSchedule();
+    await WeeklySchedule.create({
+      weekId: TEST_WEEK,
+      startDate: new Date('2026-05-10'),
+      endDate: new Date('2026-05-16'),
+      status: 'published',
+      generatedBy: 'manual',
+    });
     const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'manual' });
     expect(res.status).toBe(409);
+  });
+
+  it('returns 201 and re-generates if a draft schedule already exists for the week', async () => {
+    const { token } = await seedManager();
+    await seedDraftSchedule();
+    const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'auto' });
+    expect(res.status).toBe(201);
+    const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
+    expect(log).not.toBeNull();
   });
 
   it('manager can create a schedule and audit log is created', async () => {
