@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import Constraint from '../models/Constraint';
+import ConstraintException from '../models/ConstraintException';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
 import User from '../models/User';
@@ -74,9 +75,33 @@ export async function upsertMyConstraints(
     if (!validateWeekId(weekId, next)) return;
 
     if (req.user!.role === 'employee') {
-      const allowed = getAllowedWeekId();
-      if (weekId !== allowed) {
-        return next(new AppError(`ניתן להגיש אילוצים רק לשבוע ${allowed}`, 403));
+      const deadlinePassed = isConstraintDeadlinePassed(weekId);
+      if (deadlinePassed) {
+        const exception = await ConstraintException.findOne({
+          employeeId: req.user!._id,
+          weekId,
+          status: 'approved',
+        });
+        if (!exception) {
+          return next(new AppError('Deadline passed. Request an unlock from your manager.', 403));
+        }
+        // Consume the exception — single use
+        exception.status = 'consumed';
+        exception.consumedAt = new Date();
+        await exception.save();
+        await AuditLog.create({
+          performedBy: req.user!._id,
+          action: 'constraint_exception_consumed',
+          refModel: 'ConstraintException',
+          refId: exception._id,
+          after: { weekId },
+          ip: req.ip,
+        });
+      } else {
+        const allowed = getAllowedWeekId();
+        if (weekId !== allowed) {
+          return next(new AppError(`ניתן להגיש אילוצים רק לשבוע ${allowed}`, 403));
+        }
       }
     }
 
