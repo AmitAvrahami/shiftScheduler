@@ -6,3 +6,6 @@ dist/
 build/
 .vscode/
 *.log
+__pycache__/
+*.pyc
+backend/solver/.venv/
