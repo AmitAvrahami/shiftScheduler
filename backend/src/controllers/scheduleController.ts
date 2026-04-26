@@ -10,6 +10,7 @@ import SystemSettings from '../models/SystemSettings';
 import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
+import { runScheduler } from '../services/schedulerService';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 
@@ -229,6 +230,22 @@ export async function deleteSchedule(
     });
 
     res.json({ success: true, message: 'Schedule deleted' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function generateSchedule(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+    const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
+    const result = await runScheduler(weekId, actorId, req.ip ?? 'unknown');
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }
