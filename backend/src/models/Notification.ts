@@ -5,7 +5,8 @@ export type NotificationType =
   | 'schedule_updated'
   | 'schedule_deleted'
   | 'constraint_updated'
-  | 'swap_request_reviewed';
+  | 'swap_request_reviewed'
+  | 'announcement';
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
@@ -30,6 +31,7 @@ const notificationSchema = new Schema<INotification>(
         'schedule_deleted',
         'constraint_updated',
         'swap_request_reviewed',
+        'announcement',
       ],
       required: true,
     },
