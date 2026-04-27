@@ -1,7 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { userApi, constraintApi, scheduleApi } from '../lib/api';
+import {
+  userApi,
+  constraintApi,
+  scheduleApi,
+  shiftApi,
+  assignmentApi,
+  auditLogApi,
+  notificationApi,
+  shiftDefinitionApi,
+} from '../lib/api';
+import type {
+  Schedule,
+  Shift,
+  Assignment,
+  AuditLogEntry,
+  BroadcastRecipient,
+  GenerateResult,
+} from '../lib/api';
 import type { User } from '../types/auth';
+import type { ShiftDefinition, ConstraintEntry } from '../types/constraint';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
 
@@ -29,6 +47,25 @@ function getNextWeekId(weekId: string): string {
   const jan1 = new Date(Date.UTC(thu.getUTCFullYear(), 0, 1));
   const wk = Math.ceil(((thu.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
   return `${thu.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
+}
+
+function getWeekDates(weekId: string): Date[] {
+  const [yearStr, weekStr] = weekId.split('-W');
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = jan4.getTime() - (jan4Day - 1) * 86_400_000;
+  const monday = new Date(week1Monday + (week - 1) * 7 * 86_400_000);
+  const sundayMs = monday.getTime() - 86_400_000;
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sundayMs + i * 86_400_000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  });
+}
+
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function parseWeekNumber(weekId: string): number {
@@ -85,7 +122,7 @@ function avatarBg(idx: number): string {
 type IconName =
   | 'clock' | 'alert' | 'send' | 'calendar' | 'check' | 'plus'
   | 'download' | 'sun' | 'moon' | 'sunset' | 'users' | 'bell'
-  | 'settings' | 'log' | 'x' | 'zap';
+  | 'settings' | 'log' | 'x' | 'zap' | 'eye' | 'edit';
 
 function Icon({
   name,
@@ -115,6 +152,8 @@ function Icon({
     log:      <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
     x:        <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
     zap:      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+    eye:      <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
+    edit:     <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
   };
   return (
     <svg
@@ -134,19 +173,35 @@ function Icon({
   );
 }
 
-// ─── Static mock data ─────────────────────────────────────────────────────────
+// ─── Action label mapping ─────────────────────────────────────────────────────
 
-const AUDIT_LOG = [
-  { id: 1, action: 'לוח שיבוץ פורסם',  user: 'מנהל',       time: '09:14', type: 'publish'  as const },
-  { id: 2, action: 'עקיפת אילוץ',       user: 'מנהל',       time: '08:42', type: 'override' as const },
-  { id: 3, action: 'משתמש חדש נוצר',   user: 'מנהל',       time: 'אתמול', type: 'user'     as const },
-  { id: 4, action: 'עריכת שיבוץ',       user: 'מנהל',       time: 'אתמול', type: 'edit'     as const },
-];
+const ACTION_LABELS: Record<string, string> = {
+  schedule_created: 'לוח שיבוץ נוצר',
+  schedule_generated: 'לוח שיבוץ הופק',
+  schedule_regenerated: 'לוח שיבוץ הופק מחדש',
+  schedule_published: 'לוח שיבוץ פורסם',
+  schedule_updated: 'לוח שיבוץ עודכן',
+  schedule_deleted: 'לוח שיבוץ נמחק',
+  constraint_override: 'עקיפת אילוץ',
+  constraint_exception_consumed: 'חריגת אילוץ מומשה',
+  user_created: 'משתמש נוצר',
+  user_updated: 'משתמש עודכן',
+  shift_created: 'משמרת נוצרה',
+};
 
-const AUDIT_COLORS: Record<string, string> = {
+type AuditType = 'publish' | 'override' | 'user' | 'edit';
+
+function actionToType(action: string): AuditType {
+  if (action.includes('publish')) return 'publish';
+  if (action.includes('override') || action.includes('exception')) return 'override';
+  if (action.includes('user')) return 'user';
+  return 'edit';
+}
+
+const AUDIT_COLORS: Record<AuditType, string> = {
   publish: '#10b981', override: '#f59e0b', user: '#3b82f6', edit: '#8b5cf6',
 };
-const AUDIT_ICONS: Record<string, IconName> = {
+const AUDIT_ICONS: Record<AuditType, IconName> = {
   publish: 'check', override: 'alert', user: 'users', edit: 'settings',
 };
 
@@ -156,6 +211,8 @@ const cardStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.08)',
 };
+
+const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
@@ -323,35 +380,82 @@ function ShiftCard({
 
 // ─── Shift overview ───────────────────────────────────────────────────────────
 
-function ShiftOverview({ users }: { users: User[] }) {
+function ShiftOverview({
+  users,
+  weekId,
+  definitions,
+}: {
+  users: User[];
+  weekId: string;
+  definitions: ShiftDefinition[];
+}) {
   const [now, setNow] = useState(new Date());
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    if (!weekId) return;
+    scheduleApi.getAll().then((res) => {
+      const schedule = res.schedules.find((s) => s.weekId === weekId);
+      if (!schedule) return;
+      Promise.all([
+        shiftApi.getBySchedule(schedule._id),
+        assignmentApi.getBySchedule(schedule._id),
+      ]).then(([shiftsRes, assignRes]) => {
+        setShifts(shiftsRes.shifts);
+        setAssignments(assignRes.assignments);
+      }).catch(console.error);
+    }).catch(console.error);
+  }, [weekId]);
+
+  const sortedDefs = [...definitions].sort((a, b) => a.orderNumber - b.orderNumber);
   const employees = users.filter(u => u.isActive);
   const curIdx  = getCurrentShiftIndex(now);
   const prevIdx = (curIdx + 2) % 3;
   const nextIdx = (curIdx + 1) % 3;
 
-  // Distribute employees across shifts: fixed-morning go to morning, others round-robin afternoon/night
-  function staffForShift(shiftIdx: number): StaffEntry[] {
-    const nonFixed = employees.filter(u => !u.isFixedMorningEmployee);
-    if (shiftIdx === 0) {
-      return employees.filter(u => u.isFixedMorningEmployee).map(u => ({
-        id: u._id, name: u.name, isFixed: true,
-      }));
+  const todayKey = toDateKey(now);
+
+  function staffForShiftDef(defIdx: number): StaffEntry[] {
+    const def = sortedDefs[defIdx];
+    if (!def) {
+      // Fallback to round-robin when no real data
+      if (defIdx === 0) return employees.filter(u => u.isFixedMorningEmployee).map(u => ({ id: u._id, name: u.name, isFixed: true }));
+      const nonFixed = employees.filter(u => !u.isFixedMorningEmployee);
+      if (defIdx === 1) return nonFixed.filter((_, i) => i % 2 === 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
+      return nonFixed.filter((_, i) => i % 2 !== 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
     }
-    if (shiftIdx === 1) {
-      return nonFixed.filter((_, i) => i % 2 === 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
+
+    // Find today's shift for this definition
+    const todayShift = shifts.find((s) => {
+      const shiftDateKey = toDateKey(new Date(s.date));
+      return shiftDateKey === todayKey && s.definitionId === def._id;
+    });
+
+    if (!todayShift) {
+      // No shift record today — show empty
+      return [];
     }
-    return nonFixed.filter((_, i) => i % 2 !== 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
+
+    // Find assignments for this shift
+    const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift._id);
+    return shiftAssignments.map((a) => {
+      const user = employees.find((u) => u._id === a.userId);
+      return {
+        id: a._id,
+        name: user?.name ?? 'עובד לא ידוע',
+        isFixed: user?.isFixedMorningEmployee ?? false,
+      };
+    });
   }
 
   const progress = shiftProgress(curIdx, now);
 
-  // "Who's working today" – all employees with their shift
   function userShiftIdx(u: User): number {
     if (u.isFixedMorningEmployee) return 0;
     const nonFixed = employees.filter(e => !e.isFixedMorningEmployee);
@@ -367,9 +471,9 @@ function ShiftOverview({ users }: { users: User[] }) {
       </div>
 
       <div className="flex gap-3 mb-4">
-        <ShiftCard shift={SHIFTS[prevIdx]} staff={staffForShift(prevIdx)} type="prev" />
-        <ShiftCard shift={SHIFTS[curIdx]}  staff={staffForShift(curIdx)}  type="current" />
-        <ShiftCard shift={SHIFTS[nextIdx]} staff={staffForShift(nextIdx)} type="next" />
+        <ShiftCard shift={SHIFTS[prevIdx]} staff={staffForShiftDef(prevIdx)} type="prev" />
+        <ShiftCard shift={SHIFTS[curIdx]}  staff={staffForShiftDef(curIdx)}  type="current" />
+        <ShiftCard shift={SHIFTS[nextIdx]} staff={staffForShiftDef(nextIdx)} type="next" />
       </div>
 
       {/* Progress bar */}
@@ -557,17 +661,279 @@ function MissingConstraints({ missingUsers }: { missingUsers: User[] | null }) {
   );
 }
 
+// ─── Constraint manager panel ─────────────────────────────────────────────────
+
+function ConstraintManagerPanel({
+  users,
+  nextWeekId,
+  definitions,
+  onToast,
+}: {
+  users: User[];
+  nextWeekId: string;
+  definitions: ShiftDefinition[];
+  onToast: (t: Toast) => void;
+}) {
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editChecked, setEditChecked] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const weekDates = getWeekDates(nextWeekId);
+  const employees = users.filter(u => u.role === 'employee' && u.isActive);
+
+  async function openEditor(user: User) {
+    setSelectedUser(user);
+    setEditChecked({});
+    setLoading(true);
+    try {
+      const res = await constraintApi.getForUser(nextWeekId, user._id);
+      if (res.constraint) {
+        const initial: Record<string, boolean> = {};
+        for (const entry of res.constraint.entries) {
+          if (!entry.canWork) {
+            initial[`${entry.definitionId}:${entry.date}`] = true;
+          }
+        }
+        setEditChecked(initial);
+      }
+    } catch {
+      // start with empty constraint
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleToggle(definitionId: string, dateKey: string) {
+    const key = `${definitionId}:${dateKey}`;
+    setEditChecked(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (!next[key]) delete next[key];
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    if (!selectedUser) return;
+    setSaving(true);
+    try {
+      const entries: ConstraintEntry[] = Object.entries(editChecked)
+        .filter(([, v]) => v)
+        .map(([key]) => {
+          const [definitionId, date] = key.split(':');
+          return { definitionId, date, canWork: false };
+        });
+      await constraintApi.upsertForUser(nextWeekId, selectedUser._id, entries);
+      onToast({ message: `אילוצי ${selectedUser.name} עודכנו`, type: 'success' });
+      setSelectedUser(null);
+    } catch (err) {
+      onToast({ message: err instanceof Error ? err.message : 'שגיאה בשמירת האילוצים', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>
+          ניהול אילוצי עובדים
+        </h2>
+        <span className="text-xs" style={{ color: '#475569' }}>שבוע {parseWeekNumber(nextWeekId)}</span>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={cardStyle}>
+        {employees.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-center" style={{ color: '#475569' }}>אין עובדים פעילים</div>
+        ) : (
+          employees.map((u, i) => (
+            <div
+              key={u._id}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+              style={{ borderBottom: i < employees.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+            >
+              <div
+                style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: avatarBg(i),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+                }}
+              >
+                {avatarInitials(u.name)}
+              </div>
+              <span className="flex-1 text-sm font-medium" style={{ color: '#e2e8f0' }}>{u.name}</span>
+              <button
+                onClick={() => openEditor(u)}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
+                style={{ background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.25)' }}
+              >
+                <Icon name="edit" size={12} />
+                ערוך
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal */}
+      {selectedUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedUser(null); }}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl p-6 max-h-[90vh] overflow-auto"
+            style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)' }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold text-white">
+                אילוצי {selectedUser.name} — שבוע {parseWeekNumber(nextWeekId)}
+              </h3>
+              <button onClick={() => setSelectedUser(null)} style={{ color: '#64748b' }}>
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="py-8 text-center text-sm" style={{ color: '#64748b' }}>טוען...</div>
+            ) : (
+              <div className="overflow-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="py-2 px-3 text-right font-medium" style={{ color: '#64748b', minWidth: 100 }}>משמרת</th>
+                      {weekDates.map((date, i) => (
+                        <th key={i} className="py-2 px-2 text-center font-medium" style={{ color: '#64748b', minWidth: 60 }}>
+                          <span className="block">{DAY_LABELS[i]}</span>
+                          <span className="block text-xs" style={{ color: '#334155' }}>
+                            {date.getDate()}/{date.getMonth() + 1}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {definitions.map((def) => (
+                      <tr key={def._id}>
+                        <td className="py-2 px-3" style={{ color: '#cbd5e1' }}>
+                          <span
+                            className="inline-block w-2 h-2 rounded-full ml-2"
+                            style={{ backgroundColor: def.color }}
+                          />
+                          {def.name}
+                          <span className="block text-xs" style={{ color: '#475569' }}>
+                            {def.startTime}–{def.endTime}
+                          </span>
+                        </td>
+                        {weekDates.map((date, colIdx) => {
+                          const dateKey = toDateKey(date);
+                          const cellKey = `${def._id}:${dateKey}`;
+                          return (
+                            <td key={colIdx} className="py-2 px-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={!!editChecked[cellKey]}
+                                onChange={() => handleToggle(def._id, dateKey)}
+                                className="w-4 h-4 cursor-pointer"
+                                style={{ accentColor: '#ef4444' }}
+                                aria-label={`${def.name} — ${DAY_LABELS[colIdx]}`}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="text-xs mt-4 mb-5" style={{ color: '#475569' }}>
+              סמן משמרות שהעובד אינו יכול לעבוד בהן. שינויים נשמרים בלחיצה על שמור.
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
+              >
+                ביטול
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2 rounded-xl text-sm font-semibold transition-all"
+                style={{ background: saving ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.9)', color: '#fff', cursor: saving ? 'wait' : 'pointer' }}
+              >
+                {saving ? 'שומר...' : 'שמור'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Broadcast center ─────────────────────────────────────────────────────────
 
-function BroadcastCenter({ recipientCount }: { recipientCount: number }) {
-  const [msg, setMsg]   = useState('');
-  const [sent, setSent] = useState(false);
+interface Toast {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
 
-  function handleSend() {
+function BroadcastCenter({
+  recipientCount,
+  onToast,
+}: {
+  recipientCount: number;
+  onToast: (t: Toast) => void;
+}) {
+  const [msg, setMsg]           = useState('');
+  const [broadcastId, setBroadcastId] = useState<string | null>(null);
+  const [recipients, setRecipients]   = useState<BroadcastRecipient[]>([]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll read-receipts every 5s after a broadcast is sent
+  useEffect(() => {
+    if (!broadcastId) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await notificationApi.getBroadcastStatus(broadcastId);
+        setRecipients(res.recipients);
+      } catch {
+        // ignore poll errors
+      }
+    }, 5000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [broadcastId]);
+
+  async function handleSend() {
     if (!msg.trim()) return;
-    setSent(true);
-    setTimeout(() => { setSent(false); setMsg(''); }, 2500);
+    try {
+      const res = await notificationApi.broadcast('הודעה לצוות', msg.trim());
+      setBroadcastId(res.broadcastId);
+      // Immediately fetch initial status
+      const statusRes = await notificationApi.getBroadcastStatus(res.broadcastId);
+      setRecipients(statusRes.recipients);
+      setMsg('');
+    } catch (err) {
+      onToast({ message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה', type: 'error' });
+    }
   }
+
+  function handleReset() {
+    if (pollRef.current) clearInterval(pollRef.current);
+    setBroadcastId(null);
+    setRecipients([]);
+  }
+
+  const readCount = recipients.filter(r => r.isRead).length;
 
   return (
     <section className="mb-6">
@@ -589,55 +955,209 @@ function BroadcastCenter({ recipientCount }: { recipientCount: number }) {
           </span>
         </div>
 
-        <textarea
-          value={msg}
-          onChange={e => setMsg(e.target.value)}
-          placeholder="הכנס עדכונים חשובים, הודעות ביקורת, או הוראות כלליות לכל הצוות..."
-          className="w-full h-24 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none transition-all"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            color: '#e2e8f0',
-            direction: 'rtl',
-          }}
-          onFocus={e => (e.target.style.borderColor = 'rgba(59,130,246,0.4)')}
-          onBlur={e  => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
-        />
+        {!broadcastId ? (
+          <>
+            <textarea
+              value={msg}
+              onChange={e => setMsg(e.target.value)}
+              placeholder="הכנס עדכונים חשובים, הודעות ביקורת, או הוראות כלליות לכל הצוות..."
+              className="w-full h-24 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#e2e8f0',
+                direction: 'rtl',
+              }}
+              onFocus={e => (e.target.style.borderColor = 'rgba(59,130,246,0.4)')}
+              onBlur={e  => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
+            />
 
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-xs" style={{ color: '#475569' }}>
-            {msg.length > 0 ? `${msg.length} תווים` : 'תומך Markdown'}
-          </span>
-          <button
-            onClick={handleSend}
-            disabled={!msg.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
-            style={{
-              background: sent ? 'rgba(16,185,129,0.2)'  : msg.trim() ? 'rgba(59,130,246,0.9)' : 'rgba(255,255,255,0.05)',
-              color:      sent ? '#34d399'                : msg.trim() ? '#fff'                  : '#475569',
-              border:     sent ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
-              cursor:     msg.trim() ? 'pointer' : 'default',
-            }}
-          >
-            <Icon name={sent ? 'check' : 'send'} size={14} />
-            {sent ? 'נשלח!' : 'שלח לכולם'}
-          </button>
-        </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs" style={{ color: '#475569' }}>
+                {msg.length > 0 ? `${msg.length} תווים` : 'תומך Markdown'}
+              </span>
+              <button
+                onClick={handleSend}
+                disabled={!msg.trim()}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  background: msg.trim() ? 'rgba(59,130,246,0.9)' : 'rgba(255,255,255,0.05)',
+                  color:      msg.trim() ? '#fff'                  : '#475569',
+                  cursor:     msg.trim() ? 'pointer' : 'default',
+                }}
+              >
+                <Icon name="send" size={14} />
+                שלח לכולם
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Receipt panel */}
+            <div
+              className="rounded-xl px-4 py-3 mb-4"
+              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon name="check" size={14} className="text-emerald-400" />
+                  <span className="text-sm font-semibold" style={{ color: '#34d399' }}>ההודעה נשלחה!</span>
+                </div>
+                <span className="text-xs" style={{ color: '#475569' }}>
+                  {readCount}/{recipients.length} קראו
+                </span>
+              </div>
+              <div className="h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: recipients.length ? `${(readCount / recipients.length) * 100}%` : '0%',
+                    background: 'linear-gradient(90deg,#10b981,#34d399)',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 mb-4 max-h-48 overflow-auto">
+              {recipients.map((r, i) => (
+                <div
+                  key={r.userId}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}
+                >
+                  <div
+                    style={{
+                      width: 26, height: 26, borderRadius: '50%',
+                      background: avatarBg(i),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0,
+                    }}
+                  >
+                    {avatarInitials(r.name)}
+                  </div>
+                  <span className="flex-1 text-xs" style={{ color: '#cbd5e1' }}>{r.name}</span>
+                  {r.isRead
+                    ? <Icon name="check" size={13} style={{ color: '#10b981' }} />
+                    : <Icon name="clock" size={13} style={{ color: '#475569' }} />
+                  }
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-xs" style={{ color: '#475569' }}>מתרענן כל 5 שניות</span>
+              <button
+                onClick={handleReset}
+                className="text-xs font-medium px-4 py-2 rounded-xl transition-all"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
+              >
+                שלח הודעה חדשה
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
 }
 
-// ─── Quick actions ────────────────────────────────────────────────────────────
+// ─── Generated schedule panel ─────────────────────────────────────────────────
 
-interface Toast {
-  message: string;
-  type: 'success' | 'error' | 'info';
+function GeneratedSchedulePanel({
+  result,
+  onClose,
+}: {
+  result: GenerateResult | null;
+  onClose: () => void;
+}) {
+  if (!result) return null;
+
+  const statusColor =
+    result.status === 'OPTIMAL'  ? '#10b981' :
+    result.status === 'FEASIBLE' ? '#f59e0b' :
+    result.status === 'RELAXED'  ? '#f97316' : '#ef4444';
+
+  const statusLabel =
+    result.status === 'OPTIMAL'  ? 'אופטימלי' :
+    result.status === 'FEASIBLE' ? 'ישים' :
+    result.status === 'RELAXED'  ? 'מרופה' : result.status;
+
+  return (
+    <div
+      className="rounded-2xl p-5 mb-6"
+      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${statusColor}40` }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Icon name="zap" size={16} style={{ color: statusColor }} />
+          <span className="text-sm font-bold text-white">תוצאות הפקת לוח שיבוץ</span>
+          <span
+            className="text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{ background: `${statusColor}20`, color: statusColor }}
+          >
+            {statusLabel}
+          </span>
+        </div>
+        <button onClick={onClose} style={{ color: '#475569' }}>
+          <Icon name="x" size={16} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="text-xl font-bold mb-0.5" style={{ color: statusColor }}>
+            {result.assignmentCount}
+          </div>
+          <div className="text-xs" style={{ color: '#475569' }}>שיבוצים</div>
+        </div>
+        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="text-xl font-bold mb-0.5 text-white">
+            {(result.solveTimeMs / 1000).toFixed(2)}s
+          </div>
+          <div className="text-xs" style={{ color: '#475569' }}>זמן פתרון</div>
+        </div>
+        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="text-xl font-bold mb-0.5" style={{ color: result.warnings.length ? '#f59e0b' : '#10b981' }}>
+            {result.warnings.length}
+          </div>
+          <div className="text-xs" style={{ color: '#475569' }}>אזהרות</div>
+        </div>
+      </div>
+
+      {result.warnings.length > 0 && (
+        <div className="rounded-xl px-4 py-3 mb-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <div className="text-xs font-semibold mb-2" style={{ color: '#fbbf24' }}>אזהרות</div>
+          {result.warnings.map((w, i) => (
+            <div key={i} className="text-xs" style={{ color: '#94a3b8' }}>• {w.message}</div>
+          ))}
+        </div>
+      )}
+
+      {result.violations.length > 0 && (
+        <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          <div className="text-xs font-semibold mb-2" style={{ color: '#f87171' }}>הפרות (מרופה)</div>
+          {result.violations.map((v, i) => (
+            <div key={i} className="text-xs" style={{ color: '#94a3b8' }}>• {v.message}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function QuickActions({ weekId, onToast }: { weekId: string; onToast: (t: Toast) => void }) {
+// ─── Quick actions ────────────────────────────────────────────────────────────
+
+function QuickActions({
+  weekId,
+  onToast,
+  onGenerateResult,
+}: {
+  weekId: string;
+  onToast: (t: Toast) => void;
+  onGenerateResult: (r: GenerateResult) => void;
+}) {
   const navigate = useNavigate();
-  const [active, setActive]       = useState<string | null>(null);
+  const [active, setActive]         = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   async function handleGenerate() {
@@ -645,7 +1165,8 @@ function QuickActions({ weekId, onToast }: { weekId: string; onToast: (t: Toast)
     setGenerating(true);
     setActive('generate');
     try {
-      await scheduleApi.generate(weekId);
+      const result = await scheduleApi.generate(weekId);
+      onGenerateResult(result);
       onToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
     } catch (err) {
       onToast({ message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ', type: 'error' });
@@ -713,6 +1234,15 @@ function QuickActions({ weekId, onToast }: { weekId: string; onToast: (t: Toast)
 // ─── Audit log widget ─────────────────────────────────────────────────────────
 
 function AuditLogWidget() {
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    auditLogApi.getLogs(8).then(res => {
+      setLogs(res.logs ?? []);
+    }).catch(console.error).finally(() => setLoading(false));
+  }, []);
+
   return (
     <section className="mb-6" id="audit-log">
       <div className="flex items-center justify-between mb-4">
@@ -722,41 +1252,90 @@ function AuditLogWidget() {
         <button className="text-xs text-blue-400 hover:text-blue-300 transition-colors">← הכל</button>
       </div>
       <div className="rounded-2xl overflow-hidden" style={cardStyle}>
-        {AUDIT_LOG.map((entry, i) => (
-          <div
-            key={entry.id}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
-            style={{ borderBottom: i < AUDIT_LOG.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
-          >
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
             <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: `${AUDIT_COLORS[entry.type]}20` }}
+              key={i}
+              className="flex items-center gap-3 px-4 py-3"
+              style={{ borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
             >
-              <Icon name={AUDIT_ICONS[entry.type]} size={12} style={{ color: AUDIT_COLORS[entry.type] }} />
+              <div className="w-7 h-7 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
+              <div className="flex-1 space-y-1">
+                <div className="h-2.5 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)', width: '60%' }} />
+                <div className="h-2 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.04)', width: '40%' }} />
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium truncate" style={{ color: '#cbd5e1' }}>{entry.action}</div>
-              <div className="text-xs truncate" style={{ color: '#475569' }}>{entry.user}</div>
-            </div>
-            <span className="text-xs flex-shrink-0" style={{ color: '#334155' }}>{entry.time}</span>
-          </div>
-        ))}
+          ))
+        ) : logs.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm" style={{ color: '#475569' }}>אין פעילות עדיין</div>
+        ) : (
+          logs.map((entry, i) => {
+            const type = actionToType(entry.action);
+            const label = ACTION_LABELS[entry.action] ?? entry.action;
+            const performer = typeof entry.performedBy === 'object' && entry.performedBy !== null
+              ? (entry.performedBy as { name: string }).name
+              : 'מנהל';
+            const timeStr = new Date(entry.createdAt).toLocaleTimeString('he-IL', {
+              hour: '2-digit', minute: '2-digit',
+            });
+            return (
+              <div
+                key={entry._id}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                style={{ borderBottom: i < logs.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${AUDIT_COLORS[type]}20` }}
+                >
+                  <Icon name={AUDIT_ICONS[type]} size={12} style={{ color: AUDIT_COLORS[type] }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate" style={{ color: '#cbd5e1' }}>{label}</div>
+                  <div className="text-xs truncate" style={{ color: '#475569' }}>{performer}</div>
+                </div>
+                <span className="text-xs flex-shrink-0" style={{ color: '#334155' }}>{timeStr}</span>
+              </div>
+            );
+          })
+        )}
       </div>
     </section>
   );
 }
 
-// ─── Sidebar (stats + system status) ─────────────────────────────────────────
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ weekId, totalUsers }: { weekId: string; totalUsers: number }) {
+interface ScheduleStats {
+  total: number;
+  filled: number;
+  partial: number;
+  empty: number;
+  scheduleStatus: string | null;
+}
+
+function Sidebar({
+  weekId,
+  totalUsers,
+  stats,
+}: {
+  weekId: string;
+  totalUsers: number;
+  stats: ScheduleStats | null;
+}) {
   const STATS = [
-    { label: 'סה״כ משמרות', value: '21', color: '#3b82f6' },
-    { label: 'מלאות',        value: '17', color: '#10b981' },
-    { label: 'חלקיות',       value: '3',  color: '#f59e0b' },
-    { label: 'ריקות',        value: '1',  color: '#ef4444' },
+    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '—', color: '#3b82f6' },
+    { label: 'מלאות',        value: stats ? String(stats.filled)  : '—', color: '#10b981' },
+    { label: 'חלקיות',       value: stats ? String(stats.partial) : '—', color: '#f59e0b' },
+    { label: 'ריקות',        value: stats ? String(stats.empty)   : '—', color: '#ef4444' },
   ];
 
   const weekNum = parseWeekNumber(weekId);
+  const scheduleStatusLabel =
+    stats?.scheduleStatus === 'published' ? 'פורסם' :
+    stats?.scheduleStatus === 'draft'     ? 'טיוטה' :
+    stats?.scheduleStatus === 'archived'  ? 'ארכיון' : 'לא נוצר';
+  const scheduleStatusOk = stats?.scheduleStatus === 'published';
 
   return (
     <div className="space-y-3">
@@ -786,11 +1365,11 @@ function Sidebar({ weekId, totalUsers }: { weekId: string; totalUsers: number })
         </div>
         <div className="space-y-2">
           {[
-            { label: 'מנוע CSP',    status: 'פעיל',                           ok: true  },
-            { label: 'לוח שיבוץ',  status: 'פורסם',                          ok: true  },
-            { label: 'עובדים',      status: `${totalUsers} פעילים`,           ok: true  },
-            { label: 'שבוע',        status: `שבוע ${weekNum}`,                ok: null  },
-            { label: 'דדליין',      status: 'שני 23:59',                      ok: null  },
+            { label: 'מנוע CSP',    status: 'פעיל',              ok: true              },
+            { label: 'לוח שיבוץ',  status: scheduleStatusLabel,  ok: scheduleStatusOk  },
+            { label: 'עובדים',      status: `${totalUsers} פעילים`, ok: true            },
+            { label: 'שבוע',        status: `שבוע ${weekNum}`,    ok: null              },
+            { label: 'דדליין',      status: 'שני 23:59',          ok: null              },
           ].map(item => (
             <div key={item.label} className="flex items-center justify-between">
               <span className="text-xs" style={{ color: '#64748b' }}>{item.label}</span>
@@ -866,20 +1445,52 @@ function ToastNotification({ toast, onDismiss }: { toast: Toast | null; onDismis
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
-  const [users, setUsers]                       = useState<User[]>([]);
-  const [missingUsers, setMissingUsers]         = useState<User[] | null>(null);
-  const [toast, setToast]                       = useState<Toast | null>(null);
+  const [users, setUsers]                           = useState<User[]>([]);
+  const [missingUsers, setMissingUsers]             = useState<User[] | null>(null);
+  const [toast, setToast]                           = useState<Toast | null>(null);
+  const [scheduleStats, setScheduleStats]           = useState<ScheduleStats | null>(null);
+  const [generateResult, setGenerateResult]         = useState<GenerateResult | null>(null);
+  const [definitions, setDefinitions]               = useState<ShiftDefinition[]>([]);
 
   const weekId     = getCurrentWeekId();
   const nextWeekId = getNextWeekId(weekId);
   const employees  = users.filter(u => u.isActive);
 
+  // Load users
   useEffect(() => {
     userApi.getUsers().then(res => {
       setUsers(res.users);
     }).catch(console.error);
   }, []);
 
+  // Load shift definitions
+  useEffect(() => {
+    shiftDefinitionApi.getActive().then(res => {
+      setDefinitions(res.definitions);
+    }).catch(console.error);
+  }, []);
+
+  // Load schedule stats (sidebar)
+  useEffect(() => {
+    scheduleApi.getAll().then(async (res) => {
+      const schedule = res.schedules.find((s: Schedule) => s.weekId === weekId);
+      if (!schedule) {
+        setScheduleStats({ total: 0, filled: 0, partial: 0, empty: 0, scheduleStatus: null });
+        return;
+      }
+      const shiftsRes = await shiftApi.getBySchedule(schedule._id);
+      const shifts = shiftsRes.shifts;
+      setScheduleStats({
+        total:   shifts.length,
+        filled:  shifts.filter((s: Shift) => s.status === 'filled').length,
+        partial: shifts.filter((s: Shift) => s.status === 'partial').length,
+        empty:   shifts.filter((s: Shift) => s.status === 'empty').length,
+        scheduleStatus: schedule.status,
+      });
+    }).catch(console.error);
+  }, [weekId]);
+
+  // Load missing constraints for next week
   useEffect(() => {
     if (users.length === 0) return;
     const employeeUsers = users.filter(u => u.role === 'employee' && u.isActive);
@@ -918,20 +1529,27 @@ export default function AdminDashboardPage() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2">
-              <ShiftOverview users={employees} />
+              <ShiftOverview users={employees} weekId={weekId} definitions={definitions} />
               <MissingConstraints missingUsers={missingUsers} />
-              <BroadcastCenter recipientCount={employees.length} />
-              <QuickActions weekId={weekId} onToast={setToast} />
+              <ConstraintManagerPanel
+                users={users}
+                nextWeekId={nextWeekId}
+                definitions={definitions}
+                onToast={setToast}
+              />
+              <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
+              <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
+              <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} />
             </div>
 
             <div className="xl:col-span-1">
               <AuditLogWidget />
-              <Sidebar weekId={weekId} totalUsers={employees.length} />
+              <Sidebar weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
             </div>
           </div>
         </div>
 
-        <NotificationBell count={missingUsers.length} />
+        <NotificationBell count={missingUsers?.length ?? 0} />
         <ToastNotification toast={toast} onDismiss={() => setToast(null)} />
       </div>
     </>
