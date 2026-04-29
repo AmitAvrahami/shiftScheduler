@@ -3,79 +3,479 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 // ---------------------------------------------------------------------------
-// SVG Icon Component
+// Design-pattern note: Presentational / Container split is intentional.
+// Sub-components below are pure presentational; DashboardPage is the container
+// that owns data (auth user, navigation). This follows the Separation of
+// Concerns principle and keeps each piece independently testable.
 // ---------------------------------------------------------------------------
-type IconName = 
-  | 'home' | 'calendar' | 'bell' | 'user' | 'clock' | 'map-pin' | 'info' 
-  | 'file-text' | 'sun' | 'moon' | 'plane' | 'heart-pulse' | 'refresh-cw' 
-  | 'message-circle' | 'headphones' | 'alert-circle' | 'check' | 'chevron-left' 
-  | 'chevron-right' | 'logout' | 'settings' | 'help' | 'calendar-month';
 
 /**
- * Renders an SVG icon based on the provided name.
- * 
- * @param {Object} props - Component properties
- * @param {IconName} props.name - The name of the icon to render
- * @param {number} [props.size=20] - The size of the icon in pixels
- * @param {string} [props.className=''] - Additional CSS classes
- * @param {React.CSSProperties} [props.style] - Additional inline styles
- * @returns {React.ReactElement} The SVG icon element
+ * Material Symbols icon wrapper.
+ *
+ * Uses the Google Material Symbols font already linked in index.html.
+ *
+ * @param {Object}  props
+ * @param {string}  props.name      - Icon ligature name (e.g. "dashboard")
+ * @param {boolean} [props.fill]    - Whether to render the filled variant
+ * @param {string}  [props.className]
  */
-function Icon({ name, size = 20, className = '', style }: { name: IconName; size?: number; className?: string; style?: React.CSSProperties }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    'home': <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
-    'calendar': <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
-    'calendar-month': <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></>,
-    'bell': <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
-    'user': <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
-    'clock': <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
-    'map-pin': <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
-    'info': <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>,
-    'file-text': <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
-    'sun': <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>,
-    'moon': <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>,
-    'plane': <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.2-1.1.6L3 8l6.8 5L7 16l-3.2-.8c-.4-.1-.8.2-1 .6L2 17l5.5 1.5L9 24l1.2-.8c.4-.2.7-.6.6-1l-.8-3.2 3-2.8 5 6.8c.4.5 1 .3 1.2-.2l1.2-1.8c.2-.5 0-1-.4-1.2z"/>,
-    'heart-pulse': <><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></>,
-    'refresh-cw': <><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
-    'message-circle': <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>,
-    'headphones': <><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></>,
-    'alert-circle': <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
-    'check': <polyline points="20 6 9 17 4 12"/>,
-    'chevron-left': <polyline points="15 18 9 12 15 6"/>,
-    'chevron-right': <polyline points="9 18 15 12 9 6"/>,
-    'logout': <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
-    'settings': <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
-    'help': <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>
-  };
-
+function MaterialIcon({
+  name,
+  fill = false,
+  className = '',
+}: {
+  name: string;
+  fill?: boolean;
+  className?: string;
+}) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      style={style}
+    <span
+      className={`material-symbols-outlined select-none ${className}`}
+      style={{
+        fontVariationSettings: fill
+          ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+          : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24",
+      }}
     >
-      {paths[name]}
-    </svg>
+      {name}
+    </span>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Sidebar nav item shape
+// ---------------------------------------------------------------------------
+interface NavItem {
+  /** Icon ligature */
+  icon: string;
+  /** Hebrew label */
+  label: string;
+  /** Whether this is the active route */
+  isActive?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { icon: 'dashboard',       label: 'דאשבורד',        isActive: true },
+  { icon: 'calendar_month',  label: 'סידור עבודה' },
+  { icon: 'assignment_late', label: 'הגשת אילוצים' },
+  { icon: 'rule_folder',     label: 'בקשות חופשה' },
+  { icon: 'mail',            label: 'הודעות ומסרים' },
+  { icon: 'person',          label: 'פרופיל אישי' },
+];
+
+// ---------------------------------------------------------------------------
+// Weekly schedule rows
+// ---------------------------------------------------------------------------
+interface ScheduleRow {
+  day: string;
+  label: string;
+  isToday?: boolean;
+  isNext?: boolean;
+  isDayOff?: boolean;
+}
+
+const WEEKLY_SCHEDULE: ScheduleRow[] = [
+  { day: "היום (ב')", label: 'משמרת עברה', isToday: true },
+  { day: "מחר (ג')",  label: '08:00 - 16:00', isNext: true },
+  { day: 'רביעי',     label: '16:00 - 00:00' },
+  { day: 'חמישי',     label: 'חופש', isDayOff: true },
+];
+
+// ---------------------------------------------------------------------------
+// Quick-action buttons
+// ---------------------------------------------------------------------------
+interface QuickAction {
+  icon: string;
+  label: string;
+  iconColorClass: string;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { icon: 'flight_takeoff',  label: 'בקשת חופשה',  iconColorClass: 'text-secondary' },
+  { icon: 'medical_services',label: 'דיווח מחלה',  iconColorClass: 'text-error' },
+  { icon: 'person_edit',     label: 'עדכון פרטים', iconColorClass: 'text-primary' },
+  { icon: 'chat',            label: 'פנייה למנהל', iconColorClass: 'text-on-surface-variant' },
+];
+
+// ---------------------------------------------------------------------------
+// SideNavBar – desktop only
+// ---------------------------------------------------------------------------
+
 /**
- * Main Dashboard Page for ShiftScheduler Enterprise
- * 
- * @returns {React.ReactElement} The dashboard component
+ * Enterprise sidebar navigation for desktop screens.
+ *
+ * Renders nav links, a primary CTA button, and a logout link.
+ * Hidden on mobile (md:flex breakpoint).
+ *
+ * @param {Object}   props
+ * @param {Function} props.onLogout - Callback invoked when user clicks Logout
+ */
+function SideNavBar({ onLogout }: { onLogout: () => void }) {
+  return (
+    <aside
+      className="bg-slate-950 fixed right-0 top-0 h-screen w-64 border-l border-white/10 shadow-2xl flex-col hidden md:flex z-50"
+      dir="rtl"
+      aria-label="ניווט ראשי"
+    >
+      {/* Brand header */}
+      <div className="p-lg border-b border-white/10 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+          B
+        </div>
+        <div>
+          <h1 className="text-white text-lg font-black tracking-tight font-sans">בזק HML</h1>
+          <p className="text-slate-400 text-xs">ניהול כוח אדם</p>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-lg overflow-y-auto space-y-1" aria-label="ניווט עיקרי">
+        {NAV_ITEMS.map((item) => (
+          <a
+            key={item.label}
+            href="#"
+            className={[
+              'px-4 py-3 flex flex-row-reverse items-center gap-3 text-sm transition-all duration-200',
+              item.isActive
+                ? 'bg-blue-600/20 text-blue-400 border-r-4 border-blue-500 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-white/5 hover:translate-x-[-4px]',
+            ].join(' ')}
+            aria-current={item.isActive ? 'page' : undefined}
+          >
+            <MaterialIcon
+              name={item.icon}
+              fill={item.isActive}
+              className="text-[22px]"
+            />
+            <span>{item.label}</span>
+          </a>
+        ))}
+      </nav>
+
+      {/* Footer actions */}
+      <div className="p-lg border-t border-white/10 space-y-3">
+        {/* Primary CTA */}
+        <button
+          id="sidebar-submit-constraints-btn"
+          className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          <MaterialIcon name="assignment_add" className="text-[20px]" />
+          הגש אילוצים עכשיו
+        </button>
+
+        {/* Logout */}
+        <button
+          id="sidebar-logout-btn"
+          onClick={onLogout}
+          className="w-full text-error hover:text-red-400 px-4 py-3 flex flex-row-reverse items-center gap-3 text-sm hover:bg-white/5 transition-all duration-200 rounded-lg hover:translate-x-[-4px]"
+        >
+          <MaterialIcon name="logout" className="text-[22px]" />
+          <span>התנתק</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TopAppBar – mobile only
+// ---------------------------------------------------------------------------
+
+/**
+ * Sticky top app bar shown only on mobile screens.
+ *
+ * @param {Object}   props
+ * @param {Function} props.onLogout
+ */
+function TopAppBar({ onLogout }: { onLogout: () => void }) {
+  return (
+    <header
+      className="bg-white/90 backdrop-blur-md sticky top-0 border-b border-slate-200 shadow-sm z-40 flex flex-row-reverse justify-between items-center px-6 h-16 w-full md:hidden"
+      dir="rtl"
+    >
+      <span className="text-xl font-black text-blue-900 font-sans">בזק HML</span>
+
+      <div className="flex items-center gap-2 text-blue-700">
+        <button
+          id="topbar-notifications-btn"
+          className="hover:bg-slate-50 transition-colors p-2 rounded-full"
+          aria-label="התראות"
+        >
+          <MaterialIcon name="notifications" />
+        </button>
+        <button
+          id="topbar-schedule-btn"
+          className="hover:bg-slate-50 transition-colors p-2 rounded-full"
+          aria-label="לוח זמנים"
+        >
+          <MaterialIcon name="schedule" />
+        </button>
+        <button
+          id="topbar-logout-btn"
+          onClick={onLogout}
+          className="hover:bg-slate-50 transition-colors p-2 rounded-full"
+          aria-label="הגדרות"
+        >
+          <MaterialIcon name="logout" />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HeroShiftCard – next shift spotlight
+// ---------------------------------------------------------------------------
+
+/**
+ * Hero card displayed at the top of the dashboard, highlighting the next
+ * scheduled shift with a gradient background and clock icon watermark.
+ */
+function HeroShiftCard() {
+  return (
+    <section
+      className="bg-gradient-to-br from-primary-container to-blue-900 rounded-xl p-lg md:p-xl shadow-bezeq-float text-white relative overflow-hidden flex flex-col justify-center ring-4 ring-primary-fixed/20"
+      style={{ minHeight: '160px' }}
+      aria-label="משמרת הבאה"
+    >
+      {/* Watermark icon */}
+      <div className="absolute -right-10 -top-10 opacity-10 pointer-events-none select-none">
+        <MaterialIcon name="schedule" className="text-[150px]" />
+      </div>
+
+      <div className="relative z-10 flex justify-between items-center">
+        <div>
+          <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3 inline-block">
+            משמרת הבאה
+          </span>
+          <h3 className="text-h2 font-bold mb-1">מחר, יום שלישי</h3>
+          <div className="flex items-center gap-2 text-primary-fixed-dim">
+            <MaterialIcon name="schedule" className="text-[20px]" />
+            <span className="text-h3 font-semibold">08:00 - 16:00</span>
+          </div>
+        </div>
+
+        <div className="hidden sm:block text-center">
+          <p className="text-xs text-primary-fixed-dim mb-1">סוג משמרת</p>
+          <p className="font-bold text-lg">משמרת בוקר</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ConstraintCountdownCard
+// ---------------------------------------------------------------------------
+
+/**
+ * Card showing the countdown timer until the constraint submission deadline.
+ *
+ * Provides a direct CTA button to open the constraints form.
+ */
+function ConstraintCountdownCard() {
+  return (
+    <div
+      className="bg-surface-container-lowest rounded-xl p-lg shadow-bezeq-card border border-surface-variant flex flex-col justify-between"
+      aria-label="הגשת אילוצים"
+    >
+      {/* Header */}
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h4 className="font-bold text-on-surface mb-1">הגשת אילוצים</h4>
+          <p className="text-xs text-on-surface-variant">לשבוע 44</p>
+        </div>
+        <MaterialIcon name="assignment_late" className="text-secondary text-[24px]" />
+      </div>
+
+      {/* Countdown display */}
+      <div className="text-center py-4 bg-error-container/30 rounded-lg border border-error-container mb-4">
+        <p className="text-xs text-on-surface-variant mb-2">הזמן שנותר להגשה</p>
+        <div className="text-error flex justify-center items-baseline gap-1" style={{ fontSize: '32px', lineHeight: 1, fontWeight: 700 }}>
+          <span>2</span>
+          <span className="text-lg font-semibold">ימים</span>
+          <span className="mr-2">14</span>
+          <span className="text-lg font-semibold">שעות</span>
+        </div>
+      </div>
+
+      {/* CTA */}
+      <button
+        id="dashboard-submit-constraints-btn"
+        className="w-full h-12 bg-secondary hover:bg-blue-700 text-white rounded-full font-bold transition-colors flex items-center justify-center gap-2"
+      >
+        <MaterialIcon name="edit_calendar" className="text-[18px]" />
+        הגש אילוצים
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WeeklyOverviewCard
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders a list of this week's schedule rows.
+ * Today is styled as "past shift", next shift highlighted in primary brand colour,
+ * and days-off shown in muted text.
+ */
+function WeeklyOverviewCard() {
+  return (
+    <div
+      className="bg-surface-container-lowest rounded-xl p-lg shadow-bezeq-card border border-surface-variant flex flex-col"
+      aria-label="סידור שבועי"
+    >
+      <h4 className="font-bold text-on-surface mb-4 flex items-center gap-2">
+        <MaterialIcon name="calendar_month" className="text-outline text-[22px]" />
+        השבוע שלי
+      </h4>
+
+      <div className="flex-1 space-y-2">
+        {WEEKLY_SCHEDULE.map((row) => {
+          if (row.isToday) {
+            return (
+              <div
+                key={row.day}
+                className="flex justify-between items-center p-3 bg-surface-container-low rounded-lg border border-transparent"
+              >
+                <span className="text-on-surface text-sm">{row.day}</span>
+                <span className="text-on-surface-variant text-sm opacity-70">{row.label}</span>
+              </div>
+            );
+          }
+          if (row.isNext) {
+            return (
+              <div
+                key={row.day}
+                className="flex justify-between items-center p-3 bg-primary-container text-white rounded-lg border border-primary"
+              >
+                <span className="text-sm font-medium">{row.day}</span>
+                <span className="text-sm font-bold">{row.label}</span>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={row.day}
+              className="flex justify-between items-center p-3 bg-surface-container-lowest rounded-lg border border-surface-variant hover:border-outline-variant transition-colors"
+            >
+              <span className="text-on-surface text-sm">{row.day}</span>
+              <span className={`text-sm font-bold ${row.isDayOff ? 'text-on-surface-variant' : 'text-on-surface-variant'}`}>
+                {row.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NotificationsPanel
+// ---------------------------------------------------------------------------
+
+/**
+ * Right-column notifications panel with unread badge and message list.
+ */
+function NotificationsPanel() {
+  return (
+    <section
+      className="bg-surface-container-lowest rounded-xl p-lg shadow-bezeq-card border border-surface-variant"
+      aria-label="הודעות מערכת"
+    >
+      <div className="flex justify-between items-center mb-4 pb-3 border-b border-surface-variant">
+        <h4 className="font-bold text-on-surface flex items-center gap-2">
+          <MaterialIcon name="campaign" className="text-primary text-[22px]" />
+          הודעות מערכת
+        </h4>
+        <span className="bg-error text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+          2 חדשות
+        </span>
+      </div>
+
+      <div className="space-y-4">
+        {/* Unread message */}
+        <div className="p-3 bg-blue-50 rounded-lg border-r-4 border-secondary">
+          <p className="font-bold text-sm text-on-surface mb-1">עדכון נוהל משמרת ערב</p>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            החל מיום ראשון הקרוב, שעת תחילת משמרת ערב תעודכן ל-15:30.
+          </p>
+          <p className="text-[10px] text-outline mt-2">לפני שעתיים</p>
+        </div>
+
+        {/* Read message */}
+        <div className="p-3 hover:bg-surface-container-low rounded-lg transition-colors border border-transparent">
+          <p className="font-bold text-sm text-on-surface mb-1">אילוצים לשבוע 44</p>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            אנא זכרו להגיש אילוצים עד יום חמישי ב-12:00.
+          </p>
+          <p className="text-[10px] text-outline mt-2">אתמול</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// QuickActionsPanel
+// ---------------------------------------------------------------------------
+
+/**
+ * 2×2 grid of quick-action shortcut buttons in the right column.
+ */
+function QuickActionsPanel() {
+  return (
+    <section
+      className="bg-surface-container-low rounded-xl p-lg border border-outline-variant"
+      aria-label="פעולות מהירות"
+    >
+      <h4 className="font-bold text-on-surface mb-4">פעולות ופניות</h4>
+
+      <div className="grid grid-cols-2 gap-3">
+        {QUICK_ACTIONS.map((action) => (
+          <button
+            key={action.label}
+            id={`quick-action-${action.icon}-btn`}
+            className="bg-surface-container-lowest hover:bg-surface-variant border border-outline-variant rounded-lg p-3 flex flex-col items-center justify-center gap-2 transition-colors h-[90px]"
+          >
+            <MaterialIcon name={action.icon} className={`${action.iconColorClass} text-[26px]`} />
+            <span className="text-xs font-bold text-center text-on-surface">{action.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DashboardPage – container component
+// ---------------------------------------------------------------------------
+
+/**
+ * Employee Dashboard Page.
+ *
+ * Layout:
+ * ```
+ * ┌──────────────────────┬──────────────────┐
+ * │   SideNavBar (right) │  Mobile TopBar   │
+ * ├──────────────────────┴──────────────────┤
+ * │  Header greeting / week badge            │
+ * ├───────────────────────────┬─────────────┤
+ * │  HeroShiftCard            │ Notifications│
+ * │  ConstraintCountdown      │ QuickActions │
+ * │  WeeklyOverview           │             │
+ * └───────────────────────────┴─────────────┘
+ * ```
+ *
+ * @returns {React.ReactElement}
  */
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  // Redirect admin / manager users to the admin dashboard
   useEffect(() => {
     if (user && (user.role === 'admin' || user.role === 'manager')) {
       navigate('/admin');
@@ -83,7 +483,7 @@ export default function DashboardPage() {
   }, [user, navigate]);
 
   /**
-   * Logs out the user and redirects to login
+   * Logs the current user out and redirects to the login screen.
    */
   function handleLogout() {
     logout();
@@ -91,259 +491,64 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="bg-surface-container text-on-surface antialiased min-h-screen" dir="rtl">
-      
-      {/* ------------------------------------------------------------------------
-          Right Sidebar (Enterprise Style)
-      -------------------------------------------------------------------------- */}
-      <aside className="fixed right-0 top-0 h-full w-64 bg-surface border-l border-outline/10 flex flex-col hidden md:flex z-40 shadow-sm">
-        <div className="p-6 border-b border-outline/10 flex items-center space-x-3 space-x-reverse">
-          <div className="w-8 h-8 bg-primary-blue rounded-lg flex items-center justify-center">
-            <Icon name="calendar" size={18} className="text-white" />
-          </div>
-          <span className="text-xl font-bold text-text-primary tracking-tight">ShiftScheduler</span>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto mt-2">
-          <a href="#" className="flex items-center space-x-3 space-x-reverse px-4 py-3 bg-action-blue/10 text-action-blue rounded-lg font-semibold transition-colors border-r-4 border-action-blue">
-            <Icon name="home" size={20} />
-            <span>לוח בקרה</span>
-          </a>
-          <a href="#" className="flex items-center space-x-3 space-x-reverse px-4 py-3 text-text-primary/70 hover:bg-neutral-gray hover:text-text-primary rounded-lg font-medium transition-colors">
-            <Icon name="calendar-month" size={20} />
-            <span>המשמרות שלי</span>
-          </a>
-          <a href="#" className="flex items-center space-x-3 space-x-reverse px-4 py-3 text-text-primary/70 hover:bg-neutral-gray hover:text-text-primary rounded-lg font-medium transition-colors">
-            <div className="relative">
-              <Icon name="message-circle" size={20} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-error rounded-full"></span>
-            </div>
-            <span>הודעות</span>
-          </a>
-          <a href="#" className="flex items-center space-x-3 space-x-reverse px-4 py-3 text-text-primary/70 hover:bg-neutral-gray hover:text-text-primary rounded-lg font-medium transition-colors">
-            <Icon name="settings" size={20} />
-            <span>הגדרות</span>
-          </a>
-          <a href="#" className="flex items-center space-x-3 space-x-reverse px-4 py-3 text-text-primary/70 hover:bg-neutral-gray hover:text-text-primary rounded-lg font-medium transition-colors">
-            <Icon name="help" size={20} />
-            <span>עזרה</span>
-          </a>
-        </nav>
+    <div className="bg-background text-on-background antialiased min-h-screen flex flex-col md:flex-row" dir="rtl">
 
-        <div className="p-4 border-t border-outline/10 bg-surface">
-          <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-outline/10 hover:border-action-blue/30 transition-colors cursor-pointer">
-            <div className="flex items-center space-x-3 space-x-reverse overflow-hidden">
-              <div className="w-10 h-10 rounded-full bg-neutral-gray flex-shrink-0 flex items-center justify-center text-text-primary font-bold border border-outline/10">
-                {user?.name?.charAt(0) || 'י'}
-              </div>
-              <div className="truncate">
-                <p className="text-sm font-bold text-text-primary truncate">{user?.name || 'יוני לוי'}</p>
-                <p className="text-xs text-text-primary/70 truncate">עובד בכיר</p>
+      {/* ── Mobile top app bar ─────────────────────────────────────────── */}
+      <TopAppBar onLogout={handleLogout} />
+
+      {/* ── Desktop sidebar ────────────────────────────────────────────── */}
+      <SideNavBar onLogout={handleLogout} />
+
+      {/* ── Main canvas ────────────────────────────────────────────────── */}
+      <main className="flex-1 md:pr-64 min-h-screen">
+        <div className="max-w-[1200px] mx-auto p-lg md:p-xl space-y-xl">
+
+          {/* ── Section header ─────────────────────────────────────────── */}
+          <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-surface-variant pb-lg">
+            <div>
+              <h2 className="text-h2 text-on-surface mb-1">
+                שלום, {user?.name || 'ישראל ישראלי'}
+              </h2>
+              <p className="text-sm text-on-surface-variant">
+                {new Date().toLocaleDateString('he-IL', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+
+            {/* Week badge */}
+            <div className="bg-surface-container px-4 py-2 rounded-full border border-outline-variant flex items-center gap-2 text-on-surface-variant">
+              <MaterialIcon name="calendar_view_week" className="text-[18px]" />
+              <span className="text-sm font-bold">שבוע 43 (22.10 - 28.10)</span>
+            </div>
+          </section>
+
+          {/* ── 12-column bento grid ───────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+            {/* Left / main column (8 of 12) */}
+            <div className="lg:col-span-8 space-y-5">
+              <HeroShiftCard />
+
+              {/* Two-up bento row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <ConstraintCountdownCard />
+                <WeeklyOverviewCard />
               </div>
             </div>
-            <button onClick={handleLogout} className="text-text-primary/50 hover:text-error transition-colors p-1" title="התנתק">
-              <Icon name="logout" size={18} />
-            </button>
-          </div>
-        </div>
-      </aside>
 
-      {/* ------------------------------------------------------------------------
-          Main Content
-      -------------------------------------------------------------------------- */}
-      <main className="md:mr-64 min-h-screen flex flex-col">
-        
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 md:right-64 h-20 bg-surface/80 backdrop-blur-md border-b border-outline/10 px-8 flex justify-between items-center z-30 shadow-sm">
-          <div>
-            <h1 className="text-3xl font-bold text-on-surface">לוח בקרה אישי</h1>
-          </div>
-          <div className="flex items-center space-x-4 space-x-reverse">
-             {/* Additional header actions can be placed here */}
-          </div>
-        </header>
-
-        {/* Dashboard Content Grid */}
-        <div className="p-8 max-w-7xl mx-auto w-full space-y-6 mt-20">
-          
-          {/* Top Section: Next Shift & Countdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Next Shift Card (Dark Blue) */}
-            <div className="lg:col-span-2 bg-primary-blue border border-primary-blue rounded-xl p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-               {/* Decorative accent */}
-               <div className="absolute top-0 left-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/2 -translate-x-1/3 blur-2xl pointer-events-none"></div>
-               
-               <div className="flex justify-between items-start mb-6 relative z-10">
-                 <div>
-                   <h2 className="text-2xl font-bold text-white mb-2">יום ראשון, 06:45 - 14:45</h2>
-                   <span className="inline-block bg-white/10 text-white text-sm font-bold px-3 py-1 rounded-full border border-white/20">משמרת בוקר</span>
-                 </div>
-               </div>
-               
-               <div className="flex items-center justify-between relative z-10 mt-auto">
-                 <div className="flex items-center space-x-4 space-x-reverse p-4 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm">
-                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-primary-blue font-bold">
-                      ד
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-white">מנהלת משמרת: דניאלה כהן</p>
-                      <div className="flex items-center text-xs text-inverse-primary mt-0.5 font-medium">
-                        <Icon name="message-circle" size={14} className="ml-1" />
-                        זמינה בהודעות
-                      </div>
-                    </div>
-                 </div>
-                 
-                 <button className="bg-white text-primary-blue px-6 py-3 rounded-lg font-bold text-sm hover:bg-neutral-gray transition-colors shadow-sm">
-                   צפה בפרטים
-                 </button>
-               </div>
-            </div>
-
-            {/* Countdown Card */}
-            <div className="bg-surface border border-outline/10 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center text-center">
-               <div className="w-16 h-16 rounded-full bg-action-blue/10 flex items-center justify-center mb-4 text-action-blue">
-                 <Icon name="clock" size={32} />
-               </div>
-               <p className="text-sm text-text-primary/70 font-semibold mb-2">זמן נותר למשמרת הבאה</p>
-               <p className="text-4xl font-bold text-action-blue mb-2">14 שעות</p>
-               <div className="w-full bg-neutral-gray h-2 rounded-full mt-4 mb-2 overflow-hidden">
-                 <div className="bg-action-blue h-full rounded-full" style={{ width: '75%' }}></div>
-               </div>
-               <p className="text-xs text-text-primary/50">75% מהזמן החופשי נוצל</p>
+            {/* Right / secondary column (4 of 12) */}
+            <div className="lg:col-span-4 space-y-5">
+              <NotificationsPanel />
+              <QuickActionsPanel />
             </div>
 
           </div>
-
-          {/* Main Dashboard Layout (4 Columns) */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            
-            {/* Right Column: Weekly Status & Messages */}
-            <div className="flex flex-col space-y-6">
-              
-              {/* Weekly Status Card */}
-              <div className="bg-primary-blue rounded-xl p-6 text-white shadow-md flex flex-col relative overflow-hidden">
-                 {/* Decorative accent */}
-                 <div className="absolute top-0 right-0 w-32 h-32 bg-action-blue/20 rounded-full -translate-y-1/2 translate-x-1/3 blur-xl pointer-events-none"></div>
-                 
-                 <h3 className="text-lg font-bold mb-6 relative z-10">סטטוס שבועי</h3>
-                 
-                 <div className="space-y-6 relative z-10">
-                   <div>
-                     <p className="text-inverse-primary text-sm mb-1 font-medium">שבוע נוכחי</p>
-                     <div className="flex items-end space-x-2 space-x-reverse">
-                       <span className="text-3xl font-bold">4/5</span>
-                       <span className="text-sm text-inverse-primary mb-1">משמרות</span>
-                     </div>
-                     {/* Progress bar */}
-                     <div className="w-full bg-white/10 h-2 rounded-full mt-3 overflow-hidden">
-                       <div className="bg-action-blue h-full rounded-full" style={{ width: '80%' }}></div>
-                     </div>
-                   </div>
-                   
-                   <div className="pt-5 border-t border-white/10">
-                     <p className="text-inverse-primary text-sm mb-1 font-medium">שבוע הבא</p>
-                     <p className="text-lg font-semibold text-white/80">טרם נקבע</p>
-                   </div>
-                 </div>
-              </div>
-
-              {/* Manager Messages */}
-              <div className="bg-surface border border-outline/10 rounded-xl p-6 shadow-sm flex flex-col flex-1">
-                <h3 className="text-lg font-bold text-primary-blue mb-5 flex items-center border-b border-outline/10 pb-4">
-                  <Icon name="message-circle" size={20} className="ml-2 text-action-blue" />
-                  הודעות מנהל
-                </h3>
-                
-                <div className="space-y-4 flex-1 overflow-y-auto">
-                  <div className="p-4 bg-neutral-gray rounded-xl border-r-4 border-r-action-blue">
-                    <h4 className="text-sm font-bold text-primary-blue mb-1">שינוי בנהלי פתיחה</h4>
-                    <p className="text-xs text-text-primary leading-relaxed">שימו לב, החל מיום ראשון הקרוב נהלי הפתיחה...</p>
-                  </div>
-                  <div className="p-4 bg-neutral-gray rounded-xl border-r-4 border-r-primary-blue">
-                    <h4 className="text-sm font-bold text-primary-blue mb-1">ישיבת צוות חודשית</h4>
-                    <p className="text-xs text-text-primary leading-relaxed">מוזמנים לישיבה ביום רביעי בשעה 16:00 בחדר הישיבות</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Center Columns: Weekly Shifts */}
-            <div className="lg:col-span-2 bg-surface border border-outline/10 rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-primary-blue">משמרות השבוע</h3>
-              </div>
-
-              {/* Days Header */}
-              <div className="grid grid-cols-7 gap-2 mb-4 text-center border-b border-outline/10 pb-3">
-                {['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'].map((day, idx) => (
-                  <div key={idx} className="text-sm font-bold text-text-primary/70">{day}</div>
-                ))}
-              </div>
-
-              {/* Shift List Details */}
-              <div className="space-y-3">
-                <div className="flex items-center p-4 bg-neutral-gray rounded-xl border border-outline/5 hover:border-action-blue/30 transition-colors">
-                   <div className="w-12 text-center text-xl font-bold text-action-blue border-l border-outline/10 pl-4 ml-4">
-                     א'
-                   </div>
-                   <div className="flex-1">
-                     <p className="font-bold text-primary-blue">משמרת בוקר</p>
-                     <p className="text-sm text-text-primary/80">08:00 - 16:00 | סניף מרכז</p>
-                   </div>
-                   <button className="text-action-blue hover:text-primary-blue transition-colors p-2 bg-surface rounded-md border border-outline/10">
-                     <Icon name="info" size={18} />
-                   </button>
-                </div>
-                
-                <div className="flex items-center p-4 bg-primary-blue rounded-xl border border-primary-blue shadow-md">
-                   <div className="w-12 text-center text-xl font-bold text-inverse-primary border-l border-white/20 pl-4 ml-4">
-                     ב'
-                   </div>
-                   <div className="flex-1">
-                     <p className="font-bold text-white">משמרת לילה</p>
-                     <p className="text-sm text-white/80">22:00 - 06:00 | סניף מרכז</p>
-                   </div>
-                   <button className="text-white hover:text-inverse-primary transition-colors p-2 bg-white/10 rounded-md border border-white/20">
-                     <Icon name="info" size={18} />
-                   </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Left Column: Quick Actions */}
-            <div className="bg-surface border border-outline/10 rounded-xl p-6 shadow-sm">
-              <h3 className="text-lg font-bold text-primary-blue mb-5">פעולות מהירות</h3>
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center p-4 bg-neutral-gray rounded-xl border border-outline/10 cursor-pointer hover:border-action-blue transition-colors group">
-                   <div className="w-12 h-12 bg-surface rounded-xl flex items-center justify-center text-action-blue ml-4 shadow-sm group-hover:bg-action-blue group-hover:text-white transition-colors">
-                     <Icon name="calendar" size={20} />
-                   </div>
-                   <div>
-                     <h4 className="font-bold text-primary-blue">אירועי השבוע</h4>
-                     <p className="text-xs text-text-primary">יום גיבוש צוותי ביום ה'</p>
-                   </div>
-                </div>
-                <div className="flex items-center p-4 bg-neutral-gray rounded-xl border border-outline/10 cursor-pointer hover:border-action-blue transition-colors group">
-                   <div className="w-12 h-12 bg-surface rounded-xl flex items-center justify-center text-action-blue ml-4 shadow-sm group-hover:bg-action-blue group-hover:text-white transition-colors">
-                     <Icon name="refresh-cw" size={20} />
-                   </div>
-                   <div>
-                     <h4 className="font-bold text-primary-blue">החלפת משמרת</h4>
-                     <p className="text-xs text-text-primary">הגש בקשה להחלפה</p>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
         </div>
       </main>
-
     </div>
   );
 }
-
