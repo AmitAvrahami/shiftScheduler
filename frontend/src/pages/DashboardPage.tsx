@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import LogoutConfirmDialog from '../components/LogoutConfirmDialog';
 
 // ---------------------------------------------------------------------------
 // Design-pattern note: Presentational / Container split is intentional.
@@ -474,6 +475,7 @@ function QuickActionsPanel() {
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   // Redirect admin / manager users to the admin dashboard
   useEffect(() => {
@@ -482,9 +484,6 @@ export default function DashboardPage() {
     }
   }, [user, navigate]);
 
-  /**
-   * Logs the current user out and redirects to the login screen.
-   */
   function handleLogout() {
     logout();
     navigate('/login');
@@ -494,10 +493,10 @@ export default function DashboardPage() {
     <div className="bg-background text-on-background antialiased min-h-screen flex flex-col md:flex-row" dir="rtl">
 
       {/* ── Mobile top app bar ─────────────────────────────────────────── */}
-      <TopAppBar onLogout={handleLogout} />
+      <TopAppBar onLogout={() => setShowLogoutDialog(true)} />
 
       {/* ── Desktop sidebar ────────────────────────────────────────────── */}
-      <SideNavBar onLogout={handleLogout} />
+      <SideNavBar onLogout={() => setShowLogoutDialog(true)} />
 
       {/* ── Main canvas ────────────────────────────────────────────────── */}
       <main className="flex-1 md:pr-64 min-h-screen">
@@ -549,6 +548,12 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      <LogoutConfirmDialog
+        open={showLogoutDialog}
+        onCancel={() => setShowLogoutDialog(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

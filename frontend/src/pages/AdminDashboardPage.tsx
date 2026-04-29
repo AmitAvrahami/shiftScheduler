@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import LogoutConfirmDialog from '../components/LogoutConfirmDialog';
 import {
   userApi,
   constraintApi,
@@ -1329,10 +1331,18 @@ export default function AdminDashboardPage() {
   const [generateResult, setGenerateResult]         = useState<GenerateResult | null>(null);
   const [definitions, setDefinitions]               = useState<ShiftDefinition[]>([]);
   const [isSidebarOpen, setIsSidebarOpen]           = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog]     = useState(false);
+
+  const { logout } = useAuth();
 
   const weekId     = getCurrentWeekId();
   const nextWeekId = getNextWeekId(weekId);
   const employees  = users.filter(u => u.isActive);
+
+  function handleLogout() {
+    logout();
+    navigate('/login');
+  }
 
   // Load users
   useEffect(() => {
@@ -1434,7 +1444,7 @@ export default function AdminDashboardPage() {
             <SidebarNavLink icon="settings" label="הגדרות" />
           </nav>
           <div className="p-4 border-t border-[#F0F0F0]">
-            <SidebarNavLink icon="log" label="התנתק" />
+            <SidebarNavLink icon="log" label="התנתק" onClick={() => setShowLogoutDialog(true)} />
           </div>
         </aside>
 
@@ -1473,6 +1483,11 @@ export default function AdminDashboardPage() {
         </div>
 
         <ToastNotification toast={toast} onDismiss={() => setToast(null)} />
+        <LogoutConfirmDialog
+          open={showLogoutDialog}
+          onCancel={() => setShowLogoutDialog(false)}
+          onConfirm={handleLogout}
+        />
       </div>
     </>
   );
