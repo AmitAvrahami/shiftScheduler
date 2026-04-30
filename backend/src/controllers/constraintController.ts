@@ -5,6 +5,7 @@ import ConstraintException from '../models/ConstraintException';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
 import User from '../models/User';
+import SystemSettings from '../models/SystemSettings';
 import AppError from '../utils/AppError';
 import {
   getConstraintDeadline,
@@ -12,6 +13,8 @@ import {
   getAllowedWeekId,
   parseWeekId,
 } from '../utils/weekUtils';
+
+import { broadcastToEmployees } from '../services/notificationService';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 
@@ -51,7 +54,12 @@ export async function getMyConstraints(
 
     const constraint = await Constraint.findOne({ userId: req.user!._id, weekId });
     const deadline = getConstraintDeadline(weekId);
-    const isLocked = isConstraintDeadlinePassed(weekId);
+    const deadlinePassed = isConstraintDeadlinePassed(weekId);
+
+    // Check for explicit lock in settings
+    const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
+    const isExplicitlyLocked = !!lockSetting?.value;
+    const isLocked = deadlinePassed || isExplicitlyLocked;
 
     res.json({
       success: true,
@@ -76,14 +84,20 @@ export async function upsertMyConstraints(
 
     if (req.user!.role === 'employee') {
       const deadlinePassed = isConstraintDeadlinePassed(weekId);
-      if (deadlinePassed) {
+      const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
+      const isExplicitlyLocked = !!lockSetting?.value;
+
+      if (deadlinePassed || isExplicitlyLocked) {
         const exception = await ConstraintException.findOne({
           employeeId: req.user!._id,
           weekId,
           status: 'approved',
         });
         if (!exception) {
-          return next(new AppError('Deadline passed. Request an unlock from your manager.', 403));
+          const message = isExplicitlyLocked
+            ? 'הגשת אילוצים לשבוע זה ננעלה על ידי המנהל.'
+            : 'Deadline passed. Request an unlock from your manager.';
+          return next(new AppError(message, 403));
         }
         // Consume the exception — single use
         exception.status = 'consumed';
@@ -124,6 +138,84 @@ export async function upsertMyConstraints(
     );
 
     res.json({ success: true, constraint });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /constraints/:weekId/all — manager gets all constraints for a week
+export async function getAllConstraintsForWeek(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+
+    const constraints = await Constraint.find({ weekId }).populate('userId', 'name email role avatarUrl');
+    const deadline = getConstraintDeadline(weekId);
+    const deadlinePassed = isConstraintDeadlinePassed(weekId);
+
+    const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
+    const isExplicitlyLocked = !!lockSetting?.value;
+
+    res.json({
+      success: true,
+      constraints,
+      deadline: deadline.toISOString(),
+      isLocked: deadlinePassed || isExplicitlyLocked,
+      isExplicitlyLocked,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /constraints/:weekId/toggle-lock — manager toggle week lock
+export async function toggleWeekLock(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { weekId } = req.params;
+    const { isLocked } = req.body;
+
+    if (!validateWeekId(weekId, next)) return;
+
+    const key = `lock_constraints_${weekId}`;
+    const setting = await SystemSettings.findOneAndUpdate(
+      { key },
+      {
+        $set: {
+          value: isLocked,
+          description: `Manual lock for week ${weekId}`,
+          updatedBy: req.user!._id,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    await AuditLog.create({
+      performedBy: req.user!._id,
+      action: isLocked ? 'week_locked' : 'week_unlocked',
+      refModel: 'SystemSettings',
+      refId: setting._id,
+      after: { weekId, isLocked },
+      ip: req.ip,
+    });
+
+    // Send broadcast notification
+    const title = isLocked ? `הגשת אילוצים לשבוע ${weekId} ננעלה` : `הגשת אילוצים לשבוע ${weekId} נפתחה`;
+    const body = isLocked 
+      ? `המנהל נעל את האפשרות להגיש אילוצים לשבוע ${weekId}.` 
+      : `המנהל פתח את האפשרות להגיש אילוצים לשבוע ${weekId}. ניתן להגיש כעת.`;
+    
+    await broadcastToEmployees(title, body, 'announcement', setting._id, 'SystemSettings');
+
+    res.json({ success: true, isLocked });
   } catch (err) {
     next(err);
   }
