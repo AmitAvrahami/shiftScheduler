@@ -15,7 +15,7 @@ export interface ConstraintEntry {
 
 export interface Constraint {
   _id: string;
-  userId: string;
+  userId: string | { _id: string; name: string; email: string; avatarUrl?: string };
   weekId: string;
   entries: ConstraintEntry[];
   isLocked: boolean;

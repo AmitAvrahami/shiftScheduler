@@ -5,6 +5,7 @@ export interface User {
   role: 'employee' | 'manager' | 'admin';
   isActive: boolean;
   isFixedMorningEmployee: boolean;
+  avatarUrl?: string;
 }
 
 export interface AuthResponse {
