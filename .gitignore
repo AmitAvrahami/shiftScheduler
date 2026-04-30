@@ -6,3 +6,15 @@ dist/
 build/
 .vscode/
 *.log
+
+# Python solver artefacts
+backend/solver/__pycache__/
+backend/solver/.venv/
+backend/solver/.pytest_cache/
+backend/solver/tests/__pycache__/
+
+# Scratch / design exploration files
+scratch_dashboard.html
+stitch_downloads/
+download_stitch_assets.sh
+design/
