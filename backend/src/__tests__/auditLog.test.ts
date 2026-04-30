@@ -59,10 +59,10 @@ describe('GET /api/v1/audit-logs', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 for manager (admin only)', async () => {
+  it('returns 200 for manager (now allowed)', async () => {
     const { token } = await seedManager();
     const res = await request(app).get('/api/v1/audit-logs').set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('admin can list audit logs with pagination', async () => {
@@ -98,12 +98,12 @@ describe('GET /api/v1/audit-logs/:id', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 for manager', async () => {
+  it('returns 200 for manager (now allowed)', async () => {
     const { admin } = await seedAdmin();
     const { token } = await seedManager();
     const log = await seedLog(admin._id);
     const res = await request(app).get(`/api/v1/audit-logs/${log._id}`).set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('returns 404 for nonexistent log', async () => {

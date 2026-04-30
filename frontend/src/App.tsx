@@ -6,13 +6,14 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import ConstraintPage from './pages/ConstraintPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route
@@ -36,6 +37,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConstraintPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <AdminDashboardPage />
               </ProtectedRoute>
             }
           />

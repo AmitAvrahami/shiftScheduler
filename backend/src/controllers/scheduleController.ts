@@ -243,8 +243,34 @@ export async function generateSchedule(
   try {
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
+
     const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
-    const result = await runScheduler(weekId, actorId, req.ip ?? 'unknown');
+    const ip = req.ip ?? 'unknown';
+
+    // Ensure a draft schedule exists before invoking the solver
+    const existing = await WeeklySchedule.findOne({ weekId });
+    if (!existing) {
+      const dates = getWeekDates(weekId);
+      const created = await WeeklySchedule.create({
+        weekId,
+        startDate: dates[0],
+        endDate: dates[6],
+        status: 'draft',
+        generatedBy: 'auto',
+      });
+      await AuditLog.create({
+        performedBy: actorId,
+        action: 'schedule_created',
+        refModel: 'WeeklySchedule',
+        refId: created._id,
+        after: { weekId, generatedBy: 'auto', status: 'draft' },
+        ip,
+      });
+    } else if (existing.status !== 'draft') {
+      return next(new AppError(`Cannot re-generate a ${existing.status} schedule`, 422));
+    }
+
+    const result = await runScheduler(weekId, actorId, ip);
     res.json({ success: true, ...result });
   } catch (err) {
     next(err);
