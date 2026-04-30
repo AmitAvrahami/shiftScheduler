@@ -21,6 +21,7 @@ export default function ConstraintPage() {
   // key = "definitionId:YYYY-MM-DD", value = true means canWork:false (blocked)
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [isLocked, setIsLocked] = useState(false);
+  const [lockReason, setLockReason] = useState<'deadline' | 'schedule' | null>(null);
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [loadError, setLoadError] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -43,6 +44,13 @@ export default function ConstraintPage() {
 
         setDefinitions(definitions);
         setIsLocked(constraintRes.isLocked);
+        if (constraintRes.isLocked) {
+          setLockReason(
+            constraintRes.weekStatus && constraintRes.weekStatus !== 'open' ? 'schedule' : 'deadline'
+          );
+        } else {
+          setLockReason(null);
+        }
         setDeadline(new Date(constraintRes.deadline));
 
         if (constraintRes.constraint) {
@@ -121,8 +129,12 @@ export default function ConstraintPage() {
             <MaterialIcon name="lock" className="text-red-600" />
             <div>
               <p className="font-semibold text-red-700">הגשת האילוצים נעולה</p>
-              {formattedDeadline && (
-                <p className="text-sm text-red-500">הדדליין עבר: {formattedDeadline}</p>
+              {lockReason === 'schedule' ? (
+                <p className="text-sm text-red-500">השבוע עבר לשלב הבא — לא ניתן עוד לשנות אילוצים</p>
+              ) : (
+                formattedDeadline && (
+                  <p className="text-sm text-red-500">הדדליין עבר: {formattedDeadline}</p>
+                )
               )}
             </div>
           </div>

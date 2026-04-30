@@ -6,7 +6,7 @@ import type { Constraint, ConstraintEntry, ShiftDefinition } from '../types/cons
 export interface Schedule {
   _id: string;
   weekId: string;
-  status: 'draft' | 'published' | 'archived';
+  status: 'open' | 'locked' | 'generating' | 'draft' | 'published' | 'archived';
   generatedBy: string;
   startDate: string;
   endDate: string;
@@ -132,6 +132,7 @@ export const constraintApi = {
     deadline: string;
     isLocked: boolean;
     isExplicitlyLocked?: boolean;
+    weekStatus: Schedule['status'] | null;
   }> {
     return request(`/constraints/${weekId}`);
   },
@@ -142,6 +143,7 @@ export const constraintApi = {
     deadline: string;
     isLocked: boolean;
     isExplicitlyLocked: boolean;
+    weekStatus: Schedule['status'] | null;
   }> {
     return request(`/constraints/${weekId}/all`);
   },
@@ -203,7 +205,7 @@ export const scheduleApi = {
     });
   },
 
-  update(id: string, status: 'published' | 'archived'): Promise<{ success: boolean; schedule: Schedule }> {
+  update(id: string, status: 'open' | 'locked' | 'draft' | 'published' | 'archived'): Promise<{ success: boolean; schedule: Schedule }> {
     return request(`/schedules/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
