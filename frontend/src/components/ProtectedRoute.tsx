@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface Props {
   children: React.ReactNode;
-  requiredRole?: 'manager' | 'admin';
+  requiredRole?: 'manager';
 }
 
 export default function ProtectedRoute({ children, requiredRole }: Props) {
@@ -20,10 +20,7 @@ export default function ProtectedRoute({ children, requiredRole }: Props) {
   if (!user) return <Navigate to="/login" replace />;
 
   if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
-    // If user is already logged in but unauthorized for this specific role,
-    // redirect them to their primary dashboard instead of the login page.
-    const dashboardPath = (user.role === 'admin' || user.role === 'manager') ? '/admin' : '/dashboard';
-    return <Navigate to={dashboardPath} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

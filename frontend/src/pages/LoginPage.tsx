@@ -11,14 +11,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user && !loading) {
+    if (!isLoading && user) {
       if (user.role === 'admin' || user.role === 'manager') {
         navigate('/admin');
       } else {
         navigate('/dashboard');
       }
     }
-  }, [user, navigate, loading, isLoading]);
+  }, [user, navigate, isLoading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +26,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login({ email, password });
-      // Navigation will be handled by useEffect above after user state updates
+      // navigation handled by useEffect when user state updates
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
       setLoading(false);

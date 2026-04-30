@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import LogoutConfirmDialog from '../components/LogoutConfirmDialog';
 import {
   userApi,
   constraintApi,
@@ -97,13 +99,6 @@ function getCurrentShiftIndex(now: Date): number {
   return 2;
 }
 
-function shiftProgress(shiftIdx: number, now: Date): number {
-  const [sh, sm] = SHIFTS[shiftIdx].start.split(':').map(Number);
-  let elapsed = now.getHours() * 60 + now.getMinutes() - (sh * 60 + sm);
-  if (elapsed < 0) elapsed += 1440;
-  return Math.min(100, Math.round((elapsed / 480) * 100));
-}
-
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
@@ -122,7 +117,7 @@ function avatarBg(idx: number): string {
 type IconName =
   | 'clock' | 'alert' | 'send' | 'calendar' | 'check' | 'plus'
   | 'download' | 'sun' | 'moon' | 'sunset' | 'users' | 'bell'
-  | 'settings' | 'log' | 'x' | 'zap' | 'eye' | 'edit';
+  | 'settings' | 'log' | 'x' | 'zap' | 'eye' | 'edit' | 'home' | 'help';
 
 function Icon({
   name,
@@ -154,6 +149,8 @@ function Icon({
     zap:      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
     eye:      <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
     edit:     <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+    home:     <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
+    help:     <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
   };
   return (
     <svg
@@ -208,15 +205,33 @@ const AUDIT_ICONS: Record<AuditType, IconName> = {
 // ─── Card style helpers ───────────────────────────────────────────────────────
 
 const cardStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.04)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  background: '#ffffff',
+  border: '1px solid #e2e8f0',
+  boxShadow: 'rgba(61, 83, 222, 0.16) 0px 4px 16px 0px',
+  borderRadius: '12px',
 };
 
 const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function Header({ weekId }: { weekId: string }) {
+function SidebarNavLink({ icon, label, active, onClick }: { icon: IconName; label: string; active?: boolean; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-r-[3px] ${
+        active
+          ? 'bg-[#F1F8FF] text-[#056AE5] border-[#056AE5] font-bold'
+          : 'text-[#484C50] hover:bg-[#F1F8FF] hover:text-[#056AE5] border-transparent'
+      }`}
+    >
+      <Icon name={icon} size={18} className={active ? 'text-[#056AE5]' : 'text-[#646769]'} />
+      {label}
+    </button>
+  );
+}
+
+function TopHeader({ weekId, onToast, onSidebarToggle }: { weekId: string; onToast?: (t: Toast) => void; onSidebarToggle?: () => void }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -226,53 +241,52 @@ function Header({ weekId }: { weekId: string }) {
   const DAYS   = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
   const pad = (n: number) => String(n).padStart(2, '0');
-  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  const dateStr = `יום ${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-  const isConstraintWindow = now.getDay() === 0;
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const dateStr = `יום ${DAYS[now.getDay()]}, ${now.getDate()} ב${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
   const weekNum = parseWeekNumber(weekId);
 
   return (
-    <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex items-center justify-center w-10 h-10 rounded-xl"
-          style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)' }}
+    <header className="bg-white border-b border-[#F0F0F0] px-4 lg:px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => onSidebarToggle?.()}
+          className="lg:hidden p-2 -mr-2 text-on-surface-variant hover:bg-neutral-gray rounded-lg transition-colors"
         >
-          <Icon name="zap" size={18} className="text-blue-400" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-white tracking-tight">ShiftScheduler</h1>
-          <p className="text-xs font-medium" style={{ color: '#64748b' }}>לוח בקרה מנהל · IST (UTC+3)</p>
-        </div>
+          <Icon name="home" size={24} />
+        </button>
+        <h1 className="font-h2 text-h2 text-[#010636] tracking-tight truncate">שלום, מנהל! 👋</h1>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        {isConstraintWindow && (
-          <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
-            style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399' }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-            חלון הגשת אילוצים פתוח
+      <div className="flex items-center gap-2 lg:gap-6">
+        <div className="hidden md:flex items-center gap-4 text-sm font-medium text-[#2B358F]">
+          <div className="flex items-center gap-2">
+            <Icon name="calendar" size={16} className="text-[#056AE5]" />
+            שבוע {weekNum}
           </div>
-        )}
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium"
-          style={{ ...cardStyle, color: '#94a3b8' }}
-        >
-          <Icon name="calendar" size={13} />
-          <span className="font-semibold text-white">שבוע {weekNum}</span>
+          <div className="w-1.5 h-1.5 rounded-full bg-[#e2e8f0]" />
+          <div className="hidden lg:flex items-center gap-2">
+            <Icon name="clock" size={16} className="text-[#056AE5]" />
+            <span style={{ direction: 'ltr', display: 'inline-block' }}>{time}</span>
+          </div>
+          <div className="hidden lg:block w-1.5 h-1.5 rounded-full bg-[#e2e8f0]" />
+          <div className="font-bold text-[#2B358F]">{dateStr}</div>
         </div>
-        <div
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
-          style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)' }}
-        >
-          <Icon name="clock" size={14} className="text-blue-400" />
-          <span className="text-white font-mono tracking-wider" style={{ direction: 'ltr', display: 'inline-block' }}>
-            {time}
-          </span>
+
+        <div className="flex items-center gap-1 lg:gap-3 border-r border-[#F0F0F0] pr-2 lg:pr-6">
+          <button 
+            className="w-8 h-8 lg:w-10 lg:h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-neutral-gray transition-colors"
+            onClick={() => onToast?.({ message: 'עזרה — בקרוב', type: 'info' })}
+          >
+            <Icon name="help" size={18} />
+          </button>
+          <button className="relative w-8 h-8 lg:w-10 lg:h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-neutral-gray transition-colors">
+            <Icon name="bell" size={18} />
+            <span className="absolute top-1.5 lg:top-2.5 right-1.5 lg:right-2.5 w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full bg-error border-2 border-white" />
+          </button>
+          <button className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-secondary/10 text-secondary font-bold flex items-center justify-center border-2 border-white shadow-sm mr-1 lg:ml-2">
+            מ
+          </button>
         </div>
-        <div className="text-xs hidden sm:block" style={{ color: '#64748b' }}>{dateStr}</div>
       </div>
     </header>
   );
@@ -297,81 +311,65 @@ function ShiftCard({
 }) {
   const isCurrent = type === 'current';
   const isPrev    = type === 'prev';
+  const isNext    = type === 'next';
+
+  if (isCurrent) {
+    return (
+      <div
+        className="text-white rounded-xl p-md flex flex-col gap-sm relative overflow-hidden h-full current-glow"
+        style={{ background: 'linear-gradient(135deg, #010636 0%, #2B358F 100%)', boxShadow: 'rgba(61, 83, 222, 0.35) 0px 8px 24px 0px' }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+        <div className="flex justify-between items-center font-label-caps text-label-caps opacity-90 relative z-10">
+          <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span>פעיל</span>
+          </div>
+        </div>
+        <h3 className="font-h3 text-h3 text-white relative z-10">משמרת נוכחית</h3>
+        <p className="font-body-sm text-body-sm opacity-90 relative z-10">{shift.label}</p>
+        <div className="mt-auto pt-sm relative z-10">
+          <span className="font-body-sm text-body-sm font-medium">{staff.length} עובדים במשמרת</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`relative flex-1 min-w-0 rounded-2xl p-5 ${isCurrent ? 'current-glow' : ''}`}
-      style={{
-        background: isCurrent
-          ? 'linear-gradient(135deg,rgba(59,130,246,0.12),rgba(99,102,241,0.08))'
-          : isPrev
-          ? 'rgba(255,255,255,0.02)'
-          : 'rgba(255,255,255,0.04)',
-        border: isCurrent
-          ? '1px solid rgba(59,130,246,0.5)'
-          : '1px solid rgba(255,255,255,0.07)',
-        opacity: isPrev ? 0.6 : 1,
-      }}
+      className={`bg-white border border-[#e2e8f0] rounded-xl p-md flex flex-col gap-sm h-full ${isPrev ? 'opacity-70' : 'hover:shadow-md transition-shadow'}`}
+      style={isPrev ? undefined : { boxShadow: 'rgba(61, 83, 222, 0.16) 0px 4px 16px 0px' }}
     >
-      {isCurrent && (
-        <div
-          className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold"
-          style={{ background: 'rgba(59,130,246,0.2)', color: '#93c5fd' }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
-          פעיל
-        </div>
-      )}
-      {isPrev && <div className="absolute top-3 left-3 text-xs font-medium" style={{ color: '#475569' }}>קודם</div>}
-      {type === 'next' && <div className="absolute top-3 left-3 text-xs font-medium" style={{ color: '#64748b' }}>הבא</div>}
-
-      <div className="flex items-center gap-2 mb-3 mt-1">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: shift.dimBg, border: `1px solid ${shift.color}30` }}
-        >
-          <Icon name={shift.icon} size={15} style={{ color: shift.color }} />
-        </div>
-        <div>
-          <div className="text-sm font-semibold" style={{ color: isPrev ? '#64748b' : shift.color }}>
-            {shift.label}
-          </div>
-          <div
-            className="text-xs font-mono"
-            style={{ color: '#64748b', direction: 'ltr', display: 'inline-block' }}
-          >
-            {shift.start} – {shift.end}
-          </div>
-        </div>
+      <div className={`flex justify-between items-center font-label-caps text-label-caps ${isNext ? 'text-[#056AE5]' : 'text-on-surface-variant'}`}>
+        <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+        <Icon name={isPrev ? 'clock' : 'calendar'} size={16} />
       </div>
-
-      <div className="space-y-1.5">
-        {staff.length === 0 ? (
-          <div className="text-xs" style={{ color: '#475569' }}>אין עובדים משובצים</div>
-        ) : (
-          staff.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-2">
+      <h3 className="font-h3 text-h3 text-on-surface">{isPrev ? 'משמרת קודמת' : 'משמרת הבאה'}</h3>
+      <p className="font-body-sm text-body-sm text-on-surface-variant">{shift.label}</p>
+      <div className="mt-auto pt-sm flex items-center justify-between">
+        <div className="flex -space-x-2 space-x-reverse">
+          {staff.length === 0 ? (
+            <span className="text-[10px] text-on-surface-variant opacity-50">אין משובצים</span>
+          ) : (
+            staff.map((s, i) => (
               <div
-                style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: avatarBg(i),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 8, fontWeight: 700, color: '#fff', flexShrink: 0,
-                }}
+                key={s.id}
+                className="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden bg-surface-container-high"
+                title={s.name}
               >
-                {avatarInitials(s.name)}
-              </div>
-              <span className="text-xs truncate" style={{ color: isPrev ? '#475569' : '#cbd5e1' }}>{s.name}</span>
-              {s.isFixed && (
-                <span
-                  className="text-xs px-1 rounded"
-                  style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', fontSize: 9 }}
+                <div
+                  className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white"
+                  style={{ background: avatarBg(i) }}
                 >
-                  קבוע
-                </span>
-              )}
-            </div>
-          ))
+                  {avatarInitials(s.name)}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {isNext && staff.length === 0 && (
+          <span className="font-label-caps text-label-caps text-error bg-error-container text-on-error-container px-2 py-1 rounded">חסר עובד</span>
         )}
       </div>
     </div>
@@ -424,25 +422,19 @@ function ShiftOverview({
   function staffForShiftDef(defIdx: number): StaffEntry[] {
     const def = sortedDefs[defIdx];
     if (!def) {
-      // Fallback to round-robin when no real data
       if (defIdx === 0) return employees.filter(u => u.isFixedMorningEmployee).map(u => ({ id: u._id, name: u.name, isFixed: true }));
       const nonFixed = employees.filter(u => !u.isFixedMorningEmployee);
       if (defIdx === 1) return nonFixed.filter((_, i) => i % 2 === 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
       return nonFixed.filter((_, i) => i % 2 !== 0).map(u => ({ id: u._id, name: u.name, isFixed: false }));
     }
 
-    // Find today's shift for this definition
     const todayShift = shifts.find((s) => {
       const shiftDateKey = toDateKey(new Date(s.date));
       return shiftDateKey === todayKey && s.definitionId === def._id;
     });
 
-    if (!todayShift) {
-      // No shift record today — show empty
-      return [];
-    }
+    if (!todayShift) return [];
 
-    // Find assignments for this shift
     const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift._id);
     return shiftAssignments.map((a) => {
       const user = employees.find((u) => u._id === a.userId);
@@ -454,105 +446,18 @@ function ShiftOverview({
     });
   }
 
-  const progress = shiftProgress(curIdx, now);
-
-  function userShiftIdx(u: User): number {
-    if (u.isFixedMorningEmployee) return 0;
-    const nonFixed = employees.filter(e => !e.isFixedMorningEmployee);
-    const idx = nonFixed.findIndex(e => e._id === u._id);
-    return idx % 2 === 0 ? 1 : 2;
-  }
-
   return (
-    <section className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>סקירת משמרות</h2>
-        <span className="text-xs" style={{ color: '#475569' }}>06:45 · 14:45 · 22:45</span>
-      </div>
-
-      <div className="flex gap-3 mb-4">
+    <section className="col-span-1 md:col-span-2 flex flex-col gap-md">
+      <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">סטטוס משמרות</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
         <ShiftCard shift={SHIFTS[prevIdx]} staff={staffForShiftDef(prevIdx)} type="prev" />
         <ShiftCard shift={SHIFTS[curIdx]}  staff={staffForShiftDef(curIdx)}  type="current" />
         <ShiftCard shift={SHIFTS[nextIdx]} staff={staffForShiftDef(nextIdx)} type="next" />
       </div>
-
-      {/* Progress bar */}
-      <div className="mb-5 rounded-xl px-4 py-3" style={cardStyle}>
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs" style={{ color: '#64748b' }}>
-            התקדמות משמרת — {SHIFTS[curIdx].label}
-          </span>
-          <span className="text-xs font-semibold text-blue-400">{progress}%</span>
-        </div>
-        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1e293b' }}>
-          <div
-            className="h-full rounded-full transition-all duration-1000"
-            style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#3b82f6,#8b5cf6)' }}
-          />
-        </div>
-      </div>
-
-      {/* Who's working today */}
-      <div className="rounded-2xl p-5" style={cardStyle}>
-        <div className="flex items-center gap-2 mb-4">
-          <Icon name="users" size={14} style={{ color: '#64748b' }} />
-          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#94a3b8' }}>
-            מי עובד היום
-          </h3>
-          <span
-            className="mr-auto text-xs px-2 py-0.5 rounded-full font-semibold"
-            style={{ background: 'rgba(59,130,246,0.15)', color: '#93c5fd' }}
-          >
-            {employees.length} עובדים
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {employees.map((u, i) => {
-            const sIdx  = userShiftIdx(u);
-            const shift = SHIFTS[sIdx];
-            const isCur = sIdx === curIdx;
-            return (
-              <div
-                key={u._id}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all"
-                style={{
-                  background: isCur ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)',
-                  border: isCur ? '1px solid rgba(59,130,246,0.2)' : '1px solid transparent',
-                }}
-              >
-                <div
-                  style={{
-                    width: 30, height: 30, borderRadius: '50%',
-                    background: avatarBg(i),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 10, fontWeight: 700, color: '#fff',
-                  }}
-                >
-                  {avatarInitials(u.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate" style={{ color: '#e2e8f0' }}>{u.name}</div>
-                  <div
-                    className="text-xs font-mono"
-                    style={{ color: shift.color, direction: 'ltr', display: 'inline-block' }}
-                  >
-                    {shift.start} – {shift.end}
-                  </div>
-                </div>
-                {isCur && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />}
-              </div>
-            );
-          })}
-          {employees.length === 0 && (
-            <div className="col-span-2 text-sm text-center py-4" style={{ color: '#475569' }}>
-              אין עובדים פעילים
-            </div>
-          )}
-        </div>
-      </div>
     </section>
   );
 }
+
 
 // ─── Missing constraints ──────────────────────────────────────────────────────
 
@@ -567,96 +472,87 @@ function MissingConstraints({ missingUsers }: { missingUsers: User[] | null }) {
   }
 
   return (
-    <section className="mb-6">
-      <div className="flex items-center justify-between mb-4">
+    <section className="h-full flex flex-col">
+      <div className="flex items-center justify-between mb-md">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>
+          <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">
             אילוצים חסרים
           </h2>
           {visible.length > 0 && (
             <span
-              className="flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold"
-              style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}
+              className="flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold bg-error-container text-on-error-container animate-pulse"
             >
               {visible.length}
             </span>
           )}
         </div>
-        <span className="text-xs" style={{ color: '#475569' }}>דדליין: שני 23:59 IST</span>
+        <span className="text-xs text-on-surface-variant font-medium">דדליין: שני 23:59 IST</span>
       </div>
 
-      {missingUsers === null ? (
-        <div className="rounded-2xl p-6 flex items-center gap-3" style={cardStyle}>
-          <span className="text-sm" style={{ color: '#64748b' }}>טוען...</span>
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="rounded-2xl p-6 flex items-center gap-3" style={cardStyle}>
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(16,185,129,0.15)' }}
-          >
-            <Icon name="check" size={16} className="text-emerald-400" />
+      <div className="flex-1">
+        {missingUsers === null ? (
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-surface-container animate-pulse" />
+            <span className="font-body-sm text-body-sm text-on-surface-variant">טוען נתונים...</span>
           </div>
-          <span className="text-sm" style={{ color: '#94a3b8' }}>כל הצוות הגיש אילוצים.</span>
-        </div>
-      ) : (
-        <div className="rounded-2xl overflow-hidden" style={cardStyle}>
-          <div
-            className="px-4 py-3 flex gap-3 text-xs font-semibold uppercase tracking-wider"
-            style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
-          >
-            <span className="flex-1">עובד</span>
-            <span className="w-20">פעולה</span>
-          </div>
-          {visible.map((u, i) => (
-            <div
-              key={u._id}
-              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.02]"
-              style={{ borderBottom: i < visible.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
-            >
-              <div
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: avatarBg(i),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
-                }}
-              >
-                {avatarInitials(u.name)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium" style={{ color: '#e2e8f0' }}>{u.name}</span>
-                  <Icon name="alert" size={12} className="text-red-400 flex-shrink-0" />
-                </div>
-                <span className="text-xs" style={{ color: '#475569' }}>
-                  {u.role === 'manager' ? 'מנהל' : 'עובד'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleRemind(u._id)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
-                  style={{
-                    background: reminded.includes(u._id) ? 'rgba(16,185,129,0.15)' : 'rgba(59,130,246,0.15)',
-                    color:      reminded.includes(u._id) ? '#34d399' : '#93c5fd',
-                    border:     reminded.includes(u._id) ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(59,130,246,0.2)',
-                  }}
-                >
-                  {reminded.includes(u._id) ? 'נשלח!' : 'תזכורת'}
-                </button>
-                <button
-                  onClick={() => setDismissed(d => [...d, u._id])}
-                  className="w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
-                  style={{ color: '#475569' }}
-                >
-                  <Icon name="x" size={12} />
-                </button>
-              </div>
+        ) : visible.length === 0 ? (
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-3 shadow-sm">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-50">
+              <Icon name="check" size={16} className="text-green-600" />
             </div>
-          ))}
-        </div>
-      )}
+            <span className="font-body-sm text-body-sm text-on-surface-variant">כל הצוות הגיש אילוצים לשבוע הבא.</span>
+          </div>
+        ) : (
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+            <div className="bg-surface-container-high px-md py-sm flex justify-between text-label-caps font-label-caps text-on-surface-variant">
+              <span>שם העובד</span>
+              <span>פעולות</span>
+            </div>
+            <div className="divide-y divide-outline-variant">
+              {visible.map((u, i) => (
+                <div
+                  key={u._id}
+                  className="flex items-center gap-3 px-md py-md transition-colors hover:bg-surface-container-low"
+                >
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                    style={{ background: avatarBg(i) }}
+                  >
+                    {avatarInitials(u.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-body-base text-body-base text-on-surface font-semibold">{u.name}</span>
+                      <Icon name="alert" size={14} className="text-error" />
+                    </div>
+                    <span className="font-body-sm text-body-sm text-on-surface-variant">
+                      {u.role === 'manager' ? 'מנהל' : 'עובד'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleRemind(u._id)}
+                      className={`font-button text-button px-4 py-2 rounded-full transition-all border ${
+                        reminded.includes(u._id)
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-[#056AE5] text-white border-[#056AE5] hover:bg-[#0457B8]'
+                      }`}
+                    >
+                      {reminded.includes(u._id) ? 'נשלח!' : 'תזכורת'}
+                    </button>
+                    <button
+                      onClick={() => setDismissed(d => [...d, u._id])}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-surface-container text-on-surface-variant"
+                    >
+                      <Icon name="x" size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -735,41 +631,35 @@ function ConstraintManagerPanel({
 
   return (
     <section className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>
-          ניהול אילוצי עובדים
+      <div className="flex items-center justify-between mb-md">
+        <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">
+          ניהול אילוצים
         </h2>
-        <span className="text-xs" style={{ color: '#475569' }}>שבוע {parseWeekNumber(nextWeekId)}</span>
+        <span className="text-xs text-on-surface-variant font-medium">שבוע {parseWeekNumber(nextWeekId)}</span>
       </div>
 
-      <div className="rounded-2xl overflow-hidden" style={cardStyle}>
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
         {employees.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-center" style={{ color: '#475569' }}>אין עובדים פעילים</div>
+          <div className="px-md py-lg text-sm text-center text-on-surface-variant">אין עובדים פעילים</div>
         ) : (
           employees.map((u, i) => (
             <div
               key={u._id}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
-              style={{ borderBottom: i < employees.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+              className={`flex items-center gap-3 px-md py-3 hover:bg-surface-container-low transition-colors ${i < employees.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
             >
               <div
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: avatarBg(i),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
-                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                style={{ background: avatarBg(i) }}
               >
                 {avatarInitials(u.name)}
               </div>
-              <span className="flex-1 text-sm font-medium" style={{ color: '#e2e8f0' }}>{u.name}</span>
+              <span className="flex-1 font-body-sm text-body-sm text-on-surface font-medium">{u.name}</span>
               <button
                 onClick={() => openEditor(u)}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
-                style={{ background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.25)' }}
+                className="flex items-center gap-1.5 font-button text-[11px] px-3 py-1.5 rounded-md transition-all border border-[#056AE5] text-[#2B358F] hover:bg-[#F1F8FF]"
               >
                 <Icon name="edit" size={12} />
-                ערוך
+                עריכה
               </button>
             </div>
           ))
@@ -780,34 +670,33 @@ function ConstraintManagerPanel({
       {selectedUser && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.7)' }}
+          style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(2px)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setSelectedUser(null); }}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl p-6 max-h-[90vh] overflow-auto"
-            style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)' }}
+            className="w-full max-w-3xl rounded-2xl p-6 max-h-[90vh] overflow-auto bg-white shadow-xl border border-slate-200"
           >
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-bold text-white">
+              <h3 className="text-base font-bold text-slate-800">
                 אילוצי {selectedUser.name} — שבוע {parseWeekNumber(nextWeekId)}
               </h3>
-              <button onClick={() => setSelectedUser(null)} style={{ color: '#64748b' }}>
+              <button onClick={() => setSelectedUser(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <Icon name="x" size={18} />
               </button>
             </div>
 
             {loading ? (
-              <div className="py-8 text-center text-sm" style={{ color: '#64748b' }}>טוען...</div>
+              <div className="py-8 text-center text-sm text-slate-500">טוען...</div>
             ) : (
-              <div className="overflow-auto">
-                <table className="w-full text-sm border-collapse">
+              <div className="overflow-auto rounded-xl border border-slate-200">
+                <table className="w-full text-sm border-collapse bg-white">
                   <thead>
-                    <tr>
-                      <th className="py-2 px-3 text-right font-medium" style={{ color: '#64748b', minWidth: 100 }}>משמרת</th>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-3 px-3 text-right font-medium text-slate-500" style={{ minWidth: 100 }}>משמרת</th>
                       {weekDates.map((date, i) => (
-                        <th key={i} className="py-2 px-2 text-center font-medium" style={{ color: '#64748b', minWidth: 60 }}>
+                        <th key={i} className="py-3 px-2 text-center font-medium text-slate-500 border-r border-slate-200" style={{ minWidth: 60 }}>
                           <span className="block">{DAY_LABELS[i]}</span>
-                          <span className="block text-xs" style={{ color: '#334155' }}>
+                          <span className="block text-xs font-normal mt-0.5 text-slate-400">
                             {date.getDate()}/{date.getMonth() + 1}
                           </span>
                         </th>
@@ -815,15 +704,15 @@ function ConstraintManagerPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {definitions.map((def) => (
-                      <tr key={def._id}>
-                        <td className="py-2 px-3" style={{ color: '#cbd5e1' }}>
+                    {definitions.map((def, defIdx) => (
+                      <tr key={def._id} className={defIdx < definitions.length - 1 ? 'border-b border-slate-100' : ''}>
+                        <td className="py-3 px-3 text-slate-700 font-medium">
                           <span
-                            className="inline-block w-2 h-2 rounded-full ml-2"
+                            className="inline-block w-2.5 h-2.5 rounded-full ml-2"
                             style={{ backgroundColor: def.color }}
                           />
                           {def.name}
-                          <span className="block text-xs" style={{ color: '#475569' }}>
+                          <span className="block text-xs font-normal text-slate-500 mt-0.5 mr-4.5">
                             {def.startTime}–{def.endTime}
                           </span>
                         </td>
@@ -831,13 +720,12 @@ function ConstraintManagerPanel({
                           const dateKey = toDateKey(date);
                           const cellKey = `${def._id}:${dateKey}`;
                           return (
-                            <td key={colIdx} className="py-2 px-2 text-center">
+                            <td key={colIdx} className="py-2 px-2 text-center border-r border-slate-100 hover:bg-slate-50 transition-colors">
                               <input
                                 type="checkbox"
                                 checked={!!editChecked[cellKey]}
                                 onChange={() => handleToggle(def._id, dateKey)}
-                                className="w-4 h-4 cursor-pointer"
-                                style={{ accentColor: '#ef4444' }}
+                                className="w-4 h-4 cursor-pointer rounded border-slate-300 text-red-500 focus:ring-red-500"
                                 aria-label={`${def.name} — ${DAY_LABELS[colIdx]}`}
                               />
                             </td>
@@ -850,25 +738,26 @@ function ConstraintManagerPanel({
               </div>
             )}
 
-            <p className="text-xs mt-4 mb-5" style={{ color: '#475569' }}>
+            <p className="text-xs mt-4 mb-5 text-slate-500 flex items-center gap-2">
+              <Icon name="alert" size={14} className="text-slate-400" />
               סמן משמרות שהעובד אינו יכול לעבוד בהן. שינויים נשמרים בלחיצה על שמור.
             </p>
 
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
               <button
                 onClick={() => setSelectedUser(null)}
-                className="px-4 py-2 rounded-xl text-sm font-medium"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
               >
                 ביטול
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: saving ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.9)', color: '#fff', cursor: saving ? 'wait' : 'pointer' }}
+                className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
+                  saving ? 'bg-[#056AE5]/70 text-white cursor-wait' : 'bg-[#056AE5] text-white hover:bg-[#0457B8] hover:shadow'
+                }`}
               >
-                {saving ? 'שומר...' : 'שמור'}
+                {saving ? 'שומר...' : 'שמור אילוצים'}
               </button>
             </div>
           </div>
@@ -921,6 +810,7 @@ function BroadcastCenter({
       // Immediately fetch initial status
       const statusRes = await notificationApi.getBroadcastStatus(res.broadcastId);
       setRecipients(statusRes.recipients);
+      onToast({ message: 'הודעה הופצה לכל הצוות', type: 'success' });
       setMsg('');
     } catch (err) {
       onToast({ message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה', type: 'error' });
@@ -936,55 +826,45 @@ function BroadcastCenter({
   const readCount = recipients.filter(r => r.isRead).length;
 
   return (
-    <section className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>
+    <section className="h-full flex flex-col">
+      <div className="flex items-center justify-between mb-md">
+        <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">
           הודעות לצוות
         </h2>
-        <div className="flex items-center gap-1.5 text-xs" style={{ color: '#475569' }}>
-          <Icon name="users" size={12} />
+        <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
+          <Icon name="users" size={14} className="text-secondary" />
           <span>{recipientCount} נמענים</span>
         </div>
       </div>
 
-      <div className="rounded-2xl p-5" style={cardStyle}>
-        <div className="flex items-center gap-2 mb-3">
-          <Icon name="bell" size={14} style={{ color: '#64748b' }} />
-          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>
-            שידור הודעה
-          </span>
-        </div>
-
+      <div className="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm flex flex-col">
         {!broadcastId ? (
           <>
+            <div className="flex items-center gap-2 mb-sm">
+              <Icon name="bell" size={14} className="text-secondary" />
+              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+                שידור הודעה חדשה
+              </span>
+            </div>
+
             <textarea
               value={msg}
               onChange={e => setMsg(e.target.value)}
               placeholder="הכנס עדכונים חשובים, הודעות ביקורת, או הוראות כלליות לכל הצוות..."
-              className="w-full h-24 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none transition-all"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: '#e2e8f0',
-                direction: 'rtl',
-              }}
-              onFocus={e => (e.target.style.borderColor = 'rgba(59,130,246,0.4)')}
-              onBlur={e  => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
+              className="w-full flex-1 min-h-[120px] rounded-lg px-4 py-3 text-body-sm font-body-sm resize-none focus:outline-none focus:ring-2 focus:ring-[rgba(43,53,143,0.1)] focus:border-[#2B358F] transition-all bg-white border border-[#16254F] text-on-surface"
+              style={{ direction: 'rtl' }}
             />
 
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-xs" style={{ color: '#475569' }}>
+            <div className="flex items-center justify-between mt-md">
+              <span className="text-xs text-on-surface-variant font-medium opacity-70">
                 {msg.length > 0 ? `${msg.length} תווים` : 'תומך Markdown'}
               </span>
               <button
                 onClick={handleSend}
                 disabled={!msg.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                style={{
-                  background: msg.trim() ? 'rgba(59,130,246,0.9)' : 'rgba(255,255,255,0.05)',
-                  color:      msg.trim() ? '#fff'                  : '#475569',
-                  cursor:     msg.trim() ? 'pointer' : 'default',
-                }}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-button text-button transition-all shadow-sm ${
+                  msg.trim() ? 'bg-[#056AE5] text-white hover:bg-[#0457B8] hover:shadow-md' : 'bg-surface-container text-on-surface-variant/40 cursor-not-allowed'
+                }`}
               >
                 <Icon name="send" size={14} />
                 שלח לכולם
@@ -992,69 +872,62 @@ function BroadcastCenter({
             </div>
           </>
         ) : (
-          <>
+          <div className="flex flex-col h-full">
             {/* Receipt panel */}
-            <div
-              className="rounded-xl px-4 py-3 mb-4"
-              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}
-            >
-              <div className="flex items-center justify-between mb-2">
+            <div className="rounded-lg px-4 py-3 mb-md bg-green-50 border border-green-200">
+              <div className="flex items-center justify-between mb-sm">
                 <div className="flex items-center gap-2">
-                  <Icon name="check" size={14} className="text-emerald-400" />
-                  <span className="text-sm font-semibold" style={{ color: '#34d399' }}>ההודעה נשלחה!</span>
+                  <Icon name="check" size={16} className="text-green-600" />
+                  <span className="text-sm font-bold text-green-800">ההודעה נשלחה!</span>
                 </div>
-                <span className="text-xs" style={{ color: '#475569' }}>
+                <span className="text-xs font-bold text-green-700">
                   {readCount}/{recipients.length} קראו
                 </span>
               </div>
-              <div className="h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div className="h-2 rounded-full bg-green-100 overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all duration-500"
+                  className="h-full transition-all duration-700 bg-green-500"
                   style={{
                     width: recipients.length ? `${(readCount / recipients.length) * 100}%` : '0%',
-                    background: 'linear-gradient(90deg,#10b981,#34d399)',
                   }}
                 />
               </div>
             </div>
 
-            <div className="space-y-1.5 mb-4 max-h-48 overflow-auto">
+            <div className="flex-1 space-y-2 overflow-auto pr-1 mb-md">
               {recipients.map((r, i) => (
                 <div
                   key={r.userId}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30"
                 >
                   <div
-                    style={{
-                      width: 26, height: 26, borderRadius: '50%',
-                      background: avatarBg(i),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0,
-                    }}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                    style={{ background: avatarBg(i) }}
                   >
                     {avatarInitials(r.name)}
                   </div>
-                  <span className="flex-1 text-xs" style={{ color: '#cbd5e1' }}>{r.name}</span>
+                  <span className="flex-1 text-sm font-medium text-on-surface">{r.name}</span>
                   {r.isRead
-                    ? <Icon name="check" size={13} style={{ color: '#10b981' }} />
-                    : <Icon name="clock" size={13} style={{ color: '#475569' }} />
+                    ? <div className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-100"><Icon name="check" size={10} /> נקרא</div>
+                    : <div className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant opacity-60 bg-surface-container px-2 py-0.5 rounded border border-outline-variant/20"><Icon name="clock" size={10} /> ממתין</div>
                   }
                 </div>
               ))}
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-xs" style={{ color: '#475569' }}>מתרענן כל 5 שניות</span>
+            <div className="flex justify-between items-center pt-md border-t border-outline-variant/20 mt-auto">
+              <div className="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                מתרענן כל 5 שניות
+              </div>
               <button
                 onClick={handleReset}
-                className="text-xs font-medium px-4 py-2 rounded-xl transition-all"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
+                className="font-button text-button px-4 py-2 rounded-lg transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
               >
-                שלח הודעה חדשה
+                הודעה חדשה
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </section>
@@ -1077,6 +950,11 @@ function GeneratedSchedulePanel({
     result.status === 'FEASIBLE' ? '#f59e0b' :
     result.status === 'RELAXED'  ? '#f97316' : '#ef4444';
 
+  const statusBg =
+    result.status === 'OPTIMAL'  ? 'rgba(16,185,129,0.1)' :
+    result.status === 'FEASIBLE' ? 'rgba(245,158,11,0.1)' :
+    result.status === 'RELAXED'  ? 'rgba(249,115,22,0.1)' : 'rgba(239,68,68,0.1)';
+
   const statusLabel =
     result.status === 'OPTIMAL'  ? 'אופטימלי' :
     result.status === 'FEASIBLE' ? 'ישים' :
@@ -1084,61 +962,79 @@ function GeneratedSchedulePanel({
 
   return (
     <div
-      className="rounded-2xl p-5 mb-6"
-      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${statusColor}40` }}
+      className="rounded-2xl p-5 mb-6 shadow-sm"
+      style={{ background: '#ffffff', border: `1px solid ${statusColor}40` }}
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <Icon name="zap" size={16} style={{ color: statusColor }} />
-          <span className="text-sm font-bold text-white">תוצאות הפקת לוח שיבוץ</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: statusBg }}>
+            <Icon name="zap" size={16} style={{ color: statusColor }} />
+          </div>
+          <span className="text-sm font-bold text-slate-800">תוצאות הפקת לוח שיבוץ</span>
           <span
-            className="text-xs font-bold px-2 py-0.5 rounded-full"
-            style={{ background: `${statusColor}20`, color: statusColor }}
+            className="text-xs font-bold px-2 py-0.5 rounded-full border"
+            style={{ background: statusBg, color: statusColor, borderColor: `${statusColor}30` }}
           >
             {statusLabel}
           </span>
         </div>
-        <button onClick={onClose} style={{ color: '#475569' }}>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 hover:bg-slate-100 p-1.5 rounded-md">
           <Icon name="x" size={16} />
         </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+        <div className="rounded-xl p-3 border border-slate-100 bg-slate-50">
           <div className="text-xl font-bold mb-0.5" style={{ color: statusColor }}>
             {result.assignmentCount}
           </div>
-          <div className="text-xs" style={{ color: '#475569' }}>שיבוצים</div>
+          <div className="text-xs text-slate-500 font-medium">שיבוצים</div>
         </div>
-        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-          <div className="text-xl font-bold mb-0.5 text-white">
+        <div className="rounded-xl p-3 border border-slate-100 bg-slate-50">
+          <div className="text-xl font-bold mb-0.5 text-slate-700">
             {(result.solveTimeMs / 1000).toFixed(2)}s
           </div>
-          <div className="text-xs" style={{ color: '#475569' }}>זמן פתרון</div>
+          <div className="text-xs text-slate-500 font-medium">זמן פתרון</div>
         </div>
-        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+        <div className="rounded-xl p-3 border border-slate-100 bg-slate-50">
           <div className="text-xl font-bold mb-0.5" style={{ color: result.warnings.length ? '#f59e0b' : '#10b981' }}>
             {result.warnings.length}
           </div>
-          <div className="text-xs" style={{ color: '#475569' }}>אזהרות</div>
+          <div className="text-xs text-slate-500 font-medium">אזהרות</div>
         </div>
       </div>
 
       {result.warnings.length > 0 && (
-        <div className="rounded-xl px-4 py-3 mb-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-          <div className="text-xs font-semibold mb-2" style={{ color: '#fbbf24' }}>אזהרות</div>
-          {result.warnings.map((w, i) => (
-            <div key={i} className="text-xs" style={{ color: '#94a3b8' }}>• {w.message}</div>
-          ))}
+        <div className="rounded-xl px-4 py-3 mb-3 bg-amber-50 border border-amber-200">
+          <div className="text-xs font-bold mb-2 flex items-center gap-1.5 text-amber-700">
+            <Icon name="alert" size={12} />
+            אזהרות
+          </div>
+          <div className="space-y-1.5">
+            {result.warnings.map((w, i) => (
+              <div key={i} className="text-xs text-amber-800 flex items-start gap-2">
+                <span className="mt-0.5">•</span>
+                <span>{w.message}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {result.violations.length > 0 && (
-        <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-          <div className="text-xs font-semibold mb-2" style={{ color: '#f87171' }}>הפרות (מרופה)</div>
-          {result.violations.map((v, i) => (
-            <div key={i} className="text-xs" style={{ color: '#94a3b8' }}>• {v.message}</div>
-          ))}
+        <div className="rounded-xl px-4 py-3 bg-red-50 border border-red-200">
+          <div className="text-xs font-bold mb-2 flex items-center gap-1.5 text-red-700">
+            <Icon name="alert" size={12} />
+            הפרות (מרופה)
+          </div>
+          <div className="space-y-1.5">
+            {result.violations.map((v, i) => (
+              <div key={i} className="text-xs text-red-800 flex items-start gap-2">
+                <span className="mt-0.5">•</span>
+                <span>{v.message}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1147,6 +1043,9 @@ function GeneratedSchedulePanel({
 
 // ─── Quick actions ────────────────────────────────────────────────────────────
 
+/**
+ * QuickActions Component - Redesigned for Stitch Design System
+ */
 function QuickActions({
   weekId,
   onToast,
@@ -1156,14 +1055,11 @@ function QuickActions({
   onToast: (t: Toast) => void;
   onGenerateResult: (r: GenerateResult) => void;
 }) {
-  const navigate = useNavigate();
-  const [active, setActive]         = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   async function handleGenerate() {
     if (generating) return;
     setGenerating(true);
-    setActive('generate');
     try {
       const result = await scheduleApi.generate(weekId);
       onGenerateResult(result);
@@ -1172,60 +1068,71 @@ function QuickActions({
       onToast({ message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ', type: 'error' });
     } finally {
       setGenerating(false);
-      setTimeout(() => setActive(null), 600);
     }
   }
 
   const actions = [
-    { id: 'generate',  label: 'הפקת לוח שיבוץ',   sub: `מנוע CSP · שבוע ${parseWeekNumber(weekId)}`, icon: 'zap'      as IconName, color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.25)',  onClick: handleGenerate },
-    { id: 'leaves',    label: 'אישור חופשות',       sub: 'בקרוב',                                       icon: 'check'    as IconName, color: '#10b981', bg: 'rgba(16,185,129,0.12)',  border: 'rgba(16,185,129,0.25)',  onClick: () => onToast({ message: 'אישור חופשות — בקרוב', type: 'info' }) },
-    { id: 'emergency', label: 'הוספת משמרת חירום',  sub: 'שיבוץ ידני',                                  icon: 'plus'     as IconName, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.25)',  onClick: () => onToast({ message: 'הוספת משמרת חירום — בקרוב', type: 'info' }) },
-    { id: 'export',    label: 'ייצוא דוח',           sub: 'PDF / CSV',                                   icon: 'download' as IconName, color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',  border: 'rgba(139,92,246,0.25)',  onClick: () => onToast({ message: 'ייצוא דוח — בקרוב', type: 'info' }) },
-    { id: 'users',     label: 'ניהול עובדים',        sub: 'עובדים פעילים',                                icon: 'users'    as IconName, color: '#06b6d4', bg: 'rgba(6,182,212,0.12)',   border: 'rgba(6,182,212,0.25)',   onClick: () => navigate('/users') },
-    { id: 'audit',     label: 'יומן ביקורת',         sub: 'פעילות אחרונה',                               icon: 'log'      as IconName, color: '#ec4899', bg: 'rgba(236,72,153,0.12)',  border: 'rgba(236,72,153,0.25)',  onClick: () => document.getElementById('audit-log')?.scrollIntoView({ behavior: 'smooth' }) },
+    { id: 'generate',  label: 'ייצור סידור עבודה', icon: 'zap'      as IconName, onClick: handleGenerate, subtitle: 'אוטומציה מלאה',   isPrimary: true  },
+    { id: 'leaves',    label: 'אישור חופשות',       icon: 'check'    as IconName, onClick: () => onToast({ message: 'אישור חופשות — בקרוב', type: 'info' }), subtitle: 'ניהול היעדרויות', isPrimary: false },
+    { id: 'emergency', label: 'משמרת חירום',        icon: 'alert'    as IconName, onClick: () => onToast({ message: 'הוספת משמרת חירום — בקרוב', type: 'info' }), subtitle: 'שיבוץ דחוף',       isPrimary: false },
+    { id: 'export',    label: 'ייצוא דוחות',        icon: 'download' as IconName, onClick: () => onToast({ message: 'ייצוא דוח — בקרוב', type: 'info' }), subtitle: 'PDF / Excel',       isPrimary: false },
   ];
 
   return (
-    <section className="mb-6">
-      <h2 className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: '#cbd5e1' }}>
-        פעולות מהירות
-      </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {actions.map(a => (
-          <button
-            key={a.id}
-            onClick={a.onClick}
-            disabled={a.id === 'generate' && generating}
-            className="group rounded-2xl p-4 text-right transition-all"
-            style={{
-              background: active === a.id ? a.bg : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${active === a.id ? a.border : 'rgba(255,255,255,0.07)'}`,
-              transform: active === a.id ? 'scale(0.97)' : 'scale(1)',
-              cursor: a.id === 'generate' && generating ? 'wait' : 'pointer',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = a.bg;
-              e.currentTarget.style.borderColor = a.border;
-            }}
-            onMouseLeave={e => {
-              if (active !== a.id) {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
-              }
-            }}
-          >
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center mb-2 transition-transform group-hover:scale-110"
-              style={{ background: a.bg, border: `1px solid ${a.border}` }}
-            >
-              <Icon name={a.icon} size={17} style={{ color: a.color }} />
-            </div>
-            <div className="text-sm font-semibold leading-tight mb-1" style={{ color: '#e2e8f0' }}>{a.label}</div>
-            <div className="text-xs" style={{ color: '#475569' }}>
-              {a.id === 'generate' && generating ? 'מעבד...' : a.sub}
-            </div>
-          </button>
-        ))}
+    <section className="flex flex-col w-full">
+      <div className="flex items-center justify-between mb-md">
+        <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">
+          פעולות מהירות
+        </h2>
+      </div>
+
+      <div className="bg-white border border-[#e2e8f0] rounded-lg p-md" style={{ boxShadow: 'rgba(61, 83, 222, 0.16) 0px 4px 16px 0px' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {actions.map(a => {
+            const isGenerate  = a.id === 'generate';
+            const isEmergency = a.id === 'emergency';
+            const isLoading   = isGenerate && generating;
+
+            return (
+              <button
+                key={a.id}
+                onClick={a.onClick}
+                disabled={isLoading}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all border font-medium min-h-[56px] ${
+                  isLoading
+                    ? 'bg-[#056AE5]/80 text-white border-transparent cursor-wait'
+                    : isGenerate
+                    ? 'bg-[#056AE5] text-white border-transparent hover:bg-[#0457B8] shadow-md'
+                    : isEmergency
+                    ? 'bg-white text-error border-error/40 hover:bg-error/5 hover:border-error'
+                    : 'bg-white text-[#2B358F] border-[#e2e8f0] hover:bg-[#F1F8FF] hover:border-[#056AE5]'
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  isLoading || isGenerate
+                    ? 'bg-white/20 text-white'
+                    : isEmergency
+                    ? 'bg-error/10 text-error'
+                    : 'bg-[#056AE5]/10 text-[#056AE5]'
+                }`}>
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Icon name={a.icon} size={18} />
+                  )}
+                </div>
+                <div className="flex flex-col items-start text-right overflow-hidden">
+                  <span className="text-sm font-bold whitespace-nowrap">
+                    {isLoading ? 'מעבד...' : a.label}
+                  </span>
+                  <span className={`text-[10px] font-medium opacity-70 ${isGenerate && !isLoading ? 'text-white' : 'text-on-surface-variant'}`}>
+                    {a.subtitle}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -1244,30 +1151,30 @@ function AuditLogWidget() {
   }, []);
 
   return (
-    <section className="mb-6" id="audit-log">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#cbd5e1' }}>
+    <section className="flex flex-col h-full" id="audit-log">
+      <div className="flex items-center justify-between mb-md">
+        <h2 className="font-h2 text-h2 text-[#010636] border-r-4 border-[#056AE5] pr-3">
           פעילות אחרונה
         </h2>
-        <button className="text-xs text-blue-400 hover:text-blue-300 transition-colors">← הכל</button>
+        <button className="font-button text-xs text-secondary hover:underline font-medium transition-colors">צפה בהכל</button>
       </div>
-      <div className="rounded-2xl overflow-hidden" style={cardStyle}>
+
+      <div className="rounded-xl overflow-hidden" style={cardStyle}>
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="flex items-center gap-3 px-4 py-3"
-              style={{ borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+              className={`flex items-center gap-3 px-md py-3 ${i < 3 ? 'border-b border-outline-variant/30' : ''}`}
             >
-              <div className="w-7 h-7 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
-              <div className="flex-1 space-y-1">
-                <div className="h-2.5 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.06)', width: '60%' }} />
-                <div className="h-2 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.04)', width: '40%' }} />
+              <div className="w-8 h-8 rounded-lg bg-surface-container animate-pulse flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-2.5 rounded bg-surface-container-high animate-pulse w-3/4" />
+                <div className="h-2 rounded bg-surface-container animate-pulse w-1/2" />
               </div>
             </div>
           ))
         ) : logs.length === 0 ? (
-          <div className="px-4 py-6 text-center text-sm" style={{ color: '#475569' }}>אין פעילות עדיין</div>
+          <div className="px-md py-lg text-sm text-center text-on-surface-variant">אין פעילות עדיין</div>
         ) : (
           logs.map((entry, i) => {
             const type = actionToType(entry.action);
@@ -1281,20 +1188,19 @@ function AuditLogWidget() {
             return (
               <div
                 key={entry._id}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
-                style={{ borderBottom: i < logs.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+                className={`flex items-center gap-3 px-md py-3 hover:bg-surface-container-low transition-colors ${i < logs.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
               >
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${AUDIT_COLORS[type]}20` }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${AUDIT_COLORS[type]}15`, border: `1px solid ${AUDIT_COLORS[type]}30` }}
                 >
-                  <Icon name={AUDIT_ICONS[type]} size={12} style={{ color: AUDIT_COLORS[type] }} />
+                  <Icon name={AUDIT_ICONS[type]} size={14} style={{ color: AUDIT_COLORS[type] }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate" style={{ color: '#cbd5e1' }}>{label}</div>
-                  <div className="text-xs truncate" style={{ color: '#475569' }}>{performer}</div>
+                  <div className="font-body-sm text-sm font-semibold truncate text-on-surface">{label}</div>
+                  <div className="text-[10px] truncate text-on-surface-variant opacity-70">{performer}</div>
                 </div>
-                <span className="text-xs flex-shrink-0" style={{ color: '#334155' }}>{timeStr}</span>
+                <span className="text-[10px] font-medium flex-shrink-0 text-on-surface-variant">{timeStr}</span>
               </div>
             );
           })
@@ -1324,7 +1230,7 @@ function Sidebar({
   stats: ScheduleStats | null;
 }) {
   const STATS = [
-    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '—', color: '#3b82f6' },
+    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '—', color: '#056AE5' },
     { label: 'מלאות',        value: stats ? String(stats.filled)  : '—', color: '#10b981' },
     { label: 'חלקיות',       value: stats ? String(stats.partial) : '—', color: '#f59e0b' },
     { label: 'ריקות',        value: stats ? String(stats.empty)   : '—', color: '#ef4444' },
@@ -1375,7 +1281,7 @@ function Sidebar({
               <span className="text-xs" style={{ color: '#64748b' }}>{item.label}</span>
               <span
                 className="text-xs font-medium"
-                style={{ color: item.ok === true ? '#34d399' : item.ok === false ? '#f87171' : '#94a3b8' }}
+                style={{ color: item.ok === true ? '#056AE5' : item.ok === false ? '#f87171' : '#94a3b8' }}
               >
                 {item.status}
               </span>
@@ -1383,33 +1289,6 @@ function Sidebar({
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Notification bell ────────────────────────────────────────────────────────
-
-function NotificationBell({ count }: { count: number }) {
-  return (
-    <div className="fixed top-5 left-5 z-50">
-      <button
-        className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
-        style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          color: '#94a3b8',
-        }}
-      >
-        <Icon name="bell" size={16} />
-        {count > 0 && (
-          <span
-            className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full text-white font-bold"
-            style={{ background: '#ef4444', fontSize: 9 }}
-          >
-            {count}
-          </span>
-        )}
-      </button>
     </div>
   );
 }
@@ -1428,7 +1307,7 @@ function ToastNotification({ toast, onDismiss }: { toast: Toast | null; onDismis
   const colors = {
     success: { bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.3)', text: '#34d399' },
     error:   { bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)', text: '#f87171'  },
-    info:    { bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)', text: '#93c5fd' },
+    info:    { bg: 'rgba(43,53,143,0.12)',  border: 'rgba(43,53,143,0.25)', text: '#2B358F' },
   };
   const c = colors[toast.type];
 
@@ -1451,10 +1330,19 @@ export default function AdminDashboardPage() {
   const [scheduleStats, setScheduleStats]           = useState<ScheduleStats | null>(null);
   const [generateResult, setGenerateResult]         = useState<GenerateResult | null>(null);
   const [definitions, setDefinitions]               = useState<ShiftDefinition[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen]           = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog]     = useState(false);
+
+  const { logout } = useAuth();
 
   const weekId     = getCurrentWeekId();
   const nextWeekId = getNextWeekId(weekId);
   const employees  = users.filter(u => u.isActive);
+
+  function handleLogout() {
+    logout();
+    navigate('/login');
+  }
 
   // Load users
   useEffect(() => {
@@ -1510,47 +1398,96 @@ export default function AdminDashboardPage() {
     return () => { active = false; };
   }, [users, nextWeekId]);
 
+  const navigate = useNavigate();
+
   return (
     <>
       <style>{`
         @keyframes glow {
-          0%,100% { box-shadow: 0 0 10px 2px rgba(59,130,246,0.3), inset 0 0 20px rgba(59,130,246,0.05); }
-          50%      { box-shadow: 0 0 28px 8px rgba(59,130,246,0.5), inset 0 0 30px rgba(59,130,246,0.1); }
+          0%,100% { box-shadow: 0 0 10px 2px rgba(59,130,246,0.2), inset 0 0 20px rgba(59,130,246,0.05); }
+          50%      { box-shadow: 0 0 20px 6px rgba(59,130,246,0.4), inset 0 0 30px rgba(59,130,246,0.1); }
         }
         .current-glow { animation: glow 2.5s ease-in-out infinite; }
       `}</style>
 
-      <div
-        className="min-h-screen font-sans"
-        style={{ background: 'linear-gradient(135deg,#0f172a 0%,#0c1527 100%)', direction: 'rtl' }}
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-          <Header weekId={weekId} />
+      <div className="min-h-screen font-sans bg-[#F4F7FA] flex" style={{ direction: 'rtl' }}>
+        {/* Backdrop for mobile sidebar */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-[#010636]/40 backdrop-blur-sm z-30 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="xl:col-span-2">
-              <ShiftOverview users={employees} weekId={weekId} definitions={definitions} />
-              <MissingConstraints missingUsers={missingUsers} />
-              <ConstraintManagerPanel
-                users={users}
-                nextWeekId={nextWeekId}
-                definitions={definitions}
-                onToast={setToast}
-              />
-              <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
-              <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
-              <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} />
+        {/* Right Sidebar */}
+        <aside className={`w-64 bg-white border-l border-[#e2e8f0] flex flex-col fixed inset-y-0 right-0 z-40 transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-6 border-b border-[#F0F0F0] flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#010636] flex items-center justify-center">
+              <Icon name="calendar" size={16} className="text-white" />
             </div>
-
-            <div className="xl:col-span-1">
-              <AuditLogWidget />
-              <Sidebar weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
-            </div>
+            <span className="font-bold text-[#010636] text-lg">ניהול משמרות</span>
           </div>
+          <div className="p-4">
+            <button
+              className="w-full bg-[#056AE5] hover:bg-[#0457B8] text-white rounded-full py-2.5 flex items-center justify-center gap-2 font-medium transition-colors"
+              onClick={() => setToast({ message: 'משמרת חדשה — בקרוב', type: 'info' })}
+            >
+              <Icon name="plus" size={16} />
+              משמרת חדשה
+            </button>
+          </div>
+          <nav className="flex-1 px-3 py-2 space-y-1">
+            <SidebarNavLink icon="home" label="דאשבורד" active />
+            <SidebarNavLink icon="users" label="עובדים" onClick={() => navigate('/users')} />
+            <SidebarNavLink icon="calendar" label="לוחות זמנים" />
+            <SidebarNavLink icon="log" label="דוחות" />
+            <SidebarNavLink icon="settings" label="הגדרות" />
+          </nav>
+          <div className="p-4 border-t border-[#F0F0F0]">
+            <SidebarNavLink icon="log" label="התנתק" onClick={() => setShowLogoutDialog(true)} />
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <div className="flex-1 lg:mr-64 min-w-0 transition-all duration-300">
+           <TopHeader weekId={weekId} onToast={setToast} onSidebarToggle={() => setIsSidebarOpen(true)} />
+           
+           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <div className="space-y-6">
+                 {/* Quick Actions at the top */}
+                 <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} />
+                 
+                 {generateResult && (
+                   <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
+                 )}
+
+                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    {/* Main content column */}
+                    <div className="xl:col-span-2 space-y-6">
+                      <ShiftOverview users={employees} weekId={weekId} definitions={definitions} />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
+                         <MissingConstraints missingUsers={missingUsers} />
+                      </div>
+                    </div>
+                    
+                    {/* Side content column */}
+                    <div className="xl:col-span-1 space-y-6">
+                      <Sidebar weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
+                      <ConstraintManagerPanel users={users} nextWeekId={nextWeekId} definitions={definitions} onToast={setToast} />
+                      <AuditLogWidget />
+                    </div>
+                 </div>
+              </div>
+           </main>
         </div>
 
-        <NotificationBell count={missingUsers?.length ?? 0} />
         <ToastNotification toast={toast} onDismiss={() => setToast(null)} />
+        <LogoutConfirmDialog
+          open={showLogoutDialog}
+          onCancel={() => setShowLogoutDialog(false)}
+          onConfirm={handleLogout}
+        />
       </div>
     </>
   );
