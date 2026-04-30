@@ -6,6 +6,8 @@ import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import ConstraintPage from './pages/ConstraintPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminConstraintsPage from './pages/AdminConstraintsPage';
+import SchedulesPage from './pages/SchedulesPage';
 
 function App() {
   return (
@@ -40,10 +42,26 @@ function App() {
             }
           />
           <Route
+            path="/admin/constraints"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <AdminConstraintsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requiredRole="manager">
                 <AdminDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/schedules"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <SchedulesPage />
               </ProtectedRoute>
             }
           />
