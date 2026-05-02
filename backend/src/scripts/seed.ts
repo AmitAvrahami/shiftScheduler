@@ -2,105 +2,121 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import { connectDB } from '../config/db';
 import User from '../models/User';
+import ShiftDefinition from '../models/ShiftDefinition';
+
+const seedDefinitions = [
+  {
+    name: 'בוקר',
+    startTime: '06:45',
+    endTime: '14:45',
+    durationMinutes: 480,
+    crossesMidnight: false,
+    color: '#FFD700',
+    isActive: true,
+    orderNumber: 1,
+    coverageRequirements: { weekday: 2, weekend: 1 },
+  },
+  {
+    name: 'אחהצ',
+    startTime: '14:45',
+    endTime: '22:45',
+    durationMinutes: 480,
+    crossesMidnight: false,
+    color: '#FFA500',
+    isActive: true,
+    orderNumber: 2,
+    coverageRequirements: { weekday: 2, weekend: 1 },
+  },
+  {
+    name: 'לילה',
+    startTime: '22:45',
+    endTime: '06:45',
+    durationMinutes: 480,
+    crossesMidnight: true,
+    color: '#000080',
+    isActive: true,
+    orderNumber: 3,
+    coverageRequirements: { weekday: 1, weekend: 1 },
+  },
+];
 
 const seedUsers = [
   {
-    name: 'מנהל מערכת',
-    email: 'admin@shiftscheduler.com',
-    password: 'Admin1234!',
+    name: 'Meital',
+    email: 'meital@shiftscheduler.com',
+    password: 'Password123!',
     role: 'manager' as const,
-    isFixedMorningEmployee: true,
   },
   {
-    name: 'עובד לדוגמה',
-    email: 'employee@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Amit',
+    email: 'amit@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
   {
-    name: 'דניאל כהן',
-    email: 'daniel@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Ofek',
+    email: 'ofek@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
   {
-    name: 'מיה לוי',
-    email: 'mia@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Polina',
+    email: 'polina@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
   {
-    name: 'רון שמיר',
-    email: 'ron@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Shahar',
+    email: 'shahar@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
   {
-    name: 'לילך אברהם',
-    email: 'lilach@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Bar',
+    email: 'bar@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
   {
-    name: 'אמיר בן-דוד',
-    email: 'amir@shiftscheduler.com',
-    password: 'Employee1234!',
-    role: 'employee' as const,
-  },
-  {
-    name: 'שירה פרץ',
-    email: 'shira@shiftscheduler.com',
-    password: 'Employee1234!',
-    role: 'employee' as const,
-  },
-  {
-    name: 'יוסי גולן',
-    email: 'yossi@shiftscheduler.com',
-    password: 'Employee1234!',
-    role: 'employee' as const,
-  },
-  {
-    name: 'נוי ברק',
-    email: 'noy@shiftscheduler.com',
-    password: 'Employee1234!',
-    role: 'employee' as const,
-  },
-  {
-    name: 'אור זיו',
-    email: 'or@shiftscheduler.com',
-    password: 'Employee1234!',
+    name: 'Laura',
+    email: 'laura@shiftscheduler.com',
+    password: 'Password123!',
     role: 'employee' as const,
   },
 ];
 
 async function seed(): Promise<void> {
-  await connectDB();
+  try {
+    await connectDB();
 
-  for (const userData of seedUsers) {
-    const existing = await User.findOne({ email: userData.email });
-    if (existing) {
-      // Idempotent promotion: upgrade legacy admin role to manager
-      if (existing.role === 'admin') {
-        await User.findByIdAndUpdate(existing._id, {
-          role: 'manager',
-          isFixedMorningEmployee: true,
-        });
-        console.log(`Promoted admin → manager: ${userData.email}`);
-      } else {
-        console.log(`User already exists, skipping: ${userData.email}`);
-      }
-      continue;
+    // Clear existing users to ensure exactly 7 users as per requirements
+    await User.deleteMany({});
+    console.log('Cleared existing users');
+
+    for (const userData of seedUsers) {
+      const user = new User(userData);
+      await user.save(); // triggers pre-save bcrypt hook
+      console.log(`Created ${userData.role}: ${userData.email}`);
     }
-    const user = new User(userData);
-    await user.save(); // triggers pre-save bcrypt hook
-    console.log(`Created ${userData.role}: ${userData.email}`);
-  }
 
-  await mongoose.disconnect();
-  console.log('Done.');
+    const manager = await User.findOne({ role: 'manager' });
+    const existingDefs = await ShiftDefinition.countDocuments();
+    if (existingDefs === 0 && manager) {
+      for (const d of seedDefinitions) {
+        await ShiftDefinition.create({ ...d, createdBy: manager._id });
+        console.log(`Created ShiftDefinition: ${d.name}`);
+      }
+    } else {
+      console.log('ShiftDefinitions already exist, skipping.');
+    }
+
+    console.log('Seed completed successfully.');
+  } catch (err: unknown) {
+    console.error('Seed failed:', err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  } finally {
+    await mongoose.disconnect();
+  }
 }
 
-seed().catch((err: Error) => {
-  console.error('Seed failed:', err.message);
-  process.exit(1);
-});
+seed();

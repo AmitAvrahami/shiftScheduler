@@ -1,0 +1,283 @@
+import 'dotenv/config';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import request from 'supertest';
+import jwt from 'jsonwebtoken';
+import app from '../app';
+import User from '../models/User';
+import WeeklySchedule from '../models/WeeklySchedule';
+import ShiftDefinition from '../models/ShiftDefinition';
+import Shift from '../models/Shift';
+import AuditLog from '../models/AuditLog';
+
+// Sun 2026-05-10 through Sat 2026-05-16
+const TEST_WEEK = '2026-W20';
+
+let mongoServer: MongoMemoryServer;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
+  process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long';
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
+  await mongoServer.stop();
+});
+
+afterEach(async () => {
+  await mongoose.connection.dropDatabase();
+});
+
+function makeToken(user: { _id: unknown; email: string; role: string }): string {
+  return jwt.sign(
+    { _id: String(user._id), email: user.email, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: '1h' }
+  );
+}
+
+async function seedAdmin() {
+  const admin = await User.create({
+    name: 'Admin',
+    email: 'admin@test.com',
+    password: 'Password123!',
+    role: 'admin',
+  });
+  return { admin, token: makeToken(admin) };
+}
+
+async function seedSchedule(status = 'open') {
+  return WeeklySchedule.create({
+    weekId: TEST_WEEK,
+    startDate: new Date(2026, 4, 10),
+    endDate: new Date(2026, 4, 16),
+    status,
+    generatedBy: 'manual',
+  });
+}
+
+async function seedDefinitions(createdBy: mongoose.Types.ObjectId) {
+  return ShiftDefinition.insertMany([
+    {
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy,
+      coverageRequirements: { weekday: 2, weekend: 1 },
+    },
+    {
+      name: 'אחהצ',
+      startTime: '14:45',
+      endTime: '22:45',
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFA500',
+      isActive: true,
+      orderNumber: 2,
+      createdBy,
+      coverageRequirements: { weekday: 2, weekend: 1 },
+    },
+    {
+      name: 'לילה',
+      startTime: '22:45',
+      endTime: '06:45',
+      durationMinutes: 480,
+      crossesMidnight: true,
+      color: '#000080',
+      isActive: true,
+      orderNumber: 3,
+      createdBy,
+      coverageRequirements: { weekday: 1, weekend: 1 },
+    },
+  ]);
+}
+
+describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
+  it('generates exactly 21 shifts (7 days × 3 definitions)', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.created).toBe(21);
+    expect(await Shift.countDocuments()).toBe(21);
+  });
+
+  it('returns 409 on second call — idempotency guard', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(409);
+    expect(await Shift.countDocuments()).toBe(21); // unchanged
+  });
+
+  it('assigns requiredCount=2 for weekday morning and =1 for weekend morning', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const morningDef = await ShiftDefinition.findOne({ name: 'בוקר' }).lean();
+    expect(morningDef).not.toBeNull();
+
+    // Mon-Fri of 2026-W20: May 11-15
+    const weekdayShifts = await Shift.find({
+      definitionId: morningDef!._id,
+      date: { $gte: new Date(2026, 4, 11), $lte: new Date(2026, 4, 15) },
+    }).lean();
+    expect(weekdayShifts.length).toBe(5);
+    weekdayShifts.forEach((s) => expect(s.requiredCount).toBe(2));
+
+    // Sun May 10, Sat May 16
+    const weekendShifts = await Shift.find({
+      definitionId: morningDef!._id,
+      date: { $in: [new Date(2026, 4, 10), new Date(2026, 4, 16)] },
+    }).lean();
+    expect(weekendShifts.length).toBe(2);
+    weekendShifts.forEach((s) => expect(s.requiredCount).toBe(1));
+  });
+
+  it('night shift date equals the calendar day it starts — not the next day', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const nightDef = await ShiftDefinition.findOne({ name: 'לילה' }).lean();
+    expect(nightDef!.crossesMidnight).toBe(true);
+
+    // Monday night shift must have date = Mon May 11, not Tue May 12
+    const mondayNight = await Shift.findOne({
+      definitionId: nightDef!._id,
+      date: new Date(2026, 4, 11),
+    }).lean();
+    expect(mondayNight).not.toBeNull();
+
+    // Exactly 7 night shifts total — one per day, not 14
+    const nightCount = await Shift.countDocuments({ definitionId: nightDef!._id });
+    expect(nightCount).toBe(7);
+  });
+
+  it('returns 404 when no schedule exists for the given weekId', async () => {
+    const { token } = await seedAdmin();
+
+    const res = await request(app)
+      .post('/api/v1/admin/weeks/2099-W01/shifts')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 422 when schedule status is published', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('published');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(422);
+    expect(await Shift.countDocuments()).toBe(0);
+  });
+
+  it('returns 422 when no active ShiftDefinitions exist', async () => {
+    const { token } = await seedAdmin();
+    await seedSchedule('open');
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(422);
+    expect(await Shift.countDocuments()).toBe(0);
+  });
+
+  it('creates an audit log entry on success', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const log = await AuditLog.findOne({ action: 'shifts_generated' }).lean();
+    expect(log).not.toBeNull();
+    expect((log!.after as Record<string, unknown>).weekId).toBe(TEST_WEEK);
+    expect((log!.after as Record<string, unknown>).shiftCount).toBe(21);
+  });
+
+  it('returns 400 for a malformed weekId in the URL', async () => {
+    const { token } = await seedAdmin();
+
+    const res = await request(app)
+      .post('/api/v1/admin/weeks/not-a-week/shifts')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('succeeds when schedule status is locked', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('locked');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.created).toBe(21);
+  });
+
+  it('returns 401 with no token', async () => {
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for a manager token', async () => {
+    const manager = await User.create({
+      name: 'Manager',
+      email: 'mgr@test.com',
+      password: 'Password123!',
+      role: 'manager',
+    });
+    const token = makeToken(manager);
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+  });
+});

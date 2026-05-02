@@ -9,6 +9,10 @@ export interface IShiftDefinition extends Document {
   color: string;
   isActive: boolean;
   orderNumber: number;
+  coverageRequirements: {
+    weekday: number;
+    weekend: number;
+  };
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +28,10 @@ const shiftDefinitionSchema = new Schema<IShiftDefinition>(
     color: { type: String, required: true, trim: true },
     isActive: { type: Boolean, required: true, default: true },
     orderNumber: { type: Number, required: true },
+    coverageRequirements: {
+      weekday: { type: Number, required: true, default: 2 },
+      weekend: { type: Number, required: true, default: 1 },
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
