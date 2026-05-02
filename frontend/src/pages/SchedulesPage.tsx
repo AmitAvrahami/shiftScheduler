@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { scheduleApi, shiftApi, constraintApi } from '../lib/api';
+import { scheduleApi, shiftApi, constraintApi, adminApi } from '../lib/api';
 import type { Schedule } from '../lib/api';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -321,18 +321,22 @@ function CreateModal({
     if (!effectiveWeekId) return;
     setLoading(true);
     try {
-      const { schedule } = await scheduleApi.create(effectiveWeekId);
       if (autoGenerate) {
         await scheduleApi.generate(effectiveWeekId);
-        showToast('הסידור נוצר ונוצרו משמרות אוטומטית', 'success');
-        onNavigate();
+        showToast('הסידור נוצר ונוצרו משמרות ושיבוצים אוטומטית', 'success');
+        navigate(`/schedules/${effectiveWeekId}`);
       } else {
+        await adminApi.initialize(effectiveWeekId);
         showToast('טיוטת סידור נוצרה בהצלחה', 'success');
-        onCreated(schedule);
-        onClose();
+        // Navigate to the newly created schedule board
+        navigate(`/schedules/${effectiveWeekId}`);
       }
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
+    } catch (err: any) {
+      if (err instanceof Error && err.message.includes('409') || (err.message && err.message.includes('already exists'))) {
+        showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
+      } else {
+        showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -682,7 +686,7 @@ export default function SchedulesPage() {
               onPublish={handlePublish}
               onDelete={(sched) => setConfirmDelete(sched)}
               onClone={handleClone}
-              onView={() => navigate('/admin')}
+              onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
               onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
             />
           ))}

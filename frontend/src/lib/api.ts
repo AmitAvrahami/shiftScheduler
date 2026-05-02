@@ -276,6 +276,13 @@ export const adminApi = {
     const qs = weekId ? `?weekId=${encodeURIComponent(weekId)}` : '';
     return request(`/admin/dashboard${qs}`);
   },
+
+  initialize(weekId: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
+    return request('/admin/weeks/initialize', {
+      method: 'POST',
+      body: JSON.stringify({ weekId, generatedBy: 'manual' }),
+    });
+  },
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────

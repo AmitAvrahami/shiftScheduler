@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import {
@@ -119,15 +120,19 @@ interface StaffEntry {
 function ShiftCard({
   shift,
   staff,
+  requiredCount,
   type,
 }: {
   shift: ShiftDef;
   staff: StaffEntry[];
+  requiredCount: number;
   type: 'prev' | 'current' | 'next';
 }) {
   const isCurrent = type === 'current';
   const isPrev    = type === 'prev';
   const isNext    = type === 'next';
+
+  const emptySlotsCount = Math.max(0, requiredCount - staff.length);
 
   if (isCurrent) {
     return (
@@ -145,8 +150,20 @@ function ShiftCard({
         </div>
         <h3 className="text-lg font-bold text-white relative z-10">משמרת נוכחית</h3>
         <p className="text-sm opacity-90 relative z-10">{shift.label}</p>
-        <div className="mt-auto pt-sm relative z-10">
-          <span className="text-xs font-medium">{staff.length} עובדים במשמרת</span>
+        <div className="mt-auto pt-sm relative z-10 flex items-center justify-between">
+          <span className="text-xs font-medium">{staff.length}/{requiredCount} עובדים</span>
+          <div className="flex -space-x-1.5 space-x-reverse">
+            {staff.map((s, i) => (
+              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold">
+                {avatarInitials(s.name)}
+              </div>
+            ))}
+            {Array.from({ length: emptySlotsCount }).map((_, i) => (
+               <div key={i} className="w-5 h-5 rounded-full ring-1 ring-dashed ring-white/50 bg-white/5 flex items-center justify-center">
+                 <MaterialIcon name="add" className="text-[10px] text-white/50" />
+               </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -164,26 +181,37 @@ function ShiftCard({
       <p className="text-sm text-on-surface-variant">{shift.label}</p>
       <div className="mt-auto pt-sm flex items-center justify-between">
         <div className="flex -space-x-2 space-x-reverse">
-          {staff.length === 0 ? (
+          {staff.length === 0 && emptySlotsCount === 0 ? (
             <span className="text-[10px] text-on-surface-variant opacity-50">אין משובצים</span>
           ) : (
-            staff.map((s, i) => (
-              <div
-                key={s.id}
-                className="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden bg-surface-container-high"
-                title={s.name}
-              >
+            <>
+              {staff.map((s, i) => (
                 <div
-                  className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white"
-                  style={{ background: avatarBg(i) }}
+                  key={s.id}
+                  className="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden bg-surface-container-high"
+                  title={s.name}
                 >
-                  {avatarInitials(s.name)}
+                  <div
+                    className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white"
+                    style={{ background: avatarBg(i) }}
+                  >
+                    {avatarInitials(s.name)}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {Array.from({ length: emptySlotsCount }).map((_, i) => (
+                <div
+                  key={`empty-${i}`}
+                  className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-50 border border-dashed border-slate-300 flex items-center justify-center"
+                  title="הוספת עובד"
+                >
+                  <MaterialIcon name="add" className="text-[12px] text-slate-400" />
+                </div>
+              ))}
+            </>
           )}
         </div>
-        {isNext && staff.length === 0 && (
+        {isNext && staff.length < requiredCount && (
           <span className="text-[10px] font-bold text-error bg-error-container text-on-error-container px-2 py-1 rounded">חסר עובד</span>
         )}
       </div>
@@ -219,19 +247,19 @@ function ShiftOverview({
 
   const todayKey = toDateKey(now);
 
-  function staffForShiftDef(defIdx: number): StaffEntry[] {
+  function getShiftData(defIdx: number) {
     const def = sortedDefs[defIdx];
-    if (!def) return [];
+    if (!def) return { staff: [], requiredCount: 0 };
 
     const todayShift = shifts.find((s) => {
       const shiftDateKey = toDateKey(new Date(s.date));
       return shiftDateKey === todayKey && s.definitionId === def._id;
     });
 
-    if (!todayShift) return [];
+    if (!todayShift) return { staff: [], requiredCount: 0 };
 
     const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift._id);
-    return shiftAssignments.map((a) => {
+    const staff = shiftAssignments.map((a) => {
       const user = employees.find((u) => u._id === a.userId);
       return {
         id: a._id,
@@ -239,15 +267,21 @@ function ShiftOverview({
         isFixed: user?.isFixedMorningEmployee ?? false,
       };
     });
+
+    return { staff, requiredCount: todayShift.requiredCount };
   }
+
+  const prevData = getShiftData(prevIdx);
+  const curData  = getShiftData(curIdx);
+  const nextData = getShiftData(nextIdx);
 
   return (
     <section className="flex flex-col gap-md">
       <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">סטטוס משמרות</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-        <ShiftCard shift={SHIFTS[prevIdx]} staff={staffForShiftDef(prevIdx)} type="prev" />
-        <ShiftCard shift={SHIFTS[curIdx]}  staff={staffForShiftDef(curIdx)}  type="current" />
-        <ShiftCard shift={SHIFTS[nextIdx]} staff={staffForShiftDef(nextIdx)} type="next" />
+        <ShiftCard shift={SHIFTS[prevIdx]} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
+        <ShiftCard shift={SHIFTS[curIdx]}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
+        <ShiftCard shift={SHIFTS[nextIdx]} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
       </div>
     </section>
   );
@@ -866,6 +900,7 @@ function SidebarStats({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
+  const { weekId: paramWeekId } = useParams<{ weekId: string }>();
   const [users, setUsers]                           = useState<User[]>([]);
   const [missingUsers, setMissingUsers]             = useState<User[] | null>(null);
   const [toast, setToast]                           = useState<Toast | null>(null);
@@ -876,7 +911,7 @@ export default function AdminDashboardPage() {
   const [currentAssignments, setCurrentAssignments] = useState<Assignment[]>([]);
   const [auditLogs, setAuditLogs]                   = useState<AuditLogEntry[] | null>(null);
 
-  const weekId    = getCurrentWeekId();
+  const weekId    = paramWeekId || getCurrentWeekId();
   const employees = users.filter(u => u.isActive);
 
   // Single BFF call replaces 4 separate effects + N+1 constraint queries
