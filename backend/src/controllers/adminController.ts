@@ -8,13 +8,38 @@ import Constraint from '../models/Constraint';
 import ShiftDefinition from '../models/ShiftDefinition';
 import { getCurrentWeekId, getNextWeekId } from '../utils/weekUtils';
 import AppError from '../utils/AppError';
-import { generateWeekShifts } from '../services/shiftGenerationService';
+import { generateWeekShifts, initializeWeeklySchedule } from '../services/shiftGenerationService';
 import type { DashboardResponse, CurrentWeekStats } from '../types/admin';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 const weekIdParamSchema = z.object({
   weekId: z.string().regex(WEEK_ID_RE, 'Invalid weekId format — expected YYYY-WNN'),
 });
+
+const initializeSchema = z.object({
+  weekId: z.string().regex(WEEK_ID_RE, 'Invalid weekId format — expected YYYY-WNN'),
+  generatedBy: z.enum(['auto', 'manual']).optional().default('auto'),
+});
+
+export async function initializeWeek(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const parsed = initializeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new AppError(parsed.error.errors[0].message, 400));
+    }
+    const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
+    const { weekId, generatedBy } = parsed.data;
+
+    const result = await initializeWeeklySchedule(weekId, generatedBy, actorId, req.ip ?? 'unknown');
+    res.status(201).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function generateShifts(
   req: Request,

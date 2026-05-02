@@ -78,12 +78,13 @@ describe('GET /api/v1/admin/dashboard — access control', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 for manager token', async () => {
+  it('returns 200 for manager token', async () => {
     const { token } = await seedManager();
     const res = await request(app)
       .get('/api/v1/admin/dashboard')
       .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   it('returns 200 for admin token', async () => {
