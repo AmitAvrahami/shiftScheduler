@@ -5,6 +5,7 @@ import Shift from '../models/Shift';
 import User from '../models/User';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const createSchema = z.object({
   shiftId: z.string().min(1),
@@ -27,6 +28,7 @@ export async function getAssignments(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getAssignments - start', { query: req.query });
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
 
@@ -39,7 +41,9 @@ export async function getAssignments(
 
     const assignments = await Assignment.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, assignments });
+    logger.info('getAssignments - end', { count: assignments.length });
   } catch (err) {
+    logger.error('getAssignments - error', err);
     next(err);
   }
 }
@@ -49,6 +53,7 @@ export async function createAssignment(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('createAssignment - start', { body: req.body });
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -72,7 +77,9 @@ export async function createAssignment(
     });
 
     res.status(201).json({ success: true, assignment });
+    logger.info('createAssignment - end', { id: assignment._id });
   } catch (err) {
+    logger.error('createAssignment - error', err);
     next(err);
   }
 }
@@ -82,6 +89,7 @@ export async function getAssignmentById(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getAssignmentById - start', { id: req.params.id });
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return next(new AppError('Assignment not found', 404));
@@ -92,7 +100,9 @@ export async function getAssignmentById(
     }
 
     res.json({ success: true, assignment });
+    logger.info('getAssignmentById - end', { id: req.params.id });
   } catch (err) {
+    logger.error('getAssignmentById - error', err);
     next(err);
   }
 }
@@ -102,6 +112,7 @@ export async function updateAssignment(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('updateAssignment - start', { id: req.params.id, body: req.body });
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return next(new AppError('Assignment not found', 404));
@@ -158,7 +169,9 @@ export async function updateAssignment(
     }
 
     res.json({ success: true, assignment: updated });
+    logger.info('updateAssignment - end', { id: req.params.id });
   } catch (err) {
+    logger.error('updateAssignment - error', err);
     next(err);
   }
 }
@@ -168,6 +181,7 @@ export async function deleteAssignment(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('deleteAssignment - start', { id: req.params.id });
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return next(new AppError('Assignment not found', 404));
@@ -185,7 +199,9 @@ export async function deleteAssignment(
     });
 
     res.json({ success: true, message: 'Assignment deleted' });
+    logger.info('deleteAssignment - end', { id: req.params.id });
   } catch (err) {
+    logger.error('deleteAssignment - error', err);
     next(err);
   }
 }

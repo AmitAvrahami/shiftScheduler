@@ -7,12 +7,14 @@ import {
   getConstraintDeadline,
   isConstraintDeadlinePassed,
 } from '../utils/weekUtils';
+import { logger } from '../utils/logger';
 
 export async function getWorkflowStatus(
   _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getWorkflowStatus - start');
   try {
     const currentWeekId = getCurrentWeekId();
 
@@ -38,7 +40,9 @@ export async function getWorkflowStatus(
           : null,
       },
     });
+    logger.info('getWorkflowStatus - end');
   } catch (err) {
+    logger.error('getWorkflowStatus - error', err);
     next(err);
   }
 }

@@ -10,6 +10,7 @@ import { getCurrentWeekId, getNextWeekId } from '../utils/weekUtils';
 import AppError from '../utils/AppError';
 import { generateWeekShifts, initializeWeeklySchedule } from '../services/shiftGenerationService';
 import type { DashboardResponse, CurrentWeekStats } from '../types/admin';
+import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 const weekIdParamSchema = z.object({
@@ -26,6 +27,7 @@ export async function initializeWeek(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('initializeWeek - start', { body: req.body });
   try {
     const parsed = initializeSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -36,7 +38,9 @@ export async function initializeWeek(
 
     const result = await initializeWeeklySchedule(weekId, generatedBy, actorId, req.ip ?? 'unknown');
     res.status(201).json({ success: true, ...result });
+    logger.info('initializeWeek - end', { weekId });
   } catch (err) {
+    logger.error('initializeWeek - error', err);
     next(err);
   }
 }
@@ -46,6 +50,7 @@ export async function generateShifts(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('generateShifts - start', { weekId: req.params.weekId });
   try {
     const parsed = weekIdParamSchema.safeParse(req.params);
     if (!parsed.success) {
@@ -54,12 +59,15 @@ export async function generateShifts(
     const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
     const result = await generateWeekShifts(parsed.data.weekId, actorId, req.ip ?? 'unknown');
     res.status(201).json({ success: true, ...result });
+    logger.info('generateShifts - end', { weekId: parsed.data.weekId });
   } catch (err) {
+    logger.error('generateShifts - error', err);
     next(err);
   }
 }
 
 export async function getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getDashboard - start', { query: req.query });
   const t0 = Date.now();
 
   try {
@@ -183,7 +191,7 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
     ]);
 
     const queryTimeMs = Date.now() - t0;
-    console.info(`[ADMIN DASHBOARD] aggregation completed in ${queryTimeMs}ms (weekId=${weekId})`);
+    logger.info('getDashboard - query complete', { weekId, queryTimeMs });
 
     // ── Shape users ──────────────────────────────────────────────────────────
     const { all: allUsers, stats: statsArr } = userFacet[0] ?? { all: [], stats: [] };
@@ -244,7 +252,9 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
     };
 
     res.status(200).json(body);
+    logger.info('getDashboard - end', { weekId });
   } catch (err) {
+    logger.error('getDashboard - error', err);
     next(err);
   }
 }

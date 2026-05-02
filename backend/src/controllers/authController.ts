@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import User from '../models/User';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // Manager-only: create a new user account
 const registerSchema = z.object({
@@ -37,6 +38,7 @@ function signToken(payload: { _id: string; email: string; role: string }): strin
 }
 
 export async function register(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('register - start', { email: req.body.email, role: req.body.role });
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -53,12 +55,15 @@ export async function register(req: Request, res: Response, next: NextFunction):
     const user = await User.create({ name, email, password, role, isFixedMorningEmployee });
 
     res.status(201).json({ success: true, user });
+    logger.info('register - end', { userId: user._id });
   } catch (err) {
+    logger.error('register - error', err);
     next(err);
   }
 }
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('login - start', { email: req.body.email });
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -79,16 +84,21 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     const token = signToken({ _id: String(user._id), email: user.email, role: user.role });
 
     res.status(200).json({ success: true, token, user });
+    logger.info('login - end', { userId: user._id });
   } catch (err) {
+    logger.error('login - error', err);
     next(err);
   }
 }
 
 export async function getUsers(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getUsers - start');
   try {
     const users = await User.find({}).sort({ name: 1 });
     res.json({ success: true, users });
+    logger.info('getUsers - end', { count: users.length });
   } catch (err) {
+    logger.error('getUsers - error', err);
     next(err);
   }
 }
@@ -98,6 +108,7 @@ export async function updateUserStatus(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('updateUserStatus - start', { id: req.params.id, isActive: req.body.isActive });
   try {
     const parsed = updateStatusSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -112,7 +123,9 @@ export async function updateUserStatus(
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+    logger.info('updateUserStatus - end', { id: req.params.id });
   } catch (err) {
+    logger.error('updateUserStatus - error', err);
     next(err);
   }
 }
@@ -122,6 +135,7 @@ export async function resetPassword(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('resetPassword - start', { id: req.params.id });
   try {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -137,7 +151,9 @@ export async function resetPassword(
     await user.save(); // triggers pre-save hash
 
     res.json({ success: true, user }); // password excluded by toJSON transform
+    logger.info('resetPassword - end', { id: req.params.id });
   } catch (err) {
+    logger.error('resetPassword - error', err);
     next(err);
   }
 }
@@ -147,6 +163,7 @@ export async function updateFixedMorning(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('updateFixedMorning - start', { id: req.params.id, isFixedMorningEmployee: req.body.isFixedMorningEmployee });
   try {
     const parsed = updateFixedMorningSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -161,7 +178,9 @@ export async function updateFixedMorning(
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+    logger.info('updateFixedMorning - end', { id: req.params.id });
   } catch (err) {
+    logger.error('updateFixedMorning - error', err);
     next(err);
   }
 }

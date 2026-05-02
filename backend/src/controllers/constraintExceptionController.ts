@@ -5,6 +5,7 @@ import Notification from '../models/Notification';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
 import { isConstraintDeadlinePassed } from '../utils/weekUtils';
+import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 
@@ -23,6 +24,7 @@ export async function createException(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('createException - start', { body: req.body, user: req.user?._id });
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -61,7 +63,9 @@ export async function createException(
     });
 
     res.status(201).json({ success: true, exception });
+    logger.info('createException - end', { exceptionId: exception._id });
   } catch (err) {
+    logger.error('createException - error', err);
     next(err);
   }
 }
@@ -71,6 +75,7 @@ export async function reviewException(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('reviewException - start', { id: req.params.id, body: req.body });
   try {
     const parsed = reviewSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -116,7 +121,9 @@ export async function reviewException(
     });
 
     res.json({ success: true, exception });
+    logger.info('reviewException - end', { exceptionId: exception._id, status: exception.status });
   } catch (err) {
+    logger.error('reviewException - error', err);
     next(err);
   }
 }
@@ -126,6 +133,7 @@ export async function getExceptions(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getExceptions - start', { query: req.query, user: req.user?._id });
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
     const filter: Record<string, unknown> = isManagerOrAdmin
@@ -137,7 +145,9 @@ export async function getExceptions(
 
     const exceptions = await ConstraintException.find(filter).sort({ requestedAt: -1 });
     res.json({ success: true, exceptions });
+    logger.info('getExceptions - end', { count: exceptions.length });
   } catch (err) {
+    logger.error('getExceptions - error', err);
     next(err);
   }
 }
