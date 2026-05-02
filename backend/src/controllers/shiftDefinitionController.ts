@@ -11,10 +11,12 @@ const createSchema = z.object({
   name: z.string().min(1),
   startTime: z.string().regex(TIME_RE, 'startTime must be HH:MM'),
   endTime: z.string().regex(TIME_RE, 'endTime must be HH:MM'),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).nonempty().optional(),
   durationMinutes: z.number().int().positive(),
   crossesMidnight: z.boolean().default(false),
   color: z.string().regex(HEX_RE, 'color must be a valid hex color'),
   orderNumber: z.number().int().nonnegative(),
+  requiredStaffCount: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
 });
 

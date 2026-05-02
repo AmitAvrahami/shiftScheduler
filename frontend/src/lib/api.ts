@@ -19,6 +19,17 @@ export interface Shift {
   date: string;
   requiredCount: number;
   status: 'filled' | 'partial' | 'empty';
+  notes?: string;
+}
+
+export interface SaveShiftPayload {
+  scheduleId?: string;
+  definitionId?: string;
+  shiftDefinitionId?: string;
+  date?: string;
+  requiredCount?: number;
+  status?: Shift['status'];
+  notes?: string;
 }
 
 export interface Assignment {
@@ -65,7 +76,25 @@ export class ApiError extends Error {
 
 const BASE = '/api/v1';
 
+const logApi = import.meta.env.DEV
+  ? {
+      request: (method: string, url: string, body?: BodyInit | null) => {
+        const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+        console.log(`🚀 Sending ${method} to ${url}`, parsed != null ? { data: parsed } : '');
+      },
+      response: (url: string, status: number, data: unknown) =>
+        console.log(`✅ Received from ${url} with status ${status}`, { data }),
+      error: (url: string, code: string | undefined, message: string) =>
+        console.error(`❌ API Error at ${url}: ${code ?? 'UNKNOWN'} - ${message}`),
+    }
+  : null;
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `${BASE}${path}`;
+  const method = options.method ?? 'GET';
+
+  logApi?.request(method, url, options.body);
+
   const token = localStorage.getItem('token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -73,9 +102,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(url, { ...options, headers });
   const data = await res.json();
-  if (!res.ok) throw new ApiError(data.message ?? 'Request failed', data.code);
+
+  if (!res.ok) {
+    const err = new ApiError(data.message ?? 'Request failed', data.code);
+    logApi?.error(url, data.code, err.message);
+    throw err;
+  }
+
+  logApi?.response(url, res.status, data);
   return data as T;
 }
 
@@ -147,7 +183,7 @@ export const shiftDefinitionApi = {
     });
   },
 
-  delete(id: string): Promise<{ success: boolean }> {
+  delete(id: string): Promise<{ success: boolean; definition: ShiftDefinition }> {
     return request(`/shift-definitions/${id}`, {
       method: 'DELETE',
     });
@@ -261,7 +297,33 @@ export const shiftApi = {
   getBySchedule(scheduleId: string): Promise<{ success: boolean; shifts: Shift[] }> {
     return request(`/shifts?scheduleId=${scheduleId}`);
   },
+
+  create(body: SaveShiftPayload): Promise<{ success: boolean; shift: Shift }> {
+    const payload = normalizeShiftPayload(body);
+    return request('/shifts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  update(id: string, body: SaveShiftPayload): Promise<{ success: boolean; shift: Shift }> {
+    const payload = normalizeShiftPayload(body);
+    return request(`/shifts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
+
+function normalizeShiftPayload(body: SaveShiftPayload): SaveShiftPayload {
+  const { shiftDefinitionId, ...payload } = body;
+  return {
+    ...payload,
+    ...(payload.definitionId || shiftDefinitionId
+      ? { definitionId: payload.definitionId ?? shiftDefinitionId }
+      : {}),
+  };
+}
 
 // ─── Assignments ──────────────────────────────────────────────────────────────
 

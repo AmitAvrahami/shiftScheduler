@@ -36,13 +36,16 @@ export async function generateWeekShifts(
   const shiftDocs = [];
   for (const date of dates) {
     const day = date.getDay(); // local day — do NOT use getUTCDay()
-    const isWeekend = day === 0 || day === 6;
     for (const def of definitions) {
+      if (!def.daysOfWeek.includes(day)) continue;
+
       shiftDocs.push({
         scheduleId,
         definitionId: def._id,
         date,
-        requiredCount: def.coverageRequirements[isWeekend ? 'weekend' : 'weekday'],
+        startTime: def.startTime,
+        endTime: def.endTime,
+        requiredCount: def.requiredStaffCount,
         status: 'empty' as const,
       });
     }

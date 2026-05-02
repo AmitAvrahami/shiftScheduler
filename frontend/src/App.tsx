@@ -82,6 +82,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/schedules/:weekId/edit"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

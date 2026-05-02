@@ -162,6 +162,7 @@ interface ScheduleCardProps {
   onDelete: (s: Schedule) => void;
   onClone: (s: Schedule) => void;
   onView: (s: Schedule) => void;
+  onEdit: (s: Schedule) => void;
   onExport: () => void;
 }
 
@@ -172,6 +173,7 @@ function ScheduleCard({
   onDelete,
   onClone,
   onView,
+  onEdit,
   onExport,
 }: ScheduleCardProps) {
   const { status } = schedule;
@@ -213,13 +215,11 @@ function ScheduleCard({
         </div>
 
         <div className="flex gap-1">
-          {status === 'published' && (
-            <>
-              <ActionBtn icon="visibility" title="צפייה ועריכה" onClick={() => onView(schedule)} />
-              <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
-              <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
-            </>
-          )}
+          <ActionBtn icon="visibility" title="צפייה" onClick={() => onView(schedule)} />
+          <ActionBtn icon="edit" title="עריכה" onClick={() => onEdit(schedule)} />
+          <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
+          <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
+
           {status === 'draft' && (
             <>
               <ActionBtn
@@ -228,20 +228,12 @@ function ScheduleCard({
                 variant="primary"
                 onClick={() => onPublish(schedule)}
               />
-              <ActionBtn icon="edit" title="עריכה" onClick={() => onView(schedule)} />
               <ActionBtn
                 icon="delete"
                 title="מחיקה"
                 variant="danger"
                 onClick={() => onDelete(schedule)}
               />
-            </>
-          )}
-          {status === 'archived' && (
-            <>
-              <ActionBtn icon="visibility" title="צפייה" onClick={() => onView(schedule)} />
-              <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
-              <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
             </>
           )}
         </div>
@@ -295,8 +287,6 @@ function DeleteDialog({
 function CreateModal({
   existingWeekIds,
   onClose,
-  onCreated,
-  onNavigate,
   showToast,
   preselectedWeekId,
 }: {
@@ -307,6 +297,7 @@ function CreateModal({
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
   preselectedWeekId?: string;
 }) {
+  const navigate = useNavigate();
   const suggestions = getNextFourWeekIds().filter((w) => !existingWeekIds.has(w));
   const [selectedWeekId, setSelectedWeekId] = useState(
     preselectedWeekId ?? suggestions[0] ?? getCurrentWeekId()
@@ -693,6 +684,7 @@ export default function SchedulesPage() {
               onDelete={(sched) => setConfirmDelete(sched)}
               onClone={handleClone}
               onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
+              onEdit={(sched) => navigate(`/schedules/${sched.weekId}/edit`)}
               onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
             />
           ))}

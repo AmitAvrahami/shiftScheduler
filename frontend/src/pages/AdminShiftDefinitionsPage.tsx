@@ -17,6 +17,7 @@ export default function AdminShiftDefinitionsPage() {
     startTime: '08:00',
     endTime: '16:00',
     durationMinutes: 480,
+    crossesMidnight: false,
     color: '#101B79',
     orderNumber: 1,
     isActive: true,
@@ -30,9 +31,9 @@ export default function AdminShiftDefinitionsPage() {
   async function loadDefinitions() {
     try {
       const res = await shiftDefinitionApi.getActive();
-      setDefinitions(res.definitions);
+      setDefinitions(res.definitions.filter((definition) => definition.isActive));
     } catch (err) {
-      setError('Failed to load definitions');
+      setError(err instanceof Error ? err.message : 'Failed to load definitions');
     } finally {
       setLoading(false);
     }
@@ -53,6 +54,7 @@ export default function AdminShiftDefinitionsPage() {
         startTime: '08:00',
         endTime: '16:00',
         durationMinutes: 480,
+        crossesMidnight: false,
         color: '#101B79',
         orderNumber: 1,
         isActive: true,
@@ -60,17 +62,22 @@ export default function AdminShiftDefinitionsPage() {
       });
       loadDefinitions();
     } catch (err) {
-      alert('Failed to save definition');
+      alert(err instanceof Error ? err.message : 'Failed to save definition');
     }
   }
 
   async function handleDelete(id: string) {
+    if (!id) {
+      alert('Cannot delete definition: missing definition id');
+      return;
+    }
     if (!confirm('Are you sure you want to deactivate this shift type?')) return;
     try {
       await shiftDefinitionApi.delete(id);
-      loadDefinitions();
+      setDefinitions((prev) => prev.filter((definition) => definition._id !== id));
+      await loadDefinitions();
     } catch (err) {
-      alert('Failed to delete definition');
+      alert(err instanceof Error ? err.message : 'Failed to delete definition');
     }
   }
 
@@ -87,6 +94,7 @@ export default function AdminShiftDefinitionsPage() {
                 startTime: '08:00',
                 endTime: '16:00',
                 durationMinutes: 480,
+                crossesMidnight: false,
                 color: '#101B79',
                 orderNumber: definitions.length + 1,
                 isActive: true,

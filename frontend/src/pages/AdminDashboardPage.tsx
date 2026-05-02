@@ -154,7 +154,7 @@ function ShiftCard({
           <span className="text-xs font-medium">{staff.length}/{requiredCount} עובדים</span>
           <div className="flex -space-x-1.5 space-x-reverse">
             {staff.map((s, i) => (
-              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold">
+              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold" style={{ background: avatarBg(i) }}>
                 {avatarInitials(s.name)}
               </div>
             ))}

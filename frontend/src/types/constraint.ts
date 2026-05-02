@@ -3,8 +3,15 @@ export interface ShiftDefinition {
   name: string;
   startTime: string;
   endTime: string;
+  durationMinutes: number;
+  crossesMidnight: boolean;
   color: string;
+  isActive: boolean;
   orderNumber: number;
+  coverageRequirements: {
+    weekday: number;
+    weekend: number;
+  };
 }
 
 export interface ConstraintEntry {

@@ -13,6 +13,8 @@ import {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
 export default function ConstraintPage() {
   const weekId = getAllowedWeekId();
   const weekDates = getWeekDates(weekId);
@@ -32,13 +34,46 @@ export default function ConstraintPage() {
     Promise.all([shiftDefinitionApi.getActive(), constraintApi.getConstraints(weekId)])
       .then(([defsRes, constraintRes]) => {
         let definitions = defsRes.definitions;
-        
+
         // If no definitions exist, inject mock data for testing/demo purposes
         if (definitions.length === 0) {
           definitions = [
-            { _id: 'mock-1', name: 'משמרת בוקר', startTime: '08:00', endTime: '16:00', color: '#E3F2FD', orderNumber: 1 },
-            { _id: 'mock-2', name: 'משמרת צהריים', startTime: '16:00', endTime: '00:00', color: '#FFF3E0', orderNumber: 2 },
-            { _id: 'mock-3', name: 'משמרת לילה', startTime: '00:00', endTime: '08:00', color: '#F3E5F5', orderNumber: 3 },
+            {
+              _id: 'mock-1',
+              name: 'משמרת בוקר',
+              startTime: '08:00',
+              endTime: '16:00',
+              color: '#E3F2FD',
+              orderNumber: 1,
+              durationMinutes: 480,
+              crossesMidnight: false,
+              isActive: true,
+              coverageRequirements: { weekday: 2, weekend: 1 },
+            },
+            {
+              _id: 'mock-2',
+              name: 'משמרת צהריים',
+              startTime: '16:00',
+              endTime: '00:00',
+              color: '#FFF3E0',
+              orderNumber: 2,
+              durationMinutes: 480,
+              crossesMidnight: false,
+              isActive: true,
+              coverageRequirements: { weekday: 2, weekend: 1 },
+            },
+            {
+              _id: 'mock-3',
+              name: 'משמרת לילה',
+              startTime: '00:00',
+              endTime: '08:00',
+              color: '#F3E5F5',
+              orderNumber: 3,
+              durationMinutes: 480,
+              crossesMidnight: false,
+              isActive: true,
+              coverageRequirements: { weekday: 2, weekend: 1 },
+            },
           ];
         }
 

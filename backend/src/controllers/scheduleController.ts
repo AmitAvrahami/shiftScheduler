@@ -330,6 +330,8 @@ export async function cloneSchedule(
         scheduleId: targetSchedule._id,
         definitionId: shift.definitionId,
         date: newDate,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
         requiredCount: shift.requiredCount,
         status: shift.status,
       });

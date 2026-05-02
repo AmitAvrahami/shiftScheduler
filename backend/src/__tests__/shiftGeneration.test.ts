@@ -64,37 +64,40 @@ async function seedDefinitions(createdBy: mongoose.Types.ObjectId) {
       name: 'בוקר',
       startTime: '06:45',
       endTime: '14:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: false,
       color: '#FFD700',
       isActive: true,
       orderNumber: 1,
       createdBy,
-      coverageRequirements: { weekday: 2, weekend: 1 },
+      requiredStaffCount: 2,
     },
     {
       name: 'אחהצ',
       startTime: '14:45',
       endTime: '22:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: false,
       color: '#FFA500',
       isActive: true,
       orderNumber: 2,
       createdBy,
-      coverageRequirements: { weekday: 2, weekend: 1 },
+      requiredStaffCount: 2,
     },
     {
       name: 'לילה',
       startTime: '22:45',
       endTime: '06:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: true,
       color: '#000080',
       isActive: true,
       orderNumber: 3,
       createdBy,
-      coverageRequirements: { weekday: 1, weekend: 1 },
+      requiredStaffCount: 1,
     },
   ]);
 }
@@ -132,7 +135,7 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
     expect(await Shift.countDocuments()).toBe(21); // unchanged
   });
 
-  it('assigns requiredCount=2 for weekday morning and =1 for weekend morning', async () => {
+  it('assigns requiredCount from requiredStaffCount', async () => {
     const { admin, token } = await seedAdmin();
     await seedSchedule('open');
     await seedDefinitions(admin._id as mongoose.Types.ObjectId);
@@ -144,21 +147,43 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
     const morningDef = await ShiftDefinition.findOne({ name: 'בוקר' }).lean();
     expect(morningDef).not.toBeNull();
 
-    // Mon-Fri of 2026-W20: May 11-15
-    const weekdayShifts = await Shift.find({
+    const morningShifts = await Shift.find({
       definitionId: morningDef!._id,
-      date: { $gte: new Date(2026, 4, 11), $lte: new Date(2026, 4, 15) },
     }).lean();
-    expect(weekdayShifts.length).toBe(5);
-    weekdayShifts.forEach((s) => expect(s.requiredCount).toBe(2));
+    expect(morningShifts.length).toBe(7);
+    morningShifts.forEach((s) => expect(s.requiredCount).toBe(2));
+  });
 
-    // Sun May 10, Sat May 16
-    const weekendShifts = await Shift.find({
-      definitionId: morningDef!._id,
-      date: { $in: [new Date(2026, 4, 10), new Date(2026, 4, 16)] },
-    }).lean();
-    expect(weekendShifts.length).toBe(2);
-    weekendShifts.forEach((s) => expect(s.requiredCount).toBe(1));
+  it('generates shifts only on configured daysOfWeek', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [1, 3],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.created).toBe(2);
+
+    const shifts = await Shift.find().sort({ date: 1 }).lean();
+    expect(shifts.map((shift) => shift.date.getDay())).toEqual([1, 3]);
+    shifts.forEach((shift) => {
+      expect(shift.startTime).toBe('06:45');
+      expect(shift.endTime).toBe('14:45');
+    });
   });
 
   it('night shift date equals the calendar day it starts — not the next day', async () => {

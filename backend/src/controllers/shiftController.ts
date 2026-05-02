@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import Shift from '../models/Shift';
+import ShiftDefinition from '../models/ShiftDefinition';
 import Assignment from '../models/Assignment';
 import WeeklySchedule from '../models/WeeklySchedule';
 import AuditLog from '../models/AuditLog';
@@ -111,9 +112,14 @@ export async function createShift(req: Request, res: Response, next: NextFunctio
     const schedule = await WeeklySchedule.findById(parsed.data.scheduleId);
     if (!schedule) return next(new AppError('Schedule not found', 404));
 
+    const definition = await ShiftDefinition.findById(parsed.data.definitionId).lean();
+    if (!definition) return next(new AppError('Shift definition not found', 404));
+
     const shift = await Shift.create({
       ...parsed.data,
       date: new Date(parsed.data.date),
+      startTime: definition.startTime,
+      endTime: definition.endTime,
     });
 
     await AuditLog.create({
@@ -167,6 +173,12 @@ export async function updateShift(req: Request, res: Response, next: NextFunctio
 
     const update: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.date) update.date = new Date(parsed.data.date);
+    if (parsed.data.definitionId) {
+      const definition = await ShiftDefinition.findById(parsed.data.definitionId).lean();
+      if (!definition) return next(new AppError('Shift definition not found', 404));
+      update.startTime = definition.startTime;
+      update.endTime = definition.endTime;
+    }
 
     const shift = await Shift.findByIdAndUpdate(
       req.params.id,
