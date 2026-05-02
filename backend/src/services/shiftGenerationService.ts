@@ -23,7 +23,9 @@ export async function generateWeekShifts(
     .session(session || null)
     .sort({ orderNumber: 1 })
     .lean();
-  if (definitions.length === 0) throw new AppError('No active shift definitions found', 422);
+  if (definitions.length === 0) {
+    throw new AppError('No active shift definitions found', 422, 'ERR_NO_SHIFT_TEMPLATES');
+  }
 
   const scheduleId = schedule._id as mongoose.Types.ObjectId;
   const existingCount = await Shift.countDocuments({ scheduleId }).session(session || null);
