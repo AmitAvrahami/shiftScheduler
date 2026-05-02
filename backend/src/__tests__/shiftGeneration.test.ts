@@ -9,6 +9,7 @@ import WeeklySchedule from '../models/WeeklySchedule';
 import ShiftDefinition from '../models/ShiftDefinition';
 import Shift from '../models/Shift';
 import AuditLog from '../models/AuditLog';
+import { generateWeekFromBlueprints } from '../services/shiftGenerationService';
 
 // Sun 2026-05-10 through Sat 2026-05-16
 const TEST_WEEK = '2026-W20';
@@ -183,6 +184,8 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
     shifts.forEach((shift) => {
       expect(shift.startTime).toBe('06:45');
       expect(shift.endTime).toBe('14:45');
+      expect(shift.startsAt).toBeInstanceOf(Date);
+      expect(shift.endsAt).toBeInstanceOf(Date);
     });
   });
 
@@ -204,6 +207,8 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
       date: new Date(2026, 4, 11),
     }).lean();
     expect(mondayNight).not.toBeNull();
+    expect(mondayNight!.startsAt).toEqual(new Date(2026, 4, 11, 22, 45));
+    expect(mondayNight!.endsAt).toEqual(new Date(2026, 4, 12, 6, 45));
 
     // Exactly 7 night shifts total — one per day, not 14
     const nightCount = await Shift.countDocuments({ definitionId: nightDef!._id });
@@ -304,5 +309,103 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('generateWeekFromBlueprints', () => {
+  it('creates shifts from active blueprints and ignores inactive definitions', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [1],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+    await ShiftDefinition.create({
+      name: 'כבוי',
+      startTime: '10:00',
+      endTime: '12:00',
+      daysOfWeek: [2],
+      durationMinutes: 120,
+      crossesMidnight: false,
+      color: '#333333',
+      isActive: false,
+      orderNumber: 2,
+      createdBy: admin._id,
+      requiredStaffCount: 1,
+    });
+
+    const result = await generateWeekFromBlueprints(new mongoose.Types.ObjectId(), new Date(2026, 4, 10, 15));
+
+    expect(result.created).toBe(1);
+    const shift = await Shift.findOne().lean();
+    expect(shift).not.toBeNull();
+    expect(shift!.date).toEqual(new Date(2026, 4, 11));
+    expect(shift!.requiredCount).toBe(2);
+    expect(shift!.startTime).toBe('06:45');
+    expect(shift!.endTime).toBe('14:45');
+    expect(shift!.startsAt).toEqual(new Date(2026, 4, 11, 6, 45));
+    expect(shift!.endsAt).toEqual(new Date(2026, 4, 11, 14, 45));
+  });
+
+  it('calculates overnight endsAt on the following calendar day', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'לילה',
+      startTime: '22:00',
+      endTime: '06:00',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: true,
+      color: '#000080',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 1,
+    });
+
+    await generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10));
+
+    const shift = await Shift.findOne().lean();
+    expect(shift!.startsAt).toEqual(new Date(2026, 4, 10, 22, 0));
+    expect(shift!.endsAt).toEqual(new Date(2026, 4, 11, 6, 0));
+  });
+
+  it('throws 409 when shifts already exist in the generated date range', async () => {
+    const { admin } = await seedAdmin();
+    const schedule = await seedSchedule('open');
+    const def = await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+    await Shift.create({
+      scheduleId: schedule._id,
+      definitionId: def._id,
+      date: new Date(2026, 4, 10),
+      requiredCount: 2,
+      status: 'empty',
+    });
+
+    await expect(generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))).rejects.toMatchObject({
+      statusCode: 409,
+    });
   });
 });

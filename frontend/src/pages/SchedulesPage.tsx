@@ -292,7 +292,6 @@ function CreateModal({
 }: {
   existingWeekIds: Set<string>;
   onClose: () => void;
-  onCreated: (s: Schedule) => void;
   onNavigate: () => void;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
   preselectedWeekId?: string;
@@ -309,7 +308,7 @@ function CreateModal({
   const effectiveWeekId = useCustom ? customWeekId.trim() : selectedWeekId;
 
   async function handleCreate(autoGenerate: boolean) {
-    if (!effectiveWeekId) return;
+    if (!effectiveWeekId || loading) return;
     setLoading(true);
     try {
       if (autoGenerate) {
@@ -322,7 +321,7 @@ function CreateModal({
         // Navigate to the newly created schedule board
         navigate(`/schedules/${effectiveWeekId}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof ApiError && err.code === 'ERR_NO_SHIFT_TEMPLATES') {
         showToast("It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.", 'error');
         navigate('/admin/shift-definitions');
@@ -410,7 +409,7 @@ function CreateModal({
 
         <div className="flex flex-col gap-sm pt-sm border-t border-outline-variant/30">
           <button
-            onClick={() => handleCreate(true)}
+            onClick={() => handleCreate(false)}
             disabled={loading || !effectiveWeekId}
             className="w-full py-sm px-md rounded-lg bg-[#101B79] text-white font-bold text-sm hover:bg-[#0c1461] transition-colors disabled:opacity-50 flex items-center justify-center gap-xs"
           >
@@ -419,16 +418,18 @@ function CreateModal({
                 <MaterialIcon name="progress_activity" />
               </span>
             ) : (
-              <MaterialIcon name="auto_awesome" />
+              <MaterialIcon name="add" />
             )}
-            יצירה אוטומטית (CSP)
+            יצירת סידור עבודה (לפי תבנית)
           </button>
+
           <button
-            onClick={() => handleCreate(false)}
+            onClick={() => handleCreate(true)}
             disabled={loading || !effectiveWeekId}
-            className="w-full py-sm px-md rounded-lg border border-outline-variant text-on-surface font-semibold text-sm hover:bg-surface-container-low transition-colors disabled:opacity-50"
+            className="w-full py-sm px-md rounded-lg border border-outline-variant text-[#056AE5] font-semibold text-sm hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-xs"
           >
-            צור טיוטה בלבד
+            <MaterialIcon name="auto_awesome" />
+            יצירה אוטומטית מלאה (CSP)
           </button>
         </div>
       </div>
@@ -480,38 +481,50 @@ export default function SchedulesPage() {
 
   // ── Load schedules (runs once on mount; actions use optimistic updates) ──
 
+  const refreshScheduleStats = useCallback((s: Schedule) => {
+    Promise.all([
+      shiftApi.getBySchedule(s._id),
+      constraintApi.getAllConstraints(s.weekId),
+    ])
+      .then(([shiftsRes, constraintsRes]) => {
+        const staffed = shiftsRes.shifts.filter((sh) => sh.status === 'filled').length;
+        setStatsMap((prev) =>
+          new Map(prev).set(s._id, {
+            staffed,
+            total: shiftsRes.shifts.length,
+            constraints: constraintsRes.constraints.length,
+          })
+        );
+      })
+      .catch(() => {
+        setStatsMap((prev) =>
+          new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 })
+        );
+      });
+  }, []);
+
+  const upsertSchedule = useCallback((schedule: Schedule) => {
+    setSchedules((prev) => {
+      const exists = prev.some((s) => s._id === schedule._id);
+      return exists
+        ? prev.map((s) => (s._id === schedule._id ? schedule : s))
+        : [schedule, ...prev];
+    });
+    refreshScheduleStats(schedule);
+  }, [refreshScheduleStats]);
+
   useEffect(() => {
     scheduleApi
       .getAll()
       .then(({ schedules: all }) => {
         setSchedules(all);
-        all.forEach((s) => {
-          Promise.all([
-            shiftApi.getBySchedule(s._id),
-            constraintApi.getAllConstraints(s.weekId),
-          ])
-            .then(([shiftsRes, constraintsRes]) => {
-              const staffed = shiftsRes.shifts.filter((sh) => sh.status === 'filled').length;
-              setStatsMap((prev) =>
-                new Map(prev).set(s._id, {
-                  staffed,
-                  total: shiftsRes.shifts.length,
-                  constraints: constraintsRes.constraints.length,
-                })
-              );
-            })
-            .catch(() => {
-              setStatsMap((prev) =>
-                new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 })
-              );
-            });
-        });
+        all.forEach(refreshScheduleStats);
       })
       .catch((err: unknown) => {
         showToast(err instanceof Error ? err.message : 'שגיאה בטעינת הסידורים', 'error');
       })
       .finally(() => setLoading(false));
-  }, [showToast]);
+  }, [refreshScheduleStats, showToast]);
 
   // ── Filter ──
 
@@ -716,7 +729,6 @@ export default function SchedulesPage() {
         <CreateModal
           existingWeekIds={existingWeekIds}
           onClose={() => setShowCreate(false)}
-          onCreated={(s) => setSchedules((prev) => [s, ...prev])}
           onNavigate={() => navigate('/admin')}
           showToast={showToast}
           preselectedWeekId={clonePreselect}

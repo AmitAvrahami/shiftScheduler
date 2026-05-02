@@ -21,7 +21,8 @@ export default function AdminShiftDefinitionsPage() {
     color: '#101B79',
     orderNumber: 1,
     isActive: true,
-    coverageRequirements: { weekday: 2, weekend: 1 },
+    requiredStaffCount: 1,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
   });
 
   useEffect(() => {
@@ -58,7 +59,8 @@ export default function AdminShiftDefinitionsPage() {
         color: '#101B79',
         orderNumber: 1,
         isActive: true,
-        coverageRequirements: { weekday: 2, weekend: 1 },
+        requiredStaffCount: 1,
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       });
       loadDefinitions();
     } catch (err) {
@@ -98,7 +100,8 @@ export default function AdminShiftDefinitionsPage() {
                 color: '#101B79',
                 orderNumber: definitions.length + 1,
                 isActive: true,
-                coverageRequirements: { weekday: 2, weekend: 1 },
+                requiredStaffCount: 1,
+                daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
               });
               setShowForm(true);
             }}
@@ -227,6 +230,59 @@ export default function AdminShiftDefinitionsPage() {
                       onChange={(e) => setForm({ ...form, orderNumber: parseInt(e.target.value) })}
                     />
                   </label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
+                    Required Staff
+                    <input
+                      type="number"
+                      className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                      required
+                      min="1"
+                      value={form.requiredStaffCount}
+                      onChange={(e) => setForm({ ...form, requiredStaffCount: parseInt(e.target.value) })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
+                    Crosses Midnight
+                    <div className="flex items-center h-full">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 accent-primary"
+                        checked={form.crossesMidnight}
+                        onChange={(e) => setForm({ ...form, crossesMidnight: e.target.checked })}
+                      />
+                    </div>
+                  </label>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-on-surface-variant">Days of Week</span>
+                  <div className="flex flex-wrap gap-2">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                      <label
+                        key={i}
+                        className={`flex items-center justify-center w-8 h-8 rounded-full border cursor-pointer transition-colors ${
+                          form.daysOfWeek?.includes(i)
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-white text-on-surface-variant border-outline hover:bg-surface-container-low'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={form.daysOfWeek?.includes(i)}
+                          onChange={(e) => {
+                            const days = form.daysOfWeek || [];
+                            const nextDays = e.target.checked
+                              ? [...days, i].sort()
+                              : days.filter((d) => d !== i);
+                            setForm({ ...form, daysOfWeek: nextDays });
+                          }}
+                        />
+                        <span className="text-xs font-bold">{day}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
                   Color

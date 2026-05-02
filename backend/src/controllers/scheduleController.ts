@@ -11,6 +11,7 @@ import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
 import { runScheduler } from '../services/schedulerService';
+import { generateWeekShifts } from '../services/shiftGenerationService';
 import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
@@ -382,10 +383,10 @@ export async function generateSchedule(
     const ip = req.ip ?? 'unknown';
 
     // Ensure a schedule exists before invoking the solver
-    const existing = await WeeklySchedule.findOne({ weekId });
-    if (!existing) {
+    let schedule = await WeeklySchedule.findOne({ weekId });
+    if (!schedule) {
       const dates = getWeekDates(weekId);
-      const created = await WeeklySchedule.create({
+      schedule = await WeeklySchedule.create({
         weekId,
         startDate: dates[0],
         endDate: dates[6],
@@ -396,19 +397,24 @@ export async function generateSchedule(
         performedBy: actorId,
         action: 'schedule_created',
         refModel: 'WeeklySchedule',
-        refId: created._id,
+        refId: schedule._id,
         after: { weekId, generatedBy: 'auto', status: 'open' },
         ip,
       });
     } else {
       const { role } = req.user!;
-      if (existing.status === 'draft' && !['admin', 'manager'].includes(role)) {
+      if (schedule.status === 'draft' && !['admin', 'manager'].includes(role)) {
         return next(new AppError('Forbidden — draft access restricted to admins and managers', 403));
       }
 
-      if (!['open', 'locked', 'draft'].includes(existing.status)) {
-        return next(new AppError(`Cannot re-generate a ${existing.status} schedule`, 422));
+      if (!['open', 'locked', 'draft'].includes(schedule.status)) {
+        return next(new AppError(`Cannot re-generate a ${schedule.status} schedule`, 422));
       }
+    }
+
+    const existingShiftCount = await Shift.countDocuments({ scheduleId: schedule._id });
+    if (existingShiftCount === 0) {
+      await generateWeekShifts(weekId, actorId, ip);
     }
 
     // Transition to 'generating' before invoking the solver

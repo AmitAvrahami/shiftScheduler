@@ -17,8 +17,13 @@ export interface Shift {
   scheduleId: string;
   definitionId: string;
   date: string;
+  startTime: string;
+  endTime: string;
+  startsAt: string;
+  endsAt: string;
   requiredCount: number;
   status: 'filled' | 'partial' | 'empty';
+  templateStatus?: 'matching_template' | 'manually_modified';
   notes?: string;
 }
 
@@ -28,6 +33,9 @@ export interface SaveShiftPayload {
   shiftDefinitionId?: string;
   date?: string;
   requiredCount?: number;
+  requiredStaffCount?: number;
+  startTime?: string;
+  endTime?: string;
   status?: Shift['status'];
   notes?: string;
 }
@@ -376,7 +384,25 @@ export const adminApi = {
       body: JSON.stringify({ weekId, generatedBy: 'manual' }),
     });
   },
+
+  initializeFromTemplates(startOfWeek: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
+    return request('/admin/weeks/initialize', {
+      method: 'POST',
+      body: JSON.stringify({ weekId: weekIdFromStartOfWeek(startOfWeek), generatedBy: 'manual' }),
+    });
+  },
 };
+
+function weekIdFromStartOfWeek(startOfWeek: string): string {
+  const [year, month, day] = startOfWeek.split('-').map(Number);
+  const monday = new Date(Date.UTC(year, month - 1, day + 1));
+  const thursday = new Date(monday);
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((thursday.getTime() - jan1.getTime()) / 86_400_000) + 1) / 7);
+
+  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 

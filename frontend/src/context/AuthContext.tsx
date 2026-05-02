@@ -1,29 +1,16 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { authApi } from '../lib/api';
 import type { User } from '../types/auth';
-
-interface AuthContextValue {
-  user: User | null;
-  token: string | null;
-  isLoading: boolean;
-  login(body: { email: string; password: string }): Promise<void>;
-  logout(): void;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from './AuthContext.types';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [isLoading, setIsLoading] = useState(() => !!localStorage.getItem('token'));
 
   useEffect(() => {
-    const stored = localStorage.getItem('token');
-    if (!stored) {
-      setIsLoading(false);
-      return;
-    }
-    setToken(stored);
+    if (!token) return;
+    
     authApi
       .me()
       .then((res) => setUser(res.user))
@@ -32,7 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
       })
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [token]);
 
   async function login(body: { email: string; password: string }) {
     const res = await authApi.login(body);
@@ -52,10 +39,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
 }

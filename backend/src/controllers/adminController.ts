@@ -211,6 +211,20 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
       scheduleStatus: schedule ? (schedule.status as string) : null,
     };
 
+    const definitionById = new Map(shiftDefDocs.map((definition) => [String(definition._id), definition]));
+    const shiftsWithTemplateStatus = shifts.map((shift) => {
+      const definition = definitionById.get(String(shift.definitionId));
+      const manuallyModified = !definition
+        || shift.startTime !== definition.startTime
+        || shift.endTime !== definition.endTime
+        || shift.requiredCount !== definition.requiredStaffCount;
+
+      return {
+        ...shift,
+        templateStatus: manuallyModified ? 'manually_modified' : 'matching_template',
+      };
+    });
+
     // ── Compute missing constraints via set-difference ───────────────────────
     const submittedSet = new Set(constraintDocs.map((c) => String(c.userId)));
     const missingConstraintUserIds = allUsers
@@ -238,7 +252,7 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
         currentWeek: {
           weekId,
           schedule,
-          shifts,
+          shifts: shiftsWithTemplateStatus,
           assignments,
           stats: weekStats,
         },

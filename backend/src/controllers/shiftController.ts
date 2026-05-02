@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import Shift from '../models/Shift';
 import ShiftDefinition from '../models/ShiftDefinition';
+import type { IShiftDefinition } from '../models/ShiftDefinition';
 import Assignment from '../models/Assignment';
 import WeeklySchedule from '../models/WeeklySchedule';
 import AuditLog from '../models/AuditLog';
@@ -10,8 +11,30 @@ import AppError from '../utils/AppError';
 import { logger } from '../utils/logger';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const objectId = (field: string) =>
   z.string().refine((value) => mongoose.Types.ObjectId.isValid(value), `${field} must be a valid ObjectId`);
+
+function buildDateTime(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(':').map(Number);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes);
+}
+
+function getShiftDateTimes(
+  date: Date,
+  startTime: string,
+  endTime: string,
+  crossesMidnight = false
+): { startsAt: Date; endsAt: Date } {
+  const startsAt = buildDateTime(date, startTime);
+  const sameDayEndsAt = buildDateTime(date, endTime);
+  const endsAt = crossesMidnight || sameDayEndsAt <= startsAt
+    ? new Date(sameDayEndsAt.getTime() + DAY_MS)
+    : sameDayEndsAt;
+
+  return { startsAt, endsAt };
+}
 
 const createSchema = z.object({
   scheduleId: objectId('scheduleId'),
@@ -47,6 +70,9 @@ const updateSchema = z.object({
   shiftDefinitionId: objectId('shiftDefinitionId').optional(),
   date: z.string().regex(DATE_RE, 'date must be YYYY-MM-DD').optional(),
   requiredCount: z.number().int().positive().optional(),
+  requiredStaffCount: z.number().int().positive().optional(),
+  startTime: z.string().regex(TIME_RE, 'startTime must be HH:MM').optional(),
+  endTime: z.string().regex(TIME_RE, 'endTime must be HH:MM').optional(),
   status: z.enum(['filled', 'partial', 'empty']).optional(),
   notes: z.string().optional(),
 }).superRefine((data, ctx) => {
@@ -57,12 +83,71 @@ const updateSchema = z.object({
       message: 'shiftDefinitionId must match definitionId when both are provided',
     });
   }
-}).transform(({ shiftDefinitionId, ...data }) => ({
+  if (data.requiredCount && data.requiredStaffCount && data.requiredCount !== data.requiredStaffCount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['requiredStaffCount'],
+      message: 'requiredStaffCount must match requiredCount when both are provided',
+    });
+  }
+}).transform(({ shiftDefinitionId, requiredStaffCount, ...data }) => ({
   ...data,
+  ...(data.requiredCount || requiredStaffCount
+    ? { requiredCount: data.requiredCount ?? requiredStaffCount }
+    : {}),
   ...(data.definitionId || shiftDefinitionId
     ? { definitionId: data.definitionId ?? shiftDefinitionId }
     : {}),
 }));
+
+type ShiftResponse = Record<string, unknown> & {
+  templateStatus: 'matching_template' | 'manually_modified';
+};
+
+function isModifiedFromDefinition(
+  shift: Record<string, unknown>,
+  definition: Pick<IShiftDefinition, 'startTime' | 'endTime' | 'requiredStaffCount'> | undefined
+): boolean {
+  if (!definition) return true;
+  return shift.startTime !== definition.startTime
+    || shift.endTime !== definition.endTime
+    || shift.requiredCount !== definition.requiredStaffCount;
+}
+
+async function attachTemplateStatusToShift(shift: unknown): Promise<ShiftResponse> {
+  const shiftObject = typeof (shift as { toObject?: () => unknown }).toObject === 'function'
+    ? (shift as { toObject: () => Record<string, unknown> }).toObject()
+    : { ...(shift as Record<string, unknown>) };
+  const definitionId = shiftObject.definitionId;
+  const definition = definitionId
+    ? await ShiftDefinition.findById(definitionId).lean()
+    : null;
+
+  return {
+    ...shiftObject,
+    templateStatus: isModifiedFromDefinition(shiftObject, definition ?? undefined)
+      ? 'manually_modified'
+      : 'matching_template',
+  };
+}
+
+async function attachTemplateStatusToShifts(shifts: unknown[]): Promise<ShiftResponse[]> {
+  const shiftObjects = shifts.map((shift) => (
+    typeof (shift as { toObject?: () => unknown }).toObject === 'function'
+      ? (shift as { toObject: () => Record<string, unknown> }).toObject()
+      : { ...(shift as Record<string, unknown>) }
+  ));
+  const definitionIds = [...new Set(shiftObjects.map((shift) => String(shift.definitionId)).filter(Boolean))];
+  const definitions = await ShiftDefinition.find({ _id: { $in: definitionIds } }).lean();
+  const definitionById = new Map(definitions.map((definition) => [String(definition._id), definition]));
+
+  return shiftObjects.map((shift) => ({
+    ...shift,
+    templateStatus: isModifiedFromDefinition(shift, definitionById.get(String(shift.definitionId)))
+      ? 'manually_modified'
+      : 'matching_template',
+  }));
+}
 
 function logShiftValidationError(action: 'create' | 'update', error: z.ZodError, body: unknown): void {
   console.error(`[shiftController] Failed to ${action} shift: validation error`, {
@@ -92,7 +177,7 @@ export async function getShifts(req: Request, res: Response, next: NextFunction)
     }
 
     const shifts = await Shift.find({ scheduleId }).sort({ date: 1 });
-    res.json({ success: true, shifts });
+    res.json({ success: true, shifts: await attachTemplateStatusToShifts(shifts) });
     logger.info('getShifts - end', { count: shifts.length });
   } catch (err) {
     logger.error('getShifts - error', err);
@@ -120,6 +205,7 @@ export async function createShift(req: Request, res: Response, next: NextFunctio
       date: new Date(parsed.data.date),
       startTime: definition.startTime,
       endTime: definition.endTime,
+      ...getShiftDateTimes(new Date(parsed.data.date), definition.startTime, definition.endTime, definition.crossesMidnight),
     });
 
     await AuditLog.create({
@@ -131,7 +217,7 @@ export async function createShift(req: Request, res: Response, next: NextFunctio
       ip: req.ip,
     });
 
-    res.status(201).json({ success: true, shift });
+    res.status(201).json({ success: true, shift: await attachTemplateStatusToShift(shift) });
     logger.info('createShift - end', { id: shift._id });
   } catch (err) {
     logger.error('createShift - error', err);
@@ -151,7 +237,7 @@ export async function getShiftById(req: Request, res: Response, next: NextFuncti
       return next(new AppError('Shift not found', 404));
     }
 
-    res.json({ success: true, shift });
+    res.json({ success: true, shift: await attachTemplateStatusToShift(shift) });
     logger.info('getShiftById - end', { id: req.params.id });
   } catch (err) {
     logger.error('getShiftById - error', err);
@@ -172,12 +258,22 @@ export async function updateShift(req: Request, res: Response, next: NextFunctio
     if (!before) return next(new AppError('Shift not found', 404));
 
     const update: Record<string, unknown> = { ...parsed.data };
+    let crossesMidnight = before.endsAt.getTime() > buildDateTime(before.date, before.endTime).getTime();
     if (parsed.data.date) update.date = new Date(parsed.data.date);
     if (parsed.data.definitionId) {
       const definition = await ShiftDefinition.findById(parsed.data.definitionId).lean();
       if (!definition) return next(new AppError('Shift definition not found', 404));
-      update.startTime = definition.startTime;
-      update.endTime = definition.endTime;
+      update.startTime = parsed.data.startTime ?? definition.startTime;
+      update.endTime = parsed.data.endTime ?? definition.endTime;
+      crossesMidnight = definition.crossesMidnight;
+    }
+    if (parsed.data.startTime && !parsed.data.definitionId) update.startTime = parsed.data.startTime;
+    if (parsed.data.endTime && !parsed.data.definitionId) update.endTime = parsed.data.endTime;
+    if (parsed.data.date || parsed.data.definitionId || parsed.data.startTime || parsed.data.endTime) {
+      const date = (update.date as Date | undefined) ?? before.date;
+      const startTime = (update.startTime as string | undefined) ?? before.startTime;
+      const endTime = (update.endTime as string | undefined) ?? before.endTime;
+      Object.assign(update, getShiftDateTimes(date, startTime, endTime, crossesMidnight));
     }
 
     const shift = await Shift.findByIdAndUpdate(
@@ -196,7 +292,7 @@ export async function updateShift(req: Request, res: Response, next: NextFunctio
       ip: req.ip,
     });
 
-    res.json({ success: true, shift });
+    res.json({ success: true, shift: await attachTemplateStatusToShift(shift) });
     logger.info('updateShift - end', { id: req.params.id });
   } catch (err) {
     logger.error('updateShift - error', err);

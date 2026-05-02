@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import {
@@ -119,11 +119,13 @@ interface StaffEntry {
 
 function ShiftCard({
   shift,
+  instance,
   staff,
   requiredCount,
   type,
 }: {
   shift: ShiftDef;
+  instance?: Shift;
   staff: StaffEntry[];
   requiredCount: number;
   type: 'prev' | 'current' | 'next';
@@ -133,6 +135,14 @@ function ShiftCard({
   const isNext    = type === 'next';
 
   const emptySlotsCount = Math.max(0, requiredCount - staff.length);
+  const timeLabel = instance ? `${instance.startTime} - ${instance.endTime}` : `${shift.start} - ${shift.end}`;
+  const templateStatus = instance?.templateStatus ?? 'matching_template';
+  const templateStatusLabel = templateStatus === 'manually_modified'
+    ? 'Manually Modified'
+    : 'Matching Template';
+  const templateStatusClass = templateStatus === 'manually_modified'
+    ? 'bg-amber-100 text-amber-800 border-amber-200'
+    : 'bg-emerald-100 text-emerald-800 border-emerald-200';
 
   if (isCurrent) {
     return (
@@ -142,12 +152,15 @@ function ShiftCard({
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
         <div className="flex justify-between items-center text-[10px] font-bold opacity-90 relative z-10">
-          <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+          <span style={{ direction: 'ltr' }}>{timeLabel}</span>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span>פעיל</span>
           </div>
         </div>
+        <span className={`relative z-10 inline-flex w-fit items-center px-2 py-0.5 rounded-full border text-[10px] font-bold ${templateStatusClass}`}>
+          {templateStatusLabel}
+        </span>
         <h3 className="text-lg font-bold text-white relative z-10">משמרת נוכחית</h3>
         <p className="text-sm opacity-90 relative z-10">{shift.label}</p>
         <div className="mt-auto pt-sm relative z-10 flex items-center justify-between">
@@ -174,9 +187,12 @@ function ShiftCard({
       className={`bg-white border border-[#e2e8f0] rounded-xl p-md flex flex-col gap-sm h-full ${isPrev ? 'opacity-70' : 'hover:shadow-md transition-shadow shadow-bezeq-card'}`}
     >
       <div className={`flex justify-between items-center text-[10px] font-bold ${isNext ? 'text-[#056AE5]' : 'text-on-surface-variant'}`}>
-        <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+        <span style={{ direction: 'ltr' }}>{timeLabel}</span>
         <MaterialIcon name={isPrev ? 'history' : 'calendar_today'} className="text-[16px]" />
       </div>
+      <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded-full border text-[10px] font-bold ${templateStatusClass}`}>
+        {templateStatusLabel}
+      </span>
       <h3 className="text-lg font-bold text-on-surface">{isPrev ? 'משמרת קודמת' : 'משמרת הבאה'}</h3>
       <p className="text-sm text-on-surface-variant">{shift.label}</p>
       <div className="mt-auto pt-sm flex items-center justify-between">
@@ -249,14 +265,14 @@ function ShiftOverview({
 
   function getShiftData(defIdx: number) {
     const def = sortedDefs[defIdx];
-    if (!def) return { staff: [], requiredCount: 0 };
+    if (!def) return { staff: [], requiredCount: 0, shift: undefined };
 
     const todayShift = shifts.find((s) => {
       const shiftDateKey = toDateKey(new Date(s.date));
       return shiftDateKey === todayKey && s.definitionId === def._id;
     });
 
-    if (!todayShift) return { staff: [], requiredCount: 0 };
+    if (!todayShift) return { staff: [], requiredCount: 0, shift: undefined };
 
     const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift._id);
     const staff = shiftAssignments.map((a) => {
@@ -268,7 +284,7 @@ function ShiftOverview({
       };
     });
 
-    return { staff, requiredCount: todayShift.requiredCount };
+    return { staff, requiredCount: todayShift.requiredCount, shift: todayShift };
   }
 
   const prevData = getShiftData(prevIdx);
@@ -279,9 +295,9 @@ function ShiftOverview({
     <section className="flex flex-col gap-md">
       <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">סטטוס משמרות</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-        <ShiftCard shift={SHIFTS[prevIdx]} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
-        <ShiftCard shift={SHIFTS[curIdx]}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
-        <ShiftCard shift={SHIFTS[nextIdx]} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
+        <ShiftCard shift={SHIFTS[prevIdx]} instance={prevData.shift} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
+        <ShiftCard shift={SHIFTS[curIdx]}  instance={curData.shift}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
+        <ShiftCard shift={SHIFTS[nextIdx]} instance={nextData.shift} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
       </div>
     </section>
   );
@@ -667,6 +683,7 @@ function QuickActions({
   onGenerateResult: (r: GenerateResult) => void;
 }) {
   const [generating, setGenerating] = useState(false);
+  const navigate = useNavigate();
 
   async function handleGenerate() {
     if (generating) return;
@@ -684,9 +701,9 @@ function QuickActions({
 
   const actions = [
     { id: 'generate',  label: 'ייצור סידור עבודה', icon: 'bolt', onClick: handleGenerate, subtitle: 'אוטומציה מלאה',   isPrimary: true  },
+    { id: 'view_week', label: 'צפייה בסידור השבועי', icon: 'calendar_view_week', onClick: () => navigate(`/schedules/${weekId}`), subtitle: 'לוח שיבוץ מלא', isPrimary: false },
     { id: 'leaves',    label: 'אישור חופשות',       icon: 'check',    onClick: () => onToast({ message: 'אישור חופשות — בקרוב', type: 'info' }), subtitle: 'ניהול היעדרויות', isPrimary: false },
     { id: 'emergency', label: 'משמרת חירום',        icon: 'warning',    onClick: () => onToast({ message: 'הוספת משמרת חירום — בקרוב', type: 'info' }), subtitle: 'שיבוץ דחוף',       isPrimary: false },
-    { id: 'export',    label: 'ייצוא דוחות',        icon: 'download', onClick: () => onToast({ message: 'ייצוא דוח — בקרוב', type: 'info' }), subtitle: 'PDF / Excel',       isPrimary: false },
   ];
 
   return (

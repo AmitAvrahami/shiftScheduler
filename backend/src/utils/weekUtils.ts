@@ -1,6 +1,14 @@
-// IST = UTC+3 (fixed offset, per CLAUDE.md)
-const IST_OFFSET_MS = 3 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { 
+  addDays, 
+  subDays, 
+  addWeeks, 
+  format, 
+  getISOWeek, 
+  getISOWeekYear
+} from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
+const TIMEZONE = 'Asia/Jerusalem';
 
 export function parseWeekId(weekId: string): { year: number; week: number } {
   const match = weekId.match(/^(\d{4})-W(\d{2})$/);
@@ -13,28 +21,28 @@ function getISOWeekMondayUTC(year: number, week: number): Date {
   // Jan 4 is always in ISO week 1
   const jan4 = new Date(Date.UTC(year, 0, 4));
   const jan4DayOfWeek = jan4.getUTCDay() || 7; // ISO: Mon=1 … Sun=7
-  const week1MondayMs = jan4.getTime() - (jan4DayOfWeek - 1) * DAY_MS;
-  return new Date(week1MondayMs + (week - 1) * 7 * DAY_MS);
+  
+  // Use UTC-safe logic
+  const week1Monday = new Date(jan4.getTime());
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4DayOfWeek - 1));
+  week1Monday.setUTCHours(0, 0, 0, 0);
+  
+  return addWeeks(week1Monday, week - 1);
 }
 
 /**
  * Constraint deadline: the Monday of the given ISO week at 23:59:59.999 IST.
- * IST = UTC+3, so Mon 23:59:59.999 IST = Mon 20:59:59.999 UTC.
  */
 export function getConstraintDeadline(weekId: string): Date {
   const { year, week } = parseWeekId(weekId);
-  const monday = getISOWeekMondayUTC(year, week);
-  return new Date(
-    Date.UTC(
-      monday.getUTCFullYear(),
-      monday.getUTCMonth(),
-      monday.getUTCDate(),
-      20,
-      59,
-      59,
-      999
-    )
-  );
+  const mondayUTC = getISOWeekMondayUTC(year, week);
+  
+  // Format the date in the target timezone to get the correct YYYY-MM-DD
+  const mondayZoned = toZonedTime(mondayUTC, TIMEZONE);
+  const dateStr = format(mondayZoned, 'yyyy-MM-dd');
+  
+  // Construct the deadline at 23:59:59.999 in that timezone
+  return fromZonedTime(`${dateStr} 23:59:59.999`, TIMEZONE);
 }
 
 export function isConstraintDeadlinePassed(weekId: string): boolean {
@@ -48,63 +56,47 @@ export function isConstraintDeadlinePassed(weekId: string): boolean {
  */
 export function getWeekDates(weekId: string): Date[] {
   const { year, week } = parseWeekId(weekId);
-  const monday = getISOWeekMondayUTC(year, week);
-  const sundayMs = monday.getTime() - DAY_MS;
+  const mondayUTC = getISOWeekMondayUTC(year, week);
+  const sundayUTC = subDays(mondayUTC, 1);
 
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sundayMs + i * DAY_MS);
-    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); // local midnight
+    const dUTC = addDays(sundayUTC, i);
+    const dZoned = toZonedTime(dUTC, TIMEZONE);
+    // Return a date object representing midnight in local time
+    return new Date(dZoned.getFullYear(), dZoned.getMonth(), dZoned.getDate());
   });
 }
 
 /**
  * Builds a local-time YYYY-MM-DD date key (matches scheduler convention).
- * Never use toISOString() — UTC offset causes off-by-one in IST.
  */
 export function toDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return format(d, 'yyyy-MM-dd');
 }
 
 /**
- * Returns the ISO weekId for the current moment expressed in IST (UTC+3).
+ * Returns the ISO weekId for the current moment expressed in Asia/Jerusalem.
  */
 export function getCurrentWeekId(): string {
-  const nowIST = new Date(Date.now() + IST_OFFSET_MS);
-  const year = nowIST.getUTCFullYear();
-  const month = nowIST.getUTCMonth();
-  const day = nowIST.getUTCDate();
-
-  // ISO week number: Thursday-anchor algorithm
-  const thursday = new Date(Date.UTC(year, month, day));
-  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((thursday.getTime() - jan1.getTime()) / DAY_MS + 1) / 7);
-  const weekYear = thursday.getUTCFullYear();
+  const nowZoned = toZonedTime(new Date(Date.now()), TIMEZONE);
+  const weekNum = getISOWeek(nowZoned);
+  const weekYear = getISOWeekYear(nowZoned);
 
   return `${weekYear}-W${String(weekNum).padStart(2, '0')}`;
 }
 
 /**
  * Returns the ISO weekId for the week immediately following weekId.
- * Handles year-boundary rollover (e.g. 2015-W53 → 2016-W01).
  */
 export function getNextWeekId(weekId: string): string {
   const { year, week } = parseWeekId(weekId);
   const monday = getISOWeekMondayUTC(year, week);
-  const nextMonday = new Date(monday.getTime() + 7 * DAY_MS);
-  // nextMonday is always a Monday; its Thursday is exactly 3 days later
-  const thursday = new Date(
-    Date.UTC(
-      nextMonday.getUTCFullYear(),
-      nextMonday.getUTCMonth(),
-      nextMonday.getUTCDate() + 3
-    )
-  );
-  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(
-    ((thursday.getTime() - jan1.getTime()) / DAY_MS + 1) / 7
-  );
-  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+  const nextMonday = addWeeks(monday, 1);
+  
+  const weekNum = getISOWeek(nextMonday);
+  const weekYear = getISOWeekYear(nextMonday);
+  
+  return `${weekYear}-W${String(weekNum).padStart(2, '0')}`;
 }
 
 /**
