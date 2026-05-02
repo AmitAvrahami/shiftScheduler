@@ -11,6 +11,7 @@ import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
 import { runScheduler } from '../services/schedulerService';
+import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 
@@ -42,12 +43,15 @@ function validateWeekId(weekId: string, next: NextFunction): boolean {
 }
 
 export async function getSchedules(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getSchedules - start');
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
     const filter = isManagerOrAdmin ? {} : { status: 'published' };
     const schedules = await WeeklySchedule.find(filter).sort({ startDate: -1 });
     res.json({ success: true, schedules });
+    logger.info('getSchedules - end', { count: schedules.length });
   } catch (err) {
+    logger.error('getSchedules - error', err);
     next(err);
   }
 }
@@ -57,6 +61,7 @@ export async function createSchedule(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('createSchedule - start', { body: req.body });
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -105,7 +110,9 @@ export async function createSchedule(
     });
 
     res.status(201).json({ success: true, schedule });
+    logger.info('createSchedule - end', { weekId: schedule.weekId });
   } catch (err) {
+    logger.error('createSchedule - error', err);
     next(err);
   }
 }
@@ -115,6 +122,7 @@ export async function getScheduleById(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getScheduleById - start', { id: req.params.id });
   try {
     const schedule = await WeeklySchedule.findById(req.params.id);
     if (!schedule) return next(new AppError('Schedule not found', 404));
@@ -132,7 +140,9 @@ export async function getScheduleById(
     }
 
     res.json({ success: true, schedule });
+    logger.info('getScheduleById - end', { id: req.params.id });
   } catch (err) {
+    logger.error('getScheduleById - error', err);
     next(err);
   }
 }
@@ -142,6 +152,7 @@ export async function updateSchedule(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('updateSchedule - start', { id: req.params.id, body: req.body });
   try {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -220,7 +231,9 @@ export async function updateSchedule(
     });
 
     res.json({ success: true, schedule });
+    logger.info('updateSchedule - end', { id: req.params.id });
   } catch (err) {
+    logger.error('updateSchedule - error', err);
     next(err);
   }
 }
@@ -230,6 +243,7 @@ export async function deleteSchedule(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('deleteSchedule - start', { id: req.params.id });
   try {
     const schedule = await WeeklySchedule.findById(req.params.id);
     if (!schedule) return next(new AppError('Schedule not found', 404));
@@ -255,7 +269,9 @@ export async function deleteSchedule(
     });
 
     res.json({ success: true, message: 'Schedule deleted' });
+    logger.info('deleteSchedule - end', { id: req.params.id });
   } catch (err) {
+    logger.error('deleteSchedule - error', err);
     next(err);
   }
 }
@@ -269,6 +285,7 @@ export async function cloneSchedule(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('cloneSchedule - start', { id: req.params.id, body: req.body });
   try {
     const parsed = cloneSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -342,7 +359,9 @@ export async function cloneSchedule(
     });
 
     res.status(201).json({ success: true, schedule: targetSchedule });
+    logger.info('cloneSchedule - end', { id: req.params.id });
   } catch (err) {
+    logger.error('cloneSchedule - error', err);
     next(err);
   }
 }
@@ -352,6 +371,7 @@ export async function generateSchedule(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('generateSchedule - start', { weekId: req.params.weekId });
   try {
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -402,7 +422,9 @@ export async function generateSchedule(
     }
 
     res.json({ success: true, ...result });
+    logger.info('generateSchedule - end', { weekId: req.params.weekId });
   } catch (err) {
+    logger.error('generateSchedule - error', err);
     next(err);
   }
 }
