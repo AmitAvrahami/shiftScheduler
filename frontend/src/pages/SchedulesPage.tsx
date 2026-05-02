@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { scheduleApi, shiftApi, constraintApi, adminApi } from '../lib/api';
+import { scheduleApi, shiftApi, constraintApi, adminApi, ApiError } from '../lib/api';
 import type { Schedule } from '../lib/api';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -332,7 +332,13 @@ function CreateModal({
         navigate(`/schedules/${effectiveWeekId}`);
       }
     } catch (err: any) {
-      if (err instanceof Error && err.message.includes('409') || (err.message && err.message.includes('already exists'))) {
+      if (err instanceof ApiError && err.code === 'ERR_NO_SHIFT_TEMPLATES') {
+        showToast("It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.", 'error');
+        navigate('/admin/shift-definitions');
+        return;
+      }
+      if ((err instanceof Error && err.message.includes('409')) || (err.message && err.message.includes('already exists'))) {
+
         showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
       } else {
         showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
