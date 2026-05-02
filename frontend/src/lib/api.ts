@@ -129,6 +129,29 @@ export const shiftDefinitionApi = {
   getActive(): Promise<{ success: boolean; definitions: ShiftDefinition[] }> {
     return request('/shift-definitions');
   },
+
+  create(body: Partial<ShiftDefinition>): Promise<{ success: boolean; definition: ShiftDefinition }> {
+    return request('/shift-definitions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  update(
+    id: string,
+    body: Partial<ShiftDefinition>
+  ): Promise<{ success: boolean; definition: ShiftDefinition }> {
+    return request(`/shift-definitions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  delete(id: string): Promise<{ success: boolean }> {
+    return request(`/shift-definitions/${id}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // ─── Constraints ──────────────────────────────────────────────────────────────
