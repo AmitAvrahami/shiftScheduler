@@ -28,6 +28,7 @@ export interface EmployeeDTO {
   name: string;
   role: string;
   isActive: boolean;
+  isFixedMorningEmployee?: boolean;
 }
 
 export interface ShiftDTO {
@@ -35,6 +36,7 @@ export interface ShiftDTO {
   day: string;              // YYYY-MM-DD local time
   type: ShiftTypeDTO;
   requiredEmployees: number;
+  // TODO: add templateStatus once WeeklySchedule tracks per-template generation state
 }
 
 export interface AssignmentDTO {
@@ -97,6 +99,7 @@ export interface RawUserDoc {
   name: string;
   role: string;
   isActive: boolean;
+  isFixedMorningEmployee?: boolean;
 }
 
 export interface RawShiftDoc {

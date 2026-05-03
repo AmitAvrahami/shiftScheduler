@@ -18,6 +18,7 @@ export interface AdminDashboardDTO {
     name: string;
     role: string;
     isActive: boolean;
+    isFixedMorningEmployee?: boolean;
   }[];
 
   shifts: {

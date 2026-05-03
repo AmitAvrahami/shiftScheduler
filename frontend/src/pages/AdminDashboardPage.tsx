@@ -38,6 +38,10 @@ interface ShiftDef {
   icon: string;
 }
 
+// UI display config only — labels, colors, icons, display times.
+// Shift counts, assignments, and required employees come from dashboard.shifts.
+// TODO: future dynamic shift definitions should come from the ShiftDefinition API;
+//       remove this static list when the backend exposes shift metadata per week.
 const SHIFTS: ShiftDef[] = [
   { id: 'morning',   label: 'בוקר',  start: '06:45', end: '14:45', color: '#f59e0b', dimBg: 'rgba(245,158,11,0.15)',  icon: 'wb_sunny'    },
   { id: 'afternoon', label: 'אחה"צ', start: '14:45', end: '22:45', color: '#8b5cf6', dimBg: 'rgba(139,92,246,0.15)', icon: 'light_mode' },
@@ -267,7 +271,7 @@ function ShiftOverview({
       return {
         id: a.id,
         name: user?.name ?? 'עובד לא ידוע',
-        isFixed: false,
+        isFixed: user?.isFixedMorningEmployee ?? false,
       };
     });
 

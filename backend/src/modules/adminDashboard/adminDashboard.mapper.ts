@@ -95,6 +95,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
     name: u.name,
     role: u.role,
     isActive: u.isActive,
+    isFixedMorningEmployee: Boolean(u.isFixedMorningEmployee),
   }));
 
   // ── Shifts ────────────────────────────────────────────────────────────────
