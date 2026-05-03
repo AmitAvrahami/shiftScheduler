@@ -101,8 +101,53 @@ describe('POST /api/v1/shifts', () => {
     const { draft, def, token } = await seedData();
     const res = await request(app).post('/api/v1/shifts').set('Authorization', `Bearer ${token}`).send({ scheduleId: String(draft._id), definitionId: String(def._id), date: '2026-05-24', requiredCount: 2 });
     expect(res.status).toBe(201);
+    expect(res.body.shift.startTime).toBe(def.startTime);
+    expect(res.body.shift.endTime).toBe(def.endTime);
     const log = await AuditLog.findOne({ action: 'shift_created' });
     expect(log).not.toBeNull();
+  });
+
+  it('accepts shiftDefinitionId as a frontend alias for definitionId', async () => {
+    const { draft, def, token } = await seedData();
+    const res = await request(app).post('/api/v1/shifts').set('Authorization', `Bearer ${token}`).send({ scheduleId: String(draft._id), shiftDefinitionId: String(def._id), date: '2026-05-24', requiredCount: 2 });
+    expect(res.status).toBe(201);
+    expect(String(res.body.shift.definitionId)).toBe(String(def._id));
+    expect(String(res.body.shift.shiftDefinitionId)).toBe(String(def._id));
+  });
+
+  it('keeps shift time snapshots immutable when the definition changes later', async () => {
+    const { draft, def, token } = await seedData();
+    const res = await request(app)
+      .post('/api/v1/shifts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scheduleId: String(draft._id), definitionId: String(def._id), date: '2026-05-24', requiredCount: 2 });
+    expect(res.status).toBe(201);
+
+    await ShiftDefinition.findByIdAndUpdate(def._id, { $set: { startTime: '07:00', endTime: '15:00' } });
+    const stored = await Shift.findById(res.body.shift._id).lean();
+
+    expect(stored!.startTime).toBe('06:45');
+    expect(stored!.endTime).toBe('14:45');
+  });
+
+  it('logs validation errors with a clear shift validation code', async () => {
+    const { draft, token } = await seedData();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const res = await request(app).post('/api/v1/shifts').set('Authorization', `Bearer ${token}`).send({ scheduleId: String(draft._id), date: '2026-05-24', requiredCount: 2 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ERR_SHIFT_VALIDATION');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[shiftController] Failed to create shift: validation error'),
+      expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({ message: 'definitionId or shiftDefinitionId is required' }),
+        ]),
+      })
+    );
+
+    errorSpy.mockRestore();
   });
 });
 
@@ -123,6 +168,95 @@ describe('PATCH /api/v1/shifts/:id', () => {
     expect(res.body.shift.requiredCount).toBe(5);
     const log = await AuditLog.findOne({ action: 'shift_updated' });
     expect(log).not.toBeNull();
+  });
+
+  it('updates requiredStaffCount on the shift instance without changing the definition', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount, status: 'empty' });
+
+    const res = await request(app)
+      .patch(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ requiredStaffCount: 4 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.requiredCount).toBe(4);
+    expect(res.body.shift.templateStatus).toBe('manually_modified');
+
+    const unchangedDefinition = await ShiftDefinition.findById(def._id).lean();
+    expect(unchangedDefinition!.requiredStaffCount).toBe(def.requiredStaffCount);
+  });
+
+  it('updates shift times on the shift instance and recomputes date-times without changing the definition', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount, status: 'empty' });
+
+    const res = await request(app)
+      .patch(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ startTime: '08:00', endTime: '16:30' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.startTime).toBe('08:00');
+    expect(res.body.shift.endTime).toBe('16:30');
+    expect(res.body.shift.templateStatus).toBe('manually_modified');
+    expect(new Date(res.body.shift.startsAt).getHours()).toBe(8);
+    expect(new Date(res.body.shift.endsAt).getHours()).toBe(16);
+    expect(new Date(res.body.shift.endsAt).getMinutes()).toBe(30);
+
+    const unchangedDefinition = await ShiftDefinition.findById(def._id).lean();
+    expect(unchangedDefinition!.startTime).toBe(def.startTime);
+    expect(unchangedDefinition!.endTime).toBe(def.endTime);
+  });
+
+  it('returns matching_template when the shift snapshot matches its definition', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount, status: 'empty' });
+
+    const res = await request(app).get(`/api/v1/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.templateStatus).toBe('matching_template');
+  });
+
+  it('returns manually_modified when an overridden shift appears in a schedule list', async () => {
+    const { draft, def, token } = await seedData();
+    await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount + 1, status: 'empty' });
+
+    const res = await request(app).get(`/api/v1/shifts?scheduleId=${draft._id}`).set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.shifts[0].templateStatus).toBe('manually_modified');
+  });
+
+  it('returns to matching_template after overridden values are reset to template values', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: 4, startTime: '08:00', endTime: '16:00', status: 'empty' });
+
+    const res = await request(app)
+      .patch(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ requiredCount: def.requiredStaffCount, startTime: def.startTime, endTime: def.endTime });
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.templateStatus).toBe('matching_template');
+  });
+
+  it('supports PUT updates for schedule editors', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: 2, status: 'empty' });
+    const res = await request(app).put(`/api/v1/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`).send({ shiftDefinitionId: String(def._id), requiredCount: 4 });
+    expect(res.status).toBe(200);
+    expect(res.body.shift.requiredCount).toBe(4);
+    expect(String(res.body.shift.definitionId)).toBe(String(def._id));
+  });
+
+  it('supports legacy /api route prefix for shift saves', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: 2, status: 'empty' });
+    const res = await request(app).put(`/api/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`).send({ requiredCount: 3 });
+    expect(res.status).toBe(200);
+    expect(res.body.shift.requiredCount).toBe(3);
   });
 });
 

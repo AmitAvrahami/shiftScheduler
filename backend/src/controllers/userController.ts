@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import User from '../models/User';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const managerUpdateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -15,6 +16,7 @@ const selfUpdateSchema = z.object({
 });
 
 export async function getUserById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getUserById - start', { id: req.params.id });
   try {
     const { id } = req.params;
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
@@ -27,12 +29,15 @@ export async function getUserById(req: Request, res: Response, next: NextFunctio
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+    logger.info('getUserById - end', { id: req.params.id });
   } catch (err) {
+    logger.error('getUserById - error', err);
     next(err);
   }
 }
 
 export async function updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('updateUser - start', { id: req.params.id, body: req.body });
   try {
     const { id } = req.params;
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
@@ -50,7 +55,9 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+    logger.info('updateUser - end', { id: req.params.id });
   } catch (err) {
+    logger.error('updateUser - error', err);
     next(err);
   }
 }
@@ -60,6 +67,7 @@ export async function softDeleteUser(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('softDeleteUser - start', { id: req.params.id });
   try {
     const { id } = req.params;
 
@@ -71,7 +79,9 @@ export async function softDeleteUser(
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
+    logger.info('softDeleteUser - end', { id: req.params.id });
   } catch (err) {
+    logger.error('softDeleteUser - error', err);
     next(err);
   }
 }

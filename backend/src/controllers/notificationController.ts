@@ -4,12 +4,14 @@ import { z } from 'zod';
 import Notification from '../models/Notification';
 import User from '../models/User';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 export async function getMyNotifications(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getMyNotifications - start', { user: req.user?._id, query: req.query });
   try {
     const filter: Record<string, unknown> = { userId: req.user!._id };
 
@@ -19,7 +21,9 @@ export async function getMyNotifications(
 
     const notifications = await Notification.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, notifications });
+    logger.info('getMyNotifications - end', { count: notifications.length });
   } catch (err) {
+    logger.error('getMyNotifications - error', err);
     next(err);
   }
 }
@@ -29,6 +33,7 @@ export async function markNotificationRead(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('markNotificationRead - start', { id: req.params.id });
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) return next(new AppError('Notification not found', 404));
@@ -41,7 +46,9 @@ export async function markNotificationRead(
     await notification.save();
 
     res.json({ success: true, notification });
+    logger.info('markNotificationRead - end', { id: req.params.id });
   } catch (err) {
+    logger.error('markNotificationRead - error', err);
     next(err);
   }
 }
@@ -51,10 +58,13 @@ export async function markAllNotificationsRead(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('markAllNotificationsRead - start', { user: req.user?._id });
   try {
     await Notification.updateMany({ userId: req.user!._id, isRead: false }, { $set: { isRead: true } });
     res.json({ success: true, message: 'All notifications marked as read' });
+    logger.info('markAllNotificationsRead - end', { user: req.user?._id });
   } catch (err) {
+    logger.error('markAllNotificationsRead - error', err);
     next(err);
   }
 }
@@ -64,6 +74,7 @@ export async function deleteNotification(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('deleteNotification - start', { id: req.params.id });
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) return next(new AppError('Notification not found', 404));
@@ -74,7 +85,9 @@ export async function deleteNotification(
 
     await Notification.findByIdAndDelete(notification._id);
     res.json({ success: true, message: 'Notification deleted' });
+    logger.info('deleteNotification - end', { id: req.params.id });
   } catch (err) {
+    logger.error('deleteNotification - error', err);
     next(err);
   }
 }
@@ -91,6 +104,7 @@ export async function broadcastMessage(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('broadcastMessage - start', { body: req.body });
   try {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -123,7 +137,9 @@ export async function broadcastMessage(
     );
 
     res.json({ success: true, broadcastId: broadcastId.toString(), recipientCount: targets.length });
+    logger.info('broadcastMessage - end', { broadcastId: broadcastId.toString(), count: targets.length });
   } catch (err) {
+    logger.error('broadcastMessage - error', err);
     next(err);
   }
 }
@@ -134,6 +150,7 @@ export async function getBroadcastStatus(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getBroadcastStatus - start', { broadcastId: req.params.broadcastId });
   try {
     const { broadcastId } = req.params;
     const notifications = await Notification.find({
@@ -149,7 +166,9 @@ export async function getBroadcastStatus(
     });
 
     res.json({ success: true, recipients });
+    logger.info('getBroadcastStatus - end', { broadcastId, recipientCount: recipients.length });
   } catch (err) {
+    logger.error('getBroadcastStatus - error', err);
     next(err);
   }
 }

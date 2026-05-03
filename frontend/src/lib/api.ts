@@ -1,5 +1,6 @@
 import type { AuthResponse, User } from '../types/auth';
 import type { Constraint, ConstraintEntry, ShiftDefinition } from '../types/constraint';
+import type { AdminDashboardDTO } from '../pages/admin/types';
 
 // ─── Shared response types ────────────────────────────────────────────────────
 
@@ -17,8 +18,27 @@ export interface Shift {
   scheduleId: string;
   definitionId: string;
   date: string;
+  startTime: string;
+  endTime: string;
+  startsAt: string;
+  endsAt: string;
   requiredCount: number;
   status: 'filled' | 'partial' | 'empty';
+  templateStatus?: 'matching_template' | 'manually_modified';
+  notes?: string;
+}
+
+export interface SaveShiftPayload {
+  scheduleId?: string;
+  definitionId?: string;
+  shiftDefinitionId?: string;
+  date?: string;
+  requiredCount?: number;
+  requiredStaffCount?: number;
+  startTime?: string;
+  endTime?: string;
+  status?: Shift['status'];
+  notes?: string;
 }
 
 export interface Assignment {
@@ -53,11 +73,37 @@ export interface GenerateResult {
   violations: Array<{ message: string }>;
 }
 
+export class ApiError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 // ─── Base request helper ──────────────────────────────────────────────────────
 
 const BASE = '/api/v1';
 
+const logApi = import.meta.env.DEV
+  ? {
+      request: (method: string, url: string, body?: BodyInit | null) => {
+        const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+        console.log(`🚀 Sending ${method} to ${url}`, parsed != null ? { data: parsed } : '');
+      },
+      response: (url: string, status: number, data: unknown) =>
+        console.log(`✅ Received from ${url} with status ${status}`, { data }),
+      error: (url: string, code: string | undefined, message: string) =>
+        console.error(`❌ API Error at ${url}: ${code ?? 'UNKNOWN'} - ${message}`),
+    }
+  : null;
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `${BASE}${path}`;
+  const method = options.method ?? 'GET';
+
+  logApi?.request(method, url, options.body);
+
   const token = localStorage.getItem('token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -65,9 +111,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(url, { ...options, headers });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? 'Request failed');
+
+  if (!res.ok) {
+    const err = new ApiError(data.message ?? 'Request failed', data.code);
+    logApi?.error(url, data.code, err.message);
+    throw err;
+  }
+
+  logApi?.response(url, res.status, data);
   return data as T;
 }
 
@@ -120,6 +173,29 @@ export const userApi = {
 export const shiftDefinitionApi = {
   getActive(): Promise<{ success: boolean; definitions: ShiftDefinition[] }> {
     return request('/shift-definitions');
+  },
+
+  create(body: Partial<ShiftDefinition>): Promise<{ success: boolean; definition: ShiftDefinition }> {
+    return request('/shift-definitions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  update(
+    id: string,
+    body: Partial<ShiftDefinition>
+  ): Promise<{ success: boolean; definition: ShiftDefinition }> {
+    return request(`/shift-definitions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  delete(id: string): Promise<{ success: boolean; definition: ShiftDefinition }> {
+    return request(`/shift-definitions/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 
@@ -230,7 +306,33 @@ export const shiftApi = {
   getBySchedule(scheduleId: string): Promise<{ success: boolean; shifts: Shift[] }> {
     return request(`/shifts?scheduleId=${scheduleId}`);
   },
+
+  create(body: SaveShiftPayload): Promise<{ success: boolean; shift: Shift }> {
+    const payload = normalizeShiftPayload(body);
+    return request('/shifts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  update(id: string, body: SaveShiftPayload): Promise<{ success: boolean; shift: Shift }> {
+    const payload = normalizeShiftPayload(body);
+    return request(`/shifts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
+
+function normalizeShiftPayload(body: SaveShiftPayload): SaveShiftPayload {
+  const { shiftDefinitionId, ...payload } = body;
+  return {
+    ...payload,
+    ...(payload.definitionId || shiftDefinitionId
+      ? { definitionId: payload.definitionId ?? shiftDefinitionId }
+      : {}),
+  };
+}
 
 // ─── Assignments ──────────────────────────────────────────────────────────────
 
@@ -272,9 +374,10 @@ export interface AdminDashboardData {
 }
 
 export const adminApi = {
-  getDashboard(weekId?: string): Promise<{ success: boolean; data: AdminDashboardData }> {
-    const qs = weekId ? `?weekId=${encodeURIComponent(weekId)}` : '';
-    return request(`/admin/dashboard${qs}`);
+  getDashboard(weekId: string): Promise<AdminDashboardDTO> {
+    return request<{ success: boolean; data: AdminDashboardDTO }>(
+      `/admin/dashboard/${encodeURIComponent(weekId)}`
+    ).then((res) => res.data);
   },
 
   initialize(weekId: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
@@ -283,7 +386,25 @@ export const adminApi = {
       body: JSON.stringify({ weekId, generatedBy: 'manual' }),
     });
   },
+
+  initializeFromTemplates(startOfWeek: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
+    return request('/admin/weeks/initialize', {
+      method: 'POST',
+      body: JSON.stringify({ weekId: weekIdFromStartOfWeek(startOfWeek), generatedBy: 'manual' }),
+    });
+  },
 };
+
+function weekIdFromStartOfWeek(startOfWeek: string): string {
+  const [year, month, day] = startOfWeek.split('-').map(Number);
+  const monday = new Date(Date.UTC(year, month - 1, day + 1));
+  const thursday = new Date(monday);
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((thursday.getTime() - jan1.getTime()) / 86_400_000) + 1) / 7);
+
+  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 

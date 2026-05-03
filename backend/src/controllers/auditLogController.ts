@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 export async function getAuditLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getAuditLogs - start', { query: req.query });
   try {
     const filter: Record<string, unknown> = {};
 
@@ -27,7 +29,9 @@ export async function getAuditLogs(req: Request, res: Response, next: NextFuncti
     ]);
 
     res.json({ success: true, logs, total, page, limit });
+    logger.info('getAuditLogs - end', { count: logs.length, total });
   } catch (err) {
+    logger.error('getAuditLogs - error', err);
     next(err);
   }
 }
@@ -37,11 +41,14 @@ export async function getAuditLogById(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getAuditLogById - start', { id: req.params.id });
   try {
     const log = await AuditLog.findById(req.params.id);
     if (!log) return next(new AppError('Audit log not found', 404));
     res.json({ success: true, log });
+    logger.info('getAuditLogById - end', { id: req.params.id });
   } catch (err) {
+    logger.error('getAuditLogById - error', err);
     next(err);
   }
 }

@@ -1,10 +1,98 @@
 import mongoose from 'mongoose';
-import WeeklySchedule from '../models/WeeklySchedule';
+import { startOfWeek, addDays, set } from 'date-fns';
+import WeeklySchedule, { IWeeklySchedule } from '../models/WeeklySchedule';
 import ShiftDefinition from '../models/ShiftDefinition';
 import Shift from '../models/Shift';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
 import { getWeekDates } from '../utils/weekUtils';
+
+function normalizeWeekStart(startOfWeekDate: Date): Date {
+  return startOfWeek(startOfWeekDate, { weekStartsOn: 0 });
+}
+
+function buildDateTime(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(':').map(Number);
+  return set(date, { hours, minutes, seconds: 0, milliseconds: 0 });
+}
+
+function getShiftDateForDay(startOfWeek: Date, dayOfWeek: number): Date {
+  return addDays(startOfWeek, dayOfWeek);
+}
+
+function getShiftDateTimes(
+  date: Date,
+  startTime: string,
+  endTime: string,
+  crossesMidnight: boolean
+): { startsAt: Date; endsAt: Date } {
+  const startsAt = buildDateTime(date, startTime);
+  let endsAt = buildDateTime(date, endTime);
+
+  if (crossesMidnight || endsAt <= startsAt) {
+    endsAt = addDays(endsAt, 1);
+  }
+
+  return { startsAt, endsAt };
+}
+
+export async function generateWeekFromBlueprints(
+  organizationId: mongoose.Types.ObjectId | string,
+  startOfWeekDate: Date,
+  session?: mongoose.ClientSession
+): Promise<{ created: number }> {
+  void organizationId;
+
+  const startOfWeek = normalizeWeekStart(startOfWeekDate);
+  const endOfWeek = addDays(startOfWeek, 7);
+
+  const schedule = await WeeklySchedule.findOne({ startDate: startOfWeek }).session(session || null).lean();
+  if (!schedule) throw new AppError('Schedule not found for blueprint generation week', 404);
+
+  const existingCount = await Shift.countDocuments({
+    date: { $gte: startOfWeek, $lt: endOfWeek },
+  }).session(session || null);
+  if (existingCount > 0) throw new AppError('Shifts already exist for this date range', 409);
+
+  const definitions = await ShiftDefinition.find({ isActive: true })
+    .session(session || null)
+    .sort({ orderNumber: 1 })
+    .lean();
+  if (definitions.length === 0) {
+    throw new AppError('No active shift definitions found', 422, 'ERR_NO_SHIFT_TEMPLATES');
+  }
+
+  const scheduleId = schedule._id as mongoose.Types.ObjectId;
+  const shiftDocs = definitions.flatMap((def) =>
+    def.daysOfWeek.map((dayOfWeek) => {
+      const date = getShiftDateForDay(startOfWeek, dayOfWeek);
+      const { startsAt, endsAt } = getShiftDateTimes(
+        date,
+        def.startTime,
+        def.endTime,
+        def.crossesMidnight
+      );
+
+      return {
+        scheduleId,
+        definitionId: def._id,
+        date,
+        startTime: def.startTime,
+        endTime: def.endTime,
+        startsAt,
+        endsAt,
+        requiredCount: def.requiredStaffCount,
+        status: 'empty' as const,
+      };
+    })
+  );
+
+  if (shiftDocs.length > 0) {
+    await Shift.insertMany(shiftDocs, { session });
+  }
+
+  return { created: shiftDocs.length };
+}
 
 export async function generateWeekShifts(
   weekId: string,
@@ -19,34 +107,12 @@ export async function generateWeekShifts(
     throw new AppError(`Cannot generate shifts for a ${schedule.status} schedule`, 422);
   }
 
-  const definitions = await ShiftDefinition.find({ isActive: true })
-    .session(session || null)
-    .sort({ orderNumber: 1 })
-    .lean();
-  if (definitions.length === 0) throw new AppError('No active shift definitions found', 422);
-
   const scheduleId = schedule._id as mongoose.Types.ObjectId;
   const existingCount = await Shift.countDocuments({ scheduleId }).session(session || null);
   if (existingCount > 0) throw new AppError('Shifts already exist for this schedule', 409);
 
-  // getWeekDates returns local-midnight Dates: [Sun, Mon, Tue, Wed, Thu, Fri, Sat]
   const dates = getWeekDates(weekId);
-  const shiftDocs = [];
-  for (const date of dates) {
-    const day = date.getDay(); // local day — do NOT use getUTCDay()
-    const isWeekend = day === 0 || day === 6;
-    for (const def of definitions) {
-      shiftDocs.push({
-        scheduleId,
-        definitionId: def._id,
-        date,
-        requiredCount: def.coverageRequirements[isWeekend ? 'weekend' : 'weekday'],
-        status: 'empty' as const,
-      });
-    }
-  }
-
-  await Shift.insertMany(shiftDocs, { session });
+  const { created } = await generateWeekFromBlueprints('default', dates[0], session);
 
   await AuditLog.create(
     [
@@ -55,14 +121,14 @@ export async function generateWeekShifts(
         action: 'shifts_generated',
         refModel: 'WeeklySchedule',
         refId: scheduleId,
-        after: { weekId, shiftCount: shiftDocs.length },
+        after: { weekId, shiftCount: created },
         ip,
       },
     ],
     { session }
   );
 
-  return { created: shiftDocs.length };
+  return { created };
 }
 
 /**
@@ -74,7 +140,7 @@ export async function initializeWeeklySchedule(
   generatedBy: 'auto' | 'manual',
   actorId: mongoose.Types.ObjectId,
   ip: string
-): Promise<{ schedule: any; shiftCount: number }> {
+): Promise<{ schedule: IWeeklySchedule; shiftCount: number }> {
   const session = await mongoose.startSession();
   session.startTransaction();
 

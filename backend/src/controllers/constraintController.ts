@@ -16,6 +16,7 @@ import {
 
 import { broadcastToEmployees } from '../services/notificationService';
 import WeeklySchedule from '../models/WeeklySchedule';
+import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
 
@@ -49,6 +50,7 @@ export async function getMyConstraints(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getMyConstraints - start', { weekId: req.params.weekId, userId: req.user?._id });
   try {
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -74,7 +76,9 @@ export async function getMyConstraints(
       isLocked,
       weekStatus,
     });
+    logger.info('getMyConstraints - end', { weekId, found: !!constraint });
   } catch (err) {
+    logger.error('getMyConstraints - error', err);
     next(err);
   }
 }
@@ -85,6 +89,7 @@ export async function upsertMyConstraints(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('upsertMyConstraints - start', { weekId: req.params.weekId, userId: req.user?._id });
   try {
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -149,7 +154,9 @@ export async function upsertMyConstraints(
     );
 
     res.json({ success: true, constraint });
+    logger.info('upsertMyConstraints - end', { weekId });
   } catch (err) {
+    logger.error('upsertMyConstraints - error', err);
     next(err);
   }
 }
@@ -160,6 +167,7 @@ export async function getAllConstraintsForWeek(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getAllConstraintsForWeek - start', { weekId: req.params.weekId });
   try {
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -183,7 +191,9 @@ export async function getAllConstraintsForWeek(
       isExplicitlyLocked,
       weekStatus,
     });
+    logger.info('getAllConstraintsForWeek - end', { weekId, count: constraints.length });
   } catch (err) {
+    logger.error('getAllConstraintsForWeek - error', err);
     next(err);
   }
 }
@@ -194,6 +204,7 @@ export async function toggleWeekLock(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('toggleWeekLock - start', { weekId: req.params.weekId, body: req.body });
   try {
     const { weekId } = req.params;
     const { isLocked } = req.body;
@@ -232,7 +243,9 @@ export async function toggleWeekLock(
     await broadcastToEmployees(title, body, 'announcement', setting._id, 'SystemSettings');
 
     res.json({ success: true, isLocked });
+    logger.info('toggleWeekLock - end', { weekId, isLocked });
   } catch (err) {
+    logger.error('toggleWeekLock - error', err);
     next(err);
   }
 }
@@ -243,6 +256,7 @@ export async function getConstraintsForUser(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getConstraintsForUser - start', { weekId: req.params.weekId, userId: req.params.userId });
   try {
     const { weekId, userId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -257,7 +271,9 @@ export async function getConstraintsForUser(
       deadline: deadline.toISOString(),
       isLocked,
     });
+    logger.info('getConstraintsForUser - end', { weekId, userId, found: !!constraint });
   } catch (err) {
+    logger.error('getConstraintsForUser - error', err);
     next(err);
   }
 }
@@ -268,6 +284,7 @@ export async function managerOverrideConstraints(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('managerOverrideConstraints - start', { weekId: req.params.weekId, userId: req.params.userId });
   try {
     const { weekId, userId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -314,7 +331,9 @@ export async function managerOverrideConstraints(
     });
 
     res.json({ success: true, constraint });
+    logger.info('managerOverrideConstraints - end', { weekId, userId });
   } catch (err) {
+    logger.error('managerOverrideConstraints - error', err);
     next(err);
   }
 }

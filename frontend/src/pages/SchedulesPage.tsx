@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { scheduleApi, shiftApi, constraintApi, adminApi } from '../lib/api';
+import { scheduleApi, shiftApi, constraintApi, adminApi, ApiError } from '../lib/api';
 import type { Schedule } from '../lib/api';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -162,6 +162,7 @@ interface ScheduleCardProps {
   onDelete: (s: Schedule) => void;
   onClone: (s: Schedule) => void;
   onView: (s: Schedule) => void;
+  onEdit: (s: Schedule) => void;
   onExport: () => void;
 }
 
@@ -172,6 +173,7 @@ function ScheduleCard({
   onDelete,
   onClone,
   onView,
+  onEdit,
   onExport,
 }: ScheduleCardProps) {
   const { status } = schedule;
@@ -213,13 +215,11 @@ function ScheduleCard({
         </div>
 
         <div className="flex gap-1">
-          {status === 'published' && (
-            <>
-              <ActionBtn icon="visibility" title="צפייה ועריכה" onClick={() => onView(schedule)} />
-              <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
-              <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
-            </>
-          )}
+          <ActionBtn icon="visibility" title="צפייה" onClick={() => onView(schedule)} />
+          <ActionBtn icon="edit" title="עריכה" onClick={() => onEdit(schedule)} />
+          <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
+          <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
+
           {status === 'draft' && (
             <>
               <ActionBtn
@@ -228,20 +228,12 @@ function ScheduleCard({
                 variant="primary"
                 onClick={() => onPublish(schedule)}
               />
-              <ActionBtn icon="edit" title="עריכה" onClick={() => onView(schedule)} />
               <ActionBtn
                 icon="delete"
                 title="מחיקה"
                 variant="danger"
                 onClick={() => onDelete(schedule)}
               />
-            </>
-          )}
-          {status === 'archived' && (
-            <>
-              <ActionBtn icon="visibility" title="צפייה" onClick={() => onView(schedule)} />
-              <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
-              <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
             </>
           )}
         </div>
@@ -295,18 +287,16 @@ function DeleteDialog({
 function CreateModal({
   existingWeekIds,
   onClose,
-  onCreated,
-  onNavigate,
   showToast,
   preselectedWeekId,
 }: {
   existingWeekIds: Set<string>;
   onClose: () => void;
-  onCreated: (s: Schedule) => void;
   onNavigate: () => void;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
   preselectedWeekId?: string;
 }) {
+  const navigate = useNavigate();
   const suggestions = getNextFourWeekIds().filter((w) => !existingWeekIds.has(w));
   const [selectedWeekId, setSelectedWeekId] = useState(
     preselectedWeekId ?? suggestions[0] ?? getCurrentWeekId()
@@ -318,7 +308,7 @@ function CreateModal({
   const effectiveWeekId = useCustom ? customWeekId.trim() : selectedWeekId;
 
   async function handleCreate(autoGenerate: boolean) {
-    if (!effectiveWeekId) return;
+    if (!effectiveWeekId || loading) return;
     setLoading(true);
     try {
       if (autoGenerate) {
@@ -331,8 +321,13 @@ function CreateModal({
         // Navigate to the newly created schedule board
         navigate(`/schedules/${effectiveWeekId}`);
       }
-    } catch (err: any) {
-      if (err instanceof Error && err.message.includes('409') || (err.message && err.message.includes('already exists'))) {
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.code === 'ERR_NO_SHIFT_TEMPLATES') {
+        showToast("It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.", 'error');
+        navigate('/admin/shift-definitions');
+        return;
+      }
+      if (err instanceof Error && (err.message.includes('409') || err.message.includes('already exists'))) {
         showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
       } else {
         showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
@@ -413,7 +408,7 @@ function CreateModal({
 
         <div className="flex flex-col gap-sm pt-sm border-t border-outline-variant/30">
           <button
-            onClick={() => handleCreate(true)}
+            onClick={() => handleCreate(false)}
             disabled={loading || !effectiveWeekId}
             className="w-full py-sm px-md rounded-lg bg-[#101B79] text-white font-bold text-sm hover:bg-[#0c1461] transition-colors disabled:opacity-50 flex items-center justify-center gap-xs"
           >
@@ -422,16 +417,18 @@ function CreateModal({
                 <MaterialIcon name="progress_activity" />
               </span>
             ) : (
-              <MaterialIcon name="auto_awesome" />
+              <MaterialIcon name="add" />
             )}
-            יצירה אוטומטית (CSP)
+            יצירת סידור עבודה (לפי תבנית)
           </button>
+
           <button
-            onClick={() => handleCreate(false)}
+            onClick={() => handleCreate(true)}
             disabled={loading || !effectiveWeekId}
-            className="w-full py-sm px-md rounded-lg border border-outline-variant text-on-surface font-semibold text-sm hover:bg-surface-container-low transition-colors disabled:opacity-50"
+            className="w-full py-sm px-md rounded-lg border border-outline-variant text-[#056AE5] font-semibold text-sm hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-xs"
           >
-            צור טיוטה בלבד
+            <MaterialIcon name="auto_awesome" />
+            יצירה אוטומטית מלאה (CSP)
           </button>
         </div>
       </div>
@@ -483,38 +480,40 @@ export default function SchedulesPage() {
 
   // ── Load schedules (runs once on mount; actions use optimistic updates) ──
 
+  const refreshScheduleStats = useCallback((s: Schedule) => {
+    Promise.all([
+      shiftApi.getBySchedule(s._id),
+      constraintApi.getAllConstraints(s.weekId),
+    ])
+      .then(([shiftsRes, constraintsRes]) => {
+        const staffed = shiftsRes.shifts.filter((sh) => sh.status === 'filled').length;
+        setStatsMap((prev) =>
+          new Map(prev).set(s._id, {
+            staffed,
+            total: shiftsRes.shifts.length,
+            constraints: constraintsRes.constraints.length,
+          })
+        );
+      })
+      .catch(() => {
+        setStatsMap((prev) =>
+          new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 })
+        );
+      });
+  }, []);
+
   useEffect(() => {
     scheduleApi
       .getAll()
       .then(({ schedules: all }) => {
         setSchedules(all);
-        all.forEach((s) => {
-          Promise.all([
-            shiftApi.getBySchedule(s._id),
-            constraintApi.getAllConstraints(s.weekId),
-          ])
-            .then(([shiftsRes, constraintsRes]) => {
-              const staffed = shiftsRes.shifts.filter((sh) => sh.status === 'filled').length;
-              setStatsMap((prev) =>
-                new Map(prev).set(s._id, {
-                  staffed,
-                  total: shiftsRes.shifts.length,
-                  constraints: constraintsRes.constraints.length,
-                })
-              );
-            })
-            .catch(() => {
-              setStatsMap((prev) =>
-                new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 })
-              );
-            });
-        });
+        all.forEach(refreshScheduleStats);
       })
       .catch((err: unknown) => {
         showToast(err instanceof Error ? err.message : 'שגיאה בטעינת הסידורים', 'error');
       })
       .finally(() => setLoading(false));
-  }, [showToast]);
+  }, [refreshScheduleStats, showToast]);
 
   // ── Filter ──
 
@@ -687,6 +686,7 @@ export default function SchedulesPage() {
               onDelete={(sched) => setConfirmDelete(sched)}
               onClone={handleClone}
               onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
+              onEdit={(sched) => navigate(`/schedules/${sched.weekId}/edit`)}
               onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
             />
           ))}
@@ -718,7 +718,6 @@ export default function SchedulesPage() {
         <CreateModal
           existingWeekIds={existingWeekIds}
           onClose={() => setShowCreate(false)}
-          onCreated={(s) => setSchedules((prev) => [s, ...prev])}
           onNavigate={() => navigate('/admin')}
           showToast={showToast}
           preselectedWeekId={clonePreselect}

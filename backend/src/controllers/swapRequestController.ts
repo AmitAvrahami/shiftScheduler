@@ -5,6 +5,7 @@ import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const createSchema = z.object({
   targetUserId: z.string().min(1),
@@ -23,6 +24,7 @@ export async function getSwapRequests(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getSwapRequests - start');
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
 
@@ -32,7 +34,9 @@ export async function getSwapRequests(
 
     const swapRequests = await SwapRequest.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, swapRequests });
+    logger.info('getSwapRequests - end', { count: swapRequests.length });
   } catch (err) {
+    logger.error('getSwapRequests - error', err);
     next(err);
   }
 }
@@ -42,6 +46,7 @@ export async function createSwapRequest(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('createSwapRequest - start', { requesterId: req.user!._id, targetUserId: req.body.targetUserId });
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -77,7 +82,9 @@ export async function createSwapRequest(
     });
 
     res.status(201).json({ success: true, swapRequest });
+    logger.info('createSwapRequest - end', { id: swapRequest._id });
   } catch (err) {
+    logger.error('createSwapRequest - error', err);
     next(err);
   }
 }
@@ -87,6 +94,7 @@ export async function getSwapRequestById(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getSwapRequestById - start', { id: req.params.id });
   try {
     const swapRequest = await SwapRequest.findById(req.params.id);
     if (!swapRequest) return next(new AppError('Swap request not found', 404));
@@ -101,7 +109,9 @@ export async function getSwapRequestById(
     }
 
     res.json({ success: true, swapRequest });
+    logger.info('getSwapRequestById - end', { id: req.params.id });
   } catch (err) {
+    logger.error('getSwapRequestById - error', err);
     next(err);
   }
 }
@@ -111,6 +121,7 @@ export async function updateSwapRequest(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('updateSwapRequest - start', { id: req.params.id });
   try {
     const swapRequest = await SwapRequest.findById(req.params.id);
     if (!swapRequest) return next(new AppError('Swap request not found', 404));
@@ -177,7 +188,9 @@ export async function updateSwapRequest(
     }
 
     res.json({ success: true, swapRequest });
+    logger.info('updateSwapRequest - end', { id: req.params.id, status: swapRequest.status });
   } catch (err) {
+    logger.error('updateSwapRequest - error', err);
     next(err);
   }
 }
@@ -187,6 +200,7 @@ export async function deleteSwapRequest(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('deleteSwapRequest - start', { id: req.params.id });
   try {
     const swapRequest = await SwapRequest.findById(req.params.id);
     if (!swapRequest) return next(new AppError('Swap request not found', 404));
@@ -203,7 +217,9 @@ export async function deleteSwapRequest(
     });
 
     res.json({ success: true, message: 'Swap request deleted' });
+    logger.info('deleteSwapRequest - end', { id: req.params.id });
   } catch (err) {
+    logger.error('deleteSwapRequest - error', err);
     next(err);
   }
 }

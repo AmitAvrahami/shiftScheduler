@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { constraintApi, shiftDefinitionApi, userApi } from '../lib/api';
+import { constraintApi, shiftDefinitionApi } from '../lib/api';
 import type { Constraint, ShiftDefinition, ConstraintEntry } from '../types/constraint';
-import type { User } from '../types/auth';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import {
@@ -116,10 +115,8 @@ export default function AdminConstraintsPage() {
   const [currentViewWeek, setCurrentViewWeek] = useState(getCurrentWeekId());
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
   const [allConstraints, setAllConstraints] = useState<Constraint[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [isLocked, setIsLocked] = useState(false);
   const [isExplicitlyLocked, setIsExplicitlyLocked] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -137,24 +134,19 @@ export default function AdminConstraintsPage() {
   }, [currentViewWeek]);
 
   async function loadData() {
-    setLoading(true);
     setError('');
     try {
-      const [defsRes, constraintsRes, usersRes] = await Promise.all([
+      const [defsRes, constraintsRes] = await Promise.all([
         shiftDefinitionApi.getActive(),
         constraintApi.getAllConstraints(currentViewWeek),
-        userApi.getUsers()
       ]);
 
       setDefinitions(defsRes.definitions);
       setAllConstraints(constraintsRes.constraints);
       setIsLocked(constraintsRes.isLocked);
       setIsExplicitlyLocked(constraintsRes.isExplicitlyLocked);
-      setUsers(usersRes.users.filter(u => u.role === 'employee'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
-    } finally {
-      setLoading(false);
     }
   }
 

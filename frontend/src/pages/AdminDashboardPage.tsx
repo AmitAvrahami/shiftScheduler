@@ -1,21 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import {
-  adminApi,
-  scheduleApi,
-  notificationApi,
-} from '../lib/api';
-import type {
-  Shift,
-  Assignment,
-  AuditLogEntry,
-  BroadcastRecipient,
-  GenerateResult,
-} from '../lib/api';
-import type { User } from '../types/auth';
-import type { ShiftDefinition } from '../types/constraint';
+import { notificationApi, scheduleApi } from '../lib/api';
+import type { BroadcastRecipient, GenerateResult } from '../lib/api';
+import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
+import type { AdminDashboardDTO, ShiftType, WeekWorkflowState } from './admin/types';
+import { normalizeShiftDay, type WeekDayKey } from './admin/utils/scheduleBoardUtils';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
 
@@ -31,10 +22,6 @@ function getCurrentWeekId(): string {
 }
 
 
-function toDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function parseWeekNumber(weekId: string): number {
   return parseInt(weekId.split('-W')[1], 10);
 }
@@ -42,7 +29,7 @@ function parseWeekNumber(weekId: string): number {
 // ─── Shift definitions ────────────────────────────────────────────────────────
 
 interface ShiftDef {
-  id: string;
+  id: Exclude<ShiftType, 'unknown'>;
   label: string;
   start: string;
   end: string;
@@ -51,11 +38,17 @@ interface ShiftDef {
   icon: string;
 }
 
+// UI display config only — labels, colors, icons, display times.
+// Shift counts, assignments, and required employees come from dashboard.shifts.
+// TODO: future dynamic shift definitions should come from the ShiftDefinition API;
+//       remove this static list when the backend exposes shift metadata per week.
 const SHIFTS: ShiftDef[] = [
   { id: 'morning',   label: 'בוקר',  start: '06:45', end: '14:45', color: '#f59e0b', dimBg: 'rgba(245,158,11,0.15)',  icon: 'wb_sunny'    },
   { id: 'afternoon', label: 'אחה"צ', start: '14:45', end: '22:45', color: '#8b5cf6', dimBg: 'rgba(139,92,246,0.15)', icon: 'light_mode' },
   { id: 'night',     label: 'לילה',  start: '22:45', end: '06:45', color: '#06b6d4', dimBg: 'rgba(6,182,212,0.15)',  icon: 'dark_mode'   },
 ];
+
+const WEEK_DAY_KEYS: WeekDayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 function getCurrentShiftIndex(now: Date): number {
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -117,13 +110,21 @@ interface StaffEntry {
   isFixed: boolean;
 }
 
+type DashboardShift = AdminDashboardDTO['shifts'][number];
+type DashboardAssignment = AdminDashboardDTO['assignments'][number];
+type DashboardEmployee = AdminDashboardDTO['employees'][number];
+type DashboardAuditLog = AdminDashboardDTO['auditLogs'][number];
+type MissingConstraintUser = AdminDashboardDTO['missingConstraints'][number];
+
 function ShiftCard({
   shift,
+  instance,
   staff,
   requiredCount,
   type,
 }: {
   shift: ShiftDef;
+  instance?: DashboardShift;
   staff: StaffEntry[];
   requiredCount: number;
   type: 'prev' | 'current' | 'next';
@@ -133,6 +134,7 @@ function ShiftCard({
   const isNext    = type === 'next';
 
   const emptySlotsCount = Math.max(0, requiredCount - staff.length);
+  const timeLabel = `${shift.start} - ${shift.end}`;
 
   if (isCurrent) {
     return (
@@ -142,19 +144,24 @@ function ShiftCard({
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
         <div className="flex justify-between items-center text-[10px] font-bold opacity-90 relative z-10">
-          <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+          <span style={{ direction: 'ltr' }}>{timeLabel}</span>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span>פעיל</span>
           </div>
         </div>
+        {instance && (
+          <span className="relative z-10 inline-flex w-fit items-center px-2 py-0.5 rounded-full border text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-200">
+            מוגדרת
+          </span>
+        )}
         <h3 className="text-lg font-bold text-white relative z-10">משמרת נוכחית</h3>
         <p className="text-sm opacity-90 relative z-10">{shift.label}</p>
         <div className="mt-auto pt-sm relative z-10 flex items-center justify-between">
           <span className="text-xs font-medium">{staff.length}/{requiredCount} עובדים</span>
           <div className="flex -space-x-1.5 space-x-reverse">
             {staff.map((s, i) => (
-              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold">
+              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold" style={{ background: avatarBg(i) }}>
                 {avatarInitials(s.name)}
               </div>
             ))}
@@ -174,9 +181,14 @@ function ShiftCard({
       className={`bg-white border border-[#e2e8f0] rounded-xl p-md flex flex-col gap-sm h-full ${isPrev ? 'opacity-70' : 'hover:shadow-md transition-shadow shadow-bezeq-card'}`}
     >
       <div className={`flex justify-between items-center text-[10px] font-bold ${isNext ? 'text-[#056AE5]' : 'text-on-surface-variant'}`}>
-        <span style={{ direction: 'ltr' }}>{shift.start} - {shift.end}</span>
+        <span style={{ direction: 'ltr' }}>{timeLabel}</span>
         <MaterialIcon name={isPrev ? 'history' : 'calendar_today'} className="text-[16px]" />
       </div>
+      {instance && (
+        <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full border text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-200">
+          מוגדרת
+        </span>
+      )}
       <h3 className="text-lg font-bold text-on-surface">{isPrev ? 'משמרת קודמת' : 'משמרת הבאה'}</h3>
       <p className="text-sm text-on-surface-variant">{shift.label}</p>
       <div className="mt-auto pt-sm flex items-center justify-between">
@@ -222,15 +234,13 @@ function ShiftCard({
 // ─── Shift overview ───────────────────────────────────────────────────────────
 
 function ShiftOverview({
-  users,
-  definitions,
+  employees,
   shifts,
   assignments,
 }: {
-  users: User[];
-  definitions: ShiftDefinition[];
-  shifts: Shift[];
-  assignments: Assignment[];
+  employees: DashboardEmployee[];
+  shifts: DashboardShift[];
+  assignments: DashboardAssignment[];
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -239,36 +249,33 @@ function ShiftOverview({
     return () => clearInterval(t);
   }, []);
 
-  const sortedDefs = [...definitions].sort((a, b) => a.orderNumber - b.orderNumber);
-  const employees = users.filter(u => u.isActive);
   const curIdx  = getCurrentShiftIndex(now);
   const prevIdx = (curIdx + 2) % 3;
   const nextIdx = (curIdx + 1) % 3;
 
-  const todayKey = toDateKey(now);
+  const todayDay = WEEK_DAY_KEYS[now.getDay()];
 
   function getShiftData(defIdx: number) {
-    const def = sortedDefs[defIdx];
-    if (!def) return { staff: [], requiredCount: 0 };
+    const shiftDef = SHIFTS[defIdx];
+    if (!shiftDef) return { staff: [], requiredCount: 0, shift: undefined };
 
     const todayShift = shifts.find((s) => {
-      const shiftDateKey = toDateKey(new Date(s.date));
-      return shiftDateKey === todayKey && s.definitionId === def._id;
+      return normalizeShiftDay(s.day) === todayDay && s.type === shiftDef.id;
     });
 
-    if (!todayShift) return { staff: [], requiredCount: 0 };
+    if (!todayShift) return { staff: [], requiredCount: 0, shift: undefined };
 
-    const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift._id);
+    const shiftAssignments = assignments.filter((a) => a.shiftId === todayShift.id);
     const staff = shiftAssignments.map((a) => {
-      const user = employees.find((u) => u._id === a.userId);
+      const user = employees.find((u) => u.id === a.employeeId);
       return {
-        id: a._id,
+        id: a.id,
         name: user?.name ?? 'עובד לא ידוע',
         isFixed: user?.isFixedMorningEmployee ?? false,
       };
     });
 
-    return { staff, requiredCount: todayShift.requiredCount };
+    return { staff, requiredCount: todayShift.requiredEmployees, shift: todayShift };
   }
 
   const prevData = getShiftData(prevIdx);
@@ -279,9 +286,9 @@ function ShiftOverview({
     <section className="flex flex-col gap-md">
       <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">סטטוס משמרות</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-        <ShiftCard shift={SHIFTS[prevIdx]} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
-        <ShiftCard shift={SHIFTS[curIdx]}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
-        <ShiftCard shift={SHIFTS[nextIdx]} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
+        <ShiftCard shift={SHIFTS[prevIdx]} instance={prevData.shift} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
+        <ShiftCard shift={SHIFTS[curIdx]}  instance={curData.shift}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
+        <ShiftCard shift={SHIFTS[nextIdx]} instance={nextData.shift} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
       </div>
     </section>
   );
@@ -290,10 +297,10 @@ function ShiftOverview({
 
 // ─── Missing constraints ──────────────────────────────────────────────────────
 
-function MissingConstraints({ missingUsers }: { missingUsers: User[] | null }) {
+function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintUser[] | null }) {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [reminded, setReminded]   = useState<string[]>([]);
-  const visible = (missingUsers ?? []).filter(u => !dismissed.includes(u._id));
+  const visible = (missingUsers ?? []).filter(u => !dismissed.includes(u.id));
 
   function handleRemind(id: string) {
     setReminded(r => [...r, id]);
@@ -340,7 +347,7 @@ function MissingConstraints({ missingUsers }: { missingUsers: User[] | null }) {
             <div className="divide-y divide-outline-variant">
               {visible.map((u, i) => (
                 <div
-                  key={u._id}
+                  key={u.id}
                   className="flex items-center gap-3 px-md py-md transition-colors hover:bg-surface-container-low"
                 >
                   <div
@@ -354,23 +361,21 @@ function MissingConstraints({ missingUsers }: { missingUsers: User[] | null }) {
                       <span className="text-sm text-on-surface font-semibold truncate">{u.name}</span>
                       <MaterialIcon name="error" className="text-error text-[14px]" />
                     </div>
-                    <span className="text-xs text-on-surface-variant">
-                      {u.role === 'manager' ? 'מנהל' : 'עובד'}
-                    </span>
+                    <span className="text-xs text-on-surface-variant">עובד</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleRemind(u._id)}
+                      onClick={() => handleRemind(u.id)}
                       className={`text-[12px] px-4 py-2 rounded-full transition-all border font-bold ${
-                        reminded.includes(u._id)
+                        reminded.includes(u.id)
                           ? 'bg-green-50 text-green-700 border-green-200'
                           : 'bg-[#056AE5] text-white border-[#056AE5] hover:bg-[#0457B8]'
                       }`}
                     >
-                      {reminded.includes(u._id) ? 'נשלח!' : 'תזכורת'}
+                      {reminded.includes(u.id) ? 'נשלח!' : 'תזכורת'}
                     </button>
                     <button
-                      onClick={() => setDismissed(d => [...d, u._id])}
+                      onClick={() => setDismissed(d => [...d, u.id])}
                       className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-surface-container text-on-surface-variant"
                     >
                       <MaterialIcon name="close" className="text-[16px]" />
@@ -661,19 +666,24 @@ function QuickActions({
   weekId,
   onToast,
   onGenerateResult,
+  onRefresh,
 }: {
   weekId: string;
   onToast: (t: Toast) => void;
   onGenerateResult: (r: GenerateResult) => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   const [generating, setGenerating] = useState(false);
+  const navigate = useNavigate();
 
   async function handleGenerate() {
     if (generating) return;
     setGenerating(true);
     try {
+      // Temporary compatibility layer: keep the legacy result panel until generation UI is moved into useAdminDashboard.
       const result = await scheduleApi.generate(weekId);
       onGenerateResult(result);
+      await onRefresh();
       onToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
     } catch (err) {
       onToast({ message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ', type: 'error' });
@@ -684,9 +694,9 @@ function QuickActions({
 
   const actions = [
     { id: 'generate',  label: 'ייצור סידור עבודה', icon: 'bolt', onClick: handleGenerate, subtitle: 'אוטומציה מלאה',   isPrimary: true  },
-    { id: 'leaves',    label: 'אישור חופשות',       icon: 'check',    onClick: () => onToast({ message: 'אישור חופשות — בקרוב', type: 'info' }), subtitle: 'ניהול היעדרויות', isPrimary: false },
-    { id: 'emergency', label: 'משמרת חירום',        icon: 'warning',    onClick: () => onToast({ message: 'הוספת משמרת חירום — בקרוב', type: 'info' }), subtitle: 'שיבוץ דחוף',       isPrimary: false },
-    { id: 'export',    label: 'ייצוא דוחות',        icon: 'download', onClick: () => onToast({ message: 'ייצוא דוח — בקרוב', type: 'info' }), subtitle: 'PDF / Excel',       isPrimary: false },
+    { id: 'view_week', label: 'צפייה בסידור השבועי', icon: 'calendar_view_week', onClick: () => navigate(`/schedules/${weekId}`), subtitle: 'לוח שיבוץ מלא', isPrimary: false },
+    { id: 'leaves',    label: 'אישור חופשות',       icon: 'check',    onClick: () => onToast({ message: 'אישור חופשות (בקרוב)', type: 'info' }), subtitle: 'ניהול היעדרויות', isPrimary: false },
+    { id: 'emergency', label: 'משמרת חירום',        icon: 'warning',    onClick: () => onToast({ message: 'הוספת משמרת חירום (בקרוב)', type: 'info' }), subtitle: 'שיבוץ דחוף',       isPrimary: false },
   ];
 
   return (
@@ -751,7 +761,7 @@ function QuickActions({
 
 // ─── Audit log widget ─────────────────────────────────────────────────────────
 
-function AuditLogWidget({ logs }: { logs: AuditLogEntry[] | null }) {
+function AuditLogWidget({ logs }: { logs: DashboardAuditLog[] | null }) {
   const loading = logs === null;
 
   return (
@@ -783,15 +793,13 @@ function AuditLogWidget({ logs }: { logs: AuditLogEntry[] | null }) {
           logs.map((entry, i) => {
             const type = actionToType(entry.action);
             const label = ACTION_LABELS[entry.action] ?? entry.action;
-            const performer = typeof entry.performedBy === 'object' && entry.performedBy !== null
-              ? (entry.performedBy as { name: string }).name
-              : 'מנהל';
+            const performer = 'מערכת';
             const timeStr = new Date(entry.createdAt).toLocaleTimeString('he-IL', {
               hour: '2-digit', minute: '2-digit',
             });
             return (
               <div
-                key={entry._id}
+                key={entry.id}
                 className={`flex items-center gap-3 px-md py-3 hover:bg-surface-container-low transition-colors ${i < logs.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
               >
                 <div
@@ -821,7 +829,7 @@ interface ScheduleStats {
   filled: number;
   partial: number;
   empty: number;
-  scheduleStatus: string | null;
+  scheduleStatus: WeekWorkflowState | null;
 }
 
 function SidebarStats({
@@ -834,10 +842,10 @@ function SidebarStats({
   stats: ScheduleStats | null;
 }) {
   const STATS = [
-    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '—', color: '#056AE5' },
-    { label: 'מלאות',        value: stats ? String(stats.filled)  : '—', color: '#10b981' },
-    { label: 'חלקיות',       value: stats ? String(stats.partial) : '—', color: '#f59e0b' },
-    { label: 'ריקות',        value: stats ? String(stats.empty)   : '—', color: '#ef4444' },
+    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '-', color: '#056AE5' },
+    { label: 'מלאות',        value: stats ? String(stats.filled)  : '-', color: '#10b981' },
+    { label: 'חלקיות',       value: stats ? String(stats.partial) : '-', color: '#f59e0b' },
+    { label: 'ריקות',        value: stats ? String(stats.empty)   : '-', color: '#ef4444' },
   ];
 
   const weekNum = parseWeekNumber(weekId);
@@ -897,42 +905,44 @@ function SidebarStats({
   );
 }
 
+function getScheduleStats(dashboard: AdminDashboardDTO): ScheduleStats {
+  const assignmentsByShiftId = new Map<string, number>();
+  dashboard.assignments.forEach((assignment) => {
+    assignmentsByShiftId.set(assignment.shiftId, (assignmentsByShiftId.get(assignment.shiftId) ?? 0) + 1);
+  });
+
+  let partial = 0;
+  let empty = 0;
+
+  dashboard.shifts.forEach((shift) => {
+    const assignedCount = assignmentsByShiftId.get(shift.id) ?? 0;
+    if (assignedCount === 0) {
+      empty += 1;
+    } else if (assignedCount < Math.max(0, shift.requiredEmployees)) {
+      partial += 1;
+    }
+  });
+
+  return {
+    total: dashboard.kpis.totalShifts,
+    filled: dashboard.kpis.filledShifts,
+    partial,
+    empty,
+    scheduleStatus: dashboard.scheduleStatus,
+  };
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
   const { weekId: paramWeekId } = useParams<{ weekId: string }>();
-  const [users, setUsers]                           = useState<User[]>([]);
-  const [missingUsers, setMissingUsers]             = useState<User[] | null>(null);
   const [toast, setToast]                           = useState<Toast | null>(null);
-  const [scheduleStats, setScheduleStats]           = useState<ScheduleStats | null>(null);
   const [generateResult, setGenerateResult]         = useState<GenerateResult | null>(null);
-  const [definitions, setDefinitions]               = useState<ShiftDefinition[]>([]);
-  const [currentShifts, setCurrentShifts]           = useState<Shift[]>([]);
-  const [currentAssignments, setCurrentAssignments] = useState<Assignment[]>([]);
-  const [auditLogs, setAuditLogs]                   = useState<AuditLogEntry[] | null>(null);
 
   const weekId    = paramWeekId || getCurrentWeekId();
-  const employees = users.filter(u => u.isActive);
-
-  // Single BFF call replaces 4 separate effects + N+1 constraint queries
-  useEffect(() => {
-    adminApi.getDashboard(weekId).then(res => {
-      const { data } = res;
-      setUsers(data.users.all as unknown as User[]);
-      setDefinitions(data.shiftDefinitions as unknown as ShiftDefinition[]);
-      setCurrentShifts(data.currentWeek.shifts as unknown as Shift[]);
-      setCurrentAssignments(data.currentWeek.assignments as unknown as Assignment[]);
-      setScheduleStats(data.currentWeek.stats);
-      setAuditLogs(data.recentAuditLogs);
-
-      const missingIds = new Set(data.nextWeek.missingConstraintUserIds);
-      setMissingUsers(
-        (data.users.all as unknown as User[]).filter(
-          u => u.role === 'employee' && u.isActive && missingIds.has(u._id)
-        )
-      );
-    }).catch(console.error);
-  }, [weekId]);
+  const { dashboard, loading, error, refresh } = useAdminDashboard(weekId);
+  const employees = (dashboard?.employees ?? []).filter(u => u.isActive);
+  const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
   return (
     <MainLayout
@@ -941,31 +951,42 @@ export default function AdminDashboardPage() {
     >
       <div className="space-y-6">
         {/* Quick Actions at the top */}
-        <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} />
+        <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} onRefresh={refresh} />
         
         {generateResult && (
           <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
+        )}
+
+        {loading && !dashboard && (
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-6 text-sm text-on-surface-variant shadow-bezeq-card">
+            טוען נתוני דאשבורד...
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">
+            {error}
+          </div>
         )}
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Main content column */}
           <div className="xl:col-span-2 space-y-6">
             <ShiftOverview
-              users={employees}
-              definitions={definitions}
-              shifts={currentShifts}
-              assignments={currentAssignments}
+              employees={employees}
+              shifts={dashboard?.shifts ?? []}
+              assignments={dashboard?.assignments ?? []}
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
-                <MissingConstraints missingUsers={missingUsers} />
+                <MissingConstraints missingUsers={dashboard?.missingConstraints ?? null} />
             </div>
           </div>
           
           {/* Side content column */}
           <div className="xl:col-span-1 space-y-6">
             <SidebarStats weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
-            <AuditLogWidget logs={auditLogs} />
+            <AuditLogWidget logs={dashboard?.auditLogs ?? null} />
           </div>
         </div>
       </div>

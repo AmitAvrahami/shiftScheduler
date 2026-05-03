@@ -3,6 +3,7 @@ import { z } from 'zod';
 import SystemSettings from '../models/SystemSettings';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const upsertSchema = z.object({
   value: z.unknown(),
@@ -10,10 +11,13 @@ const upsertSchema = z.object({
 });
 
 export async function getSettings(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  logger.info('getSettings - start');
   try {
     const settings = await SystemSettings.find({}).sort({ key: 1 });
     res.json({ success: true, settings });
+    logger.info('getSettings - end', { count: settings.length });
   } catch (err) {
+    logger.error('getSettings - error', err);
     next(err);
   }
 }
@@ -23,11 +27,14 @@ export async function getSettingByKey(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('getSettingByKey - start', { key: req.params.key });
   try {
     const setting = await SystemSettings.findOne({ key: req.params.key });
     if (!setting) return next(new AppError('Setting not found', 404));
     res.json({ success: true, setting });
+    logger.info('getSettingByKey - end', { key: req.params.key });
   } catch (err) {
+    logger.error('getSettingByKey - error', err);
     next(err);
   }
 }
@@ -37,6 +44,7 @@ export async function upsertSetting(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('upsertSetting - start', { key: req.params.key });
   try {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -67,7 +75,9 @@ export async function upsertSetting(
     });
 
     res.json({ success: true, setting });
+    logger.info('upsertSetting - end', { key: req.params.key });
   } catch (err) {
+    logger.error('upsertSetting - error', err);
     next(err);
   }
 }
@@ -77,6 +87,7 @@ export async function deleteSetting(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info('deleteSetting - start', { key: req.params.key });
   try {
     const setting = await SystemSettings.findOneAndDelete({ key: req.params.key });
     if (!setting) return next(new AppError('Setting not found', 404));
@@ -91,7 +102,9 @@ export async function deleteSetting(
     });
 
     res.json({ success: true, message: 'Setting deleted' });
+    logger.info('deleteSetting - end', { key: req.params.key });
   } catch (err) {
+    logger.error('deleteSetting - error', err);
     next(err);
   }
 }

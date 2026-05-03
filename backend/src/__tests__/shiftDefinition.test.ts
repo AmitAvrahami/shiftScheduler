@@ -47,11 +47,13 @@ async function seedDefinition(managerId: mongoose.Types.ObjectId) {
     name: 'בוקר',
     startTime: '06:45',
     endTime: '14:45',
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     durationMinutes: 480,
     crossesMidnight: false,
     color: '#FFD700',
     isActive: true,
     orderNumber: 1,
+    requiredStaffCount: 2,
     createdBy: managerId,
   });
 }
@@ -60,10 +62,12 @@ const validPayload = {
   name: 'לילה',
   startTime: '22:00',
   endTime: '06:00',
+  daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
   durationMinutes: 480,
   crossesMidnight: true,
   color: '#000080',
   orderNumber: 2,
+  requiredStaffCount: 1,
 };
 
 describe('GET /api/v1/shift-definitions', () => {
@@ -118,11 +122,39 @@ describe('POST /api/v1/shift-definitions', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 with invalid daysOfWeek', async () => {
+    const { token } = await seedManager();
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...validPayload, daysOfWeek: [1, 7] });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 with invalid requiredStaffCount', async () => {
+    const { token } = await seedManager();
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...validPayload, requiredStaffCount: 0 });
+    expect(res.status).toBe(400);
+  });
+
   it('manager can create a shift definition', async () => {
     const { token } = await seedManager();
     const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send(validPayload);
     expect(res.status).toBe(201);
     expect(res.body.definition.name).toBe(validPayload.name);
+    expect(res.body.definition.daysOfWeek).toEqual(validPayload.daysOfWeek);
+    expect(res.body.definition.requiredStaffCount).toBe(validPayload.requiredStaffCount);
+  });
+
+  it('defaults crossesMidnight to false when frontend form omits it', async () => {
+    const { token } = await seedManager();
+    const { crossesMidnight, ...payload } = validPayload;
+    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.definition.crossesMidnight).toBe(false);
   });
 });
 

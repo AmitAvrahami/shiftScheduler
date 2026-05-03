@@ -9,6 +9,7 @@ import WeeklySchedule from '../models/WeeklySchedule';
 import ShiftDefinition from '../models/ShiftDefinition';
 import Shift from '../models/Shift';
 import AuditLog from '../models/AuditLog';
+import { generateWeekFromBlueprints } from '../services/shiftGenerationService';
 
 // Sun 2026-05-10 through Sat 2026-05-16
 const TEST_WEEK = '2026-W20';
@@ -64,37 +65,40 @@ async function seedDefinitions(createdBy: mongoose.Types.ObjectId) {
       name: 'בוקר',
       startTime: '06:45',
       endTime: '14:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: false,
       color: '#FFD700',
       isActive: true,
       orderNumber: 1,
       createdBy,
-      coverageRequirements: { weekday: 2, weekend: 1 },
+      requiredStaffCount: 2,
     },
     {
       name: 'אחהצ',
       startTime: '14:45',
       endTime: '22:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: false,
       color: '#FFA500',
       isActive: true,
       orderNumber: 2,
       createdBy,
-      coverageRequirements: { weekday: 2, weekend: 1 },
+      requiredStaffCount: 2,
     },
     {
       name: 'לילה',
       startTime: '22:45',
       endTime: '06:45',
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       durationMinutes: 480,
       crossesMidnight: true,
       color: '#000080',
       isActive: true,
       orderNumber: 3,
       createdBy,
-      coverageRequirements: { weekday: 1, weekend: 1 },
+      requiredStaffCount: 1,
     },
   ]);
 }
@@ -132,7 +136,7 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
     expect(await Shift.countDocuments()).toBe(21); // unchanged
   });
 
-  it('assigns requiredCount=2 for weekday morning and =1 for weekend morning', async () => {
+  it('assigns requiredCount from requiredStaffCount', async () => {
     const { admin, token } = await seedAdmin();
     await seedSchedule('open');
     await seedDefinitions(admin._id as mongoose.Types.ObjectId);
@@ -144,21 +148,45 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
     const morningDef = await ShiftDefinition.findOne({ name: 'בוקר' }).lean();
     expect(morningDef).not.toBeNull();
 
-    // Mon-Fri of 2026-W20: May 11-15
-    const weekdayShifts = await Shift.find({
+    const morningShifts = await Shift.find({
       definitionId: morningDef!._id,
-      date: { $gte: new Date(2026, 4, 11), $lte: new Date(2026, 4, 15) },
     }).lean();
-    expect(weekdayShifts.length).toBe(5);
-    weekdayShifts.forEach((s) => expect(s.requiredCount).toBe(2));
+    expect(morningShifts.length).toBe(7);
+    morningShifts.forEach((s) => expect(s.requiredCount).toBe(2));
+  });
 
-    // Sun May 10, Sat May 16
-    const weekendShifts = await Shift.find({
-      definitionId: morningDef!._id,
-      date: { $in: [new Date(2026, 4, 10), new Date(2026, 4, 16)] },
-    }).lean();
-    expect(weekendShifts.length).toBe(2);
-    weekendShifts.forEach((s) => expect(s.requiredCount).toBe(1));
+  it('generates shifts only on configured daysOfWeek', async () => {
+    const { admin, token } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [1, 3],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+
+    const res = await request(app)
+      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.created).toBe(2);
+
+    const shifts = await Shift.find().sort({ date: 1 }).lean();
+    expect(shifts.map((shift) => shift.date.getDay())).toEqual([1, 3]);
+    shifts.forEach((shift) => {
+      expect(shift.startTime).toBe('06:45');
+      expect(shift.endTime).toBe('14:45');
+      expect(shift.startsAt).toBeInstanceOf(Date);
+      expect(shift.endsAt).toBeInstanceOf(Date);
+    });
   });
 
   it('night shift date equals the calendar day it starts — not the next day', async () => {
@@ -179,6 +207,8 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
       date: new Date(2026, 4, 11),
     }).lean();
     expect(mondayNight).not.toBeNull();
+    expect(mondayNight!.startsAt).toEqual(new Date(2026, 4, 11, 22, 45));
+    expect(mondayNight!.endsAt).toEqual(new Date(2026, 4, 12, 6, 45));
 
     // Exactly 7 night shifts total — one per day, not 14
     const nightCount = await Shift.countDocuments({ definitionId: nightDef!._id });
@@ -279,5 +309,103 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('generateWeekFromBlueprints', () => {
+  it('creates shifts from active blueprints and ignores inactive definitions', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [1],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+    await ShiftDefinition.create({
+      name: 'כבוי',
+      startTime: '10:00',
+      endTime: '12:00',
+      daysOfWeek: [2],
+      durationMinutes: 120,
+      crossesMidnight: false,
+      color: '#333333',
+      isActive: false,
+      orderNumber: 2,
+      createdBy: admin._id,
+      requiredStaffCount: 1,
+    });
+
+    const result = await generateWeekFromBlueprints(new mongoose.Types.ObjectId(), new Date(2026, 4, 10, 15));
+
+    expect(result.created).toBe(1);
+    const shift = await Shift.findOne().lean();
+    expect(shift).not.toBeNull();
+    expect(shift!.date).toEqual(new Date(2026, 4, 11));
+    expect(shift!.requiredCount).toBe(2);
+    expect(shift!.startTime).toBe('06:45');
+    expect(shift!.endTime).toBe('14:45');
+    expect(shift!.startsAt).toEqual(new Date(2026, 4, 11, 6, 45));
+    expect(shift!.endsAt).toEqual(new Date(2026, 4, 11, 14, 45));
+  });
+
+  it('calculates overnight endsAt on the following calendar day', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'לילה',
+      startTime: '22:00',
+      endTime: '06:00',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: true,
+      color: '#000080',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 1,
+    });
+
+    await generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10));
+
+    const shift = await Shift.findOne().lean();
+    expect(shift!.startsAt).toEqual(new Date(2026, 4, 10, 22, 0));
+    expect(shift!.endsAt).toEqual(new Date(2026, 4, 11, 6, 0));
+  });
+
+  it('throws 409 when shifts already exist in the generated date range', async () => {
+    const { admin } = await seedAdmin();
+    const schedule = await seedSchedule('open');
+    const def = await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 2,
+    });
+    await Shift.create({
+      scheduleId: schedule._id,
+      definitionId: def._id,
+      date: new Date(2026, 4, 10),
+      requiredCount: 2,
+      status: 'empty',
+    });
+
+    await expect(generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))).rejects.toMatchObject({
+      statusCode: 409,
+    });
   });
 });
