@@ -327,8 +327,7 @@ function CreateModal({
         navigate('/admin/shift-definitions');
         return;
       }
-      if ((err instanceof Error && err.message.includes('409')) || (err.message && err.message.includes('already exists'))) {
-
+      if (err instanceof Error && (err.message.includes('409') || err.message.includes('already exists'))) {
         showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
       } else {
         showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
@@ -502,16 +501,6 @@ export default function SchedulesPage() {
         );
       });
   }, []);
-
-  const upsertSchedule = useCallback((schedule: Schedule) => {
-    setSchedules((prev) => {
-      const exists = prev.some((s) => s._id === schedule._id);
-      return exists
-        ? prev.map((s) => (s._id === schedule._id ? schedule : s))
-        : [schedule, ...prev];
-    });
-    refreshScheduleStats(schedule);
-  }, [refreshScheduleStats]);
 
   useEffect(() => {
     scheduleApi

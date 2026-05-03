@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { adminApi, scheduleApi, shiftApi, assignmentApi } from '../lib/api';
-import type { Schedule, Shift, Assignment, AdminDashboardData } from '../lib/api';
+import { adminApi, scheduleApi } from '../lib/api';
+import type { Shift, Assignment, AdminDashboardData } from '../lib/api';
 import type { User } from '../types/auth';
 import type { ShiftDefinition } from '../types/constraint';
 import MainLayout from '../components/layout/MainLayout';

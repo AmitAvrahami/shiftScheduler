@@ -3,15 +3,13 @@ export interface ShiftDefinition {
   name: string;
   startTime: string;
   endTime: string;
+  daysOfWeek: number[];
   durationMinutes: number;
   crossesMidnight: boolean;
   color: string;
   isActive: boolean;
   orderNumber: number;
-  coverageRequirements: {
-    weekday: number;
-    weekend: number;
-  };
+  requiredStaffCount: number;
 }
 
 export interface ConstraintEntry {

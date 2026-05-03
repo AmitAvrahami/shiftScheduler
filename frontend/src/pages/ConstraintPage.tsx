@@ -48,7 +48,8 @@ export default function ConstraintPage() {
               durationMinutes: 480,
               crossesMidnight: false,
               isActive: true,
-              coverageRequirements: { weekday: 2, weekend: 1 },
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+              requiredStaffCount: 2,
             },
             {
               _id: 'mock-2',
@@ -60,7 +61,8 @@ export default function ConstraintPage() {
               durationMinutes: 480,
               crossesMidnight: false,
               isActive: true,
-              coverageRequirements: { weekday: 2, weekend: 1 },
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+              requiredStaffCount: 2,
             },
             {
               _id: 'mock-3',
@@ -72,7 +74,8 @@ export default function ConstraintPage() {
               durationMinutes: 480,
               crossesMidnight: false,
               isActive: true,
-              coverageRequirements: { weekday: 2, weekend: 1 },
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+              requiredStaffCount: 1,
             },
           ];
         }

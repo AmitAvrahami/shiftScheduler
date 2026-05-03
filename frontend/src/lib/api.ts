@@ -1,5 +1,6 @@
 import type { AuthResponse, User } from '../types/auth';
 import type { Constraint, ConstraintEntry, ShiftDefinition } from '../types/constraint';
+import type { AdminDashboardDTO } from '../pages/admin/types';
 
 // ─── Shared response types ────────────────────────────────────────────────────
 
@@ -373,9 +374,10 @@ export interface AdminDashboardData {
 }
 
 export const adminApi = {
-  getDashboard(weekId?: string): Promise<{ success: boolean; data: AdminDashboardData }> {
-    const qs = weekId ? `?weekId=${encodeURIComponent(weekId)}` : '';
-    return request(`/admin/dashboard${qs}`);
+  getDashboard(weekId: string): Promise<AdminDashboardDTO> {
+    return request<{ success: boolean; data: AdminDashboardDTO }>(
+      `/admin/dashboard/${encodeURIComponent(weekId)}`
+    ).then((res) => res.data);
   },
 
   initialize(weekId: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
