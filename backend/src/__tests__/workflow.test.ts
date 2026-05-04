@@ -554,7 +554,8 @@ describe('assignment_override audit log', () => {
 
 describe('schedule_regenerated audit log and draft re-generation', () => {
   it('5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedShiftDef(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: '2026-W20',
       startDate: new Date('2026-05-10'),

@@ -166,6 +166,7 @@ describe('PATCH /api/v1/shifts/:id', () => {
     const res = await request(app).patch(`/api/v1/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`).send({ requiredCount: 5 });
     expect(res.status).toBe(200);
     expect(res.body.shift.requiredCount).toBe(5);
+    expect(res.body.shift.templateStatus).toBe('manually_modified');
     const log = await AuditLog.findOne({ action: 'shift_updated' });
     expect(log).not.toBeNull();
   });
@@ -221,7 +222,8 @@ describe('PATCH /api/v1/shifts/:id', () => {
 
   it('returns manually_modified when an overridden shift appears in a schedule list', async () => {
     const { draft, def, token } = await seedData();
-    await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount + 1, status: 'empty' });
+    const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: def.requiredStaffCount + 1, status: 'empty' });
+    await Shift.collection.updateOne({ _id: shift._id }, { $unset: { templateStatus: '' } });
 
     const res = await request(app).get(`/api/v1/shifts?scheduleId=${draft._id}`).set('Authorization', `Bearer ${token}`);
 
@@ -229,7 +231,7 @@ describe('PATCH /api/v1/shifts/:id', () => {
     expect(res.body.shifts[0].templateStatus).toBe('manually_modified');
   });
 
-  it('returns to matching_template after overridden values are reset to template values', async () => {
+  it('keeps manually_modified after overridden values are reset to template values', async () => {
     const { draft, def, token } = await seedData();
     const shift = await Shift.create({ scheduleId: draft._id, definitionId: def._id, date: new Date('2026-05-24'), requiredCount: 4, startTime: '08:00', endTime: '16:00', status: 'empty' });
 
@@ -237,6 +239,61 @@ describe('PATCH /api/v1/shifts/:id', () => {
       .patch(`/api/v1/shifts/${shift._id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ requiredCount: def.requiredStaffCount, startTime: def.startTime, endTime: def.endTime });
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.templateStatus).toBe('manually_modified');
+  });
+
+  it('does not mark manually_modified when updating notes or status', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({
+      scheduleId: draft._id,
+      definitionId: def._id,
+      date: new Date('2026-05-24'),
+      requiredCount: def.requiredStaffCount,
+      status: 'empty',
+    });
+
+    const res = await request(app)
+      .patch(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ notes: 'updated note', status: 'partial' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.notes).toBe('updated note');
+    expect(res.body.shift.status).toBe('partial');
+    expect(res.body.shift.templateStatus).toBe('matching_template');
+  });
+
+  it('uses computed fallback for legacy shifts without templateStatus', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({
+      scheduleId: draft._id,
+      definitionId: def._id,
+      date: new Date('2026-05-24'),
+      requiredCount: def.requiredStaffCount + 1,
+      status: 'empty',
+    });
+    await Shift.collection.updateOne({ _id: shift._id }, { $unset: { templateStatus: '' } });
+
+    const res = await request(app).get(`/api/v1/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.shift.templateStatus).toBe('manually_modified');
+  });
+
+  it('uses persisted templateStatus instead of computed fallback', async () => {
+    const { draft, def, token } = await seedData();
+    const shift = await Shift.create({
+      scheduleId: draft._id,
+      definitionId: def._id,
+      date: new Date('2026-05-24'),
+      requiredCount: def.requiredStaffCount + 1,
+      status: 'empty',
+      templateStatus: 'matching_template',
+    });
+
+    const res = await request(app).get(`/api/v1/shifts/${shift._id}`).set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body.shift.templateStatus).toBe('matching_template');

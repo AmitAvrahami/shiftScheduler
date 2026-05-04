@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import WeeklySchedule from '../models/WeeklySchedule';
 import Shift from '../models/Shift';
+import ShiftDefinition from '../models/ShiftDefinition';
 import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
@@ -11,7 +12,7 @@ import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
 import { runScheduler } from '../services/schedulerService';
-import { generateWeekShifts } from '../services/shiftGenerationService';
+import { fillMissingTemplateShifts } from '../services/shiftGenerationService';
 import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
@@ -31,6 +32,17 @@ async function cascadeDeleteSchedule(scheduleId: mongoose.Types.ObjectId): Promi
   await Assignment.deleteMany({ shiftId: { $in: shiftIds.map((s) => s._id) } });
   await Shift.deleteMany({ scheduleId });
   await WeeklySchedule.findByIdAndDelete(scheduleId);
+}
+
+async function assertActiveShiftTemplates(): Promise<void> {
+  const activeTemplateCount = await ShiftDefinition.countDocuments({ isActive: true });
+  if (activeTemplateCount === 0) {
+    throw new AppError(
+      'Cannot materialize schedule without active shift templates',
+      422,
+      'ERR_NO_SHIFT_TEMPLATES'
+    );
+  }
 }
 
 function validateWeekId(weekId: string, next: NextFunction): boolean {
@@ -80,6 +92,7 @@ export async function createSchedule(
       if (!['open', 'draft'].includes(existing.status)) {
         return next(new AppError(`Schedule for week ${weekId} already exists`, 409));
       }
+      await assertActiveShiftTemplates();
       const before = existing.toObject();
       await cascadeDeleteSchedule(existing._id as mongoose.Types.ObjectId);
       await AuditLog.create({
@@ -90,6 +103,8 @@ export async function createSchedule(
         before,
         ip: req.ip,
       });
+    } else {
+      await assertActiveShiftTemplates();
     }
 
     const dates = getWeekDates(weekId);
@@ -110,7 +125,13 @@ export async function createSchedule(
       ip: req.ip,
     });
 
-    res.status(201).json({ success: true, schedule });
+    const { created: shiftCount } = await fillMissingTemplateShifts(
+      weekId,
+      new mongoose.Types.ObjectId(req.user!._id as string),
+      req.ip ?? 'unknown'
+    );
+
+    res.status(201).json({ success: true, schedule, shiftCount });
     logger.info('createSchedule - end', { weekId: schedule.weekId });
   } catch (err) {
     logger.error('createSchedule - error', err);
@@ -385,6 +406,7 @@ export async function generateSchedule(
     // Ensure a schedule exists before invoking the solver
     let schedule = await WeeklySchedule.findOne({ weekId });
     if (!schedule) {
+      await assertActiveShiftTemplates();
       const dates = getWeekDates(weekId);
       schedule = await WeeklySchedule.create({
         weekId,
@@ -412,10 +434,7 @@ export async function generateSchedule(
       }
     }
 
-    const existingShiftCount = await Shift.countDocuments({ scheduleId: schedule._id });
-    if (existingShiftCount === 0) {
-      await generateWeekShifts(weekId, actorId, ip);
-    }
+    await fillMissingTemplateShifts(weekId, actorId, ip);
 
     // Transition to 'generating' before invoking the solver
     await WeeklySchedule.findOneAndUpdate({ weekId }, { $set: { status: 'generating' } });

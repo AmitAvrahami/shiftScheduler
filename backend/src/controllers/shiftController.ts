@@ -104,6 +104,10 @@ type ShiftResponse = Record<string, unknown> & {
   templateStatus: 'matching_template' | 'manually_modified';
 };
 
+function isTemplateStatus(value: unknown): value is ShiftResponse['templateStatus'] {
+  return value === 'matching_template' || value === 'manually_modified';
+}
+
 function isModifiedFromDefinition(
   shift: Record<string, unknown>,
   definition: Pick<IShiftDefinition, 'startTime' | 'endTime' | 'requiredStaffCount'> | undefined
@@ -119,6 +123,13 @@ async function attachTemplateStatusToShift(shift: unknown): Promise<ShiftRespons
     ? (shift as { toObject: () => Record<string, unknown> }).toObject()
     : { ...(shift as Record<string, unknown>) };
   const definitionId = shiftObject.definitionId;
+  if (isTemplateStatus(shiftObject.templateStatus)) {
+    return {
+      ...shiftObject,
+      templateStatus: shiftObject.templateStatus,
+    };
+  }
+
   const definition = definitionId
     ? await ShiftDefinition.findById(definitionId).lean()
     : null;
@@ -141,12 +152,21 @@ async function attachTemplateStatusToShifts(shifts: unknown[]): Promise<ShiftRes
   const definitions = await ShiftDefinition.find({ _id: { $in: definitionIds } }).lean();
   const definitionById = new Map(definitions.map((definition) => [String(definition._id), definition]));
 
-  return shiftObjects.map((shift) => ({
-    ...shift,
-    templateStatus: isModifiedFromDefinition(shift, definitionById.get(String(shift.definitionId)))
-      ? 'manually_modified'
-      : 'matching_template',
-  }));
+  return shiftObjects.map((shift) => {
+    if (isTemplateStatus(shift.templateStatus)) {
+      return {
+        ...shift,
+        templateStatus: shift.templateStatus,
+      };
+    }
+
+    return {
+      ...shift,
+      templateStatus: isModifiedFromDefinition(shift, definitionById.get(String(shift.definitionId)))
+        ? 'manually_modified'
+        : 'matching_template',
+    };
+  });
 }
 
 function logShiftValidationError(action: 'create' | 'update', error: z.ZodError, body: unknown): void {
@@ -176,7 +196,7 @@ export async function getShifts(req: Request, res: Response, next: NextFunction)
       return next(new AppError('Schedule not found', 404));
     }
 
-    const shifts = await Shift.find({ scheduleId }).sort({ date: 1 });
+    const shifts = await Shift.find({ scheduleId }).sort({ date: 1 }).lean({ defaults: false });
     res.json({ success: true, shifts: await attachTemplateStatusToShifts(shifts) });
     logger.info('getShifts - end', { count: shifts.length });
   } catch (err) {
@@ -228,7 +248,7 @@ export async function createShift(req: Request, res: Response, next: NextFunctio
 export async function getShiftById(req: Request, res: Response, next: NextFunction): Promise<void> {
   logger.info('getShiftById - start', { id: req.params.id });
   try {
-    const shift = await Shift.findById(req.params.id);
+    const shift = await Shift.findById(req.params.id).lean({ defaults: false });
     if (!shift) return next(new AppError('Shift not found', 404));
 
     const schedule = await WeeklySchedule.findById(shift.scheduleId);
@@ -274,6 +294,9 @@ export async function updateShift(req: Request, res: Response, next: NextFunctio
       const startTime = (update.startTime as string | undefined) ?? before.startTime;
       const endTime = (update.endTime as string | undefined) ?? before.endTime;
       Object.assign(update, getShiftDateTimes(date, startTime, endTime, crossesMidnight));
+    }
+    if (parsed.data.startTime || parsed.data.endTime || parsed.data.requiredCount) {
+      update.templateStatus = 'manually_modified';
     }
 
     const shift = await Shift.findByIdAndUpdate(

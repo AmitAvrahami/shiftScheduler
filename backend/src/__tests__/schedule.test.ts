@@ -49,6 +49,22 @@ async function seedEmployee() {
   return { employee, token: makeToken(employee) };
 }
 
+async function seedShiftDefinition(createdBy: mongoose.Types.ObjectId) {
+  return ShiftDefinition.create({
+    name: 'בוקר',
+    startTime: '06:45',
+    endTime: '14:45',
+    daysOfWeek: [0],
+    durationMinutes: 480,
+    crossesMidnight: false,
+    color: '#FFD700',
+    isActive: true,
+    orderNumber: 1,
+    createdBy,
+    requiredStaffCount: 2,
+  });
+}
+
 async function seedDraftSchedule() {
   return WeeklySchedule.create({
     weekId: TEST_WEEK,
@@ -148,19 +164,23 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 201 and re-generates if a draft schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
     await seedDraftSchedule();
     const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'auto' });
     expect(res.status).toBe(201);
+    expect(res.body.shiftCount).toBe(1);
     const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
     expect(log).not.toBeNull();
   });
 
   it('returns 201 and re-generates if an open schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
     await seedOpenSchedule();
     const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'auto' });
     expect(res.status).toBe(201);
+    expect(res.body.shiftCount).toBe(1);
     const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
     expect(log).not.toBeNull();
   });
@@ -173,14 +193,31 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('manager can create a schedule and audit log is created', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
     const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'manual' });
     expect(res.status).toBe(201);
     expect(res.body.schedule.weekId).toBe(TEST_WEEK);
     expect(res.body.schedule.status).toBe('open');
+    expect(res.body.shiftCount).toBe(1);
+    expect(await Shift.countDocuments({ scheduleId: res.body.schedule._id })).toBe(1);
 
     const log = await AuditLog.findOne({ action: 'schedule_created' });
     expect(log).not.toBeNull();
+  });
+
+  it('returns 422 when creating a schedule without active templates', async () => {
+    const { token } = await seedManager();
+
+    const res = await request(app)
+      .post('/api/v1/schedules')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ weekId: TEST_WEEK, generatedBy: 'manual' });
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('ERR_NO_SHIFT_TEMPLATES');
+    expect(await WeeklySchedule.countDocuments({ weekId: TEST_WEEK })).toBe(0);
+    expect(await Shift.countDocuments()).toBe(0);
   });
 });
 
@@ -288,7 +325,8 @@ describe('DELETE /api/v1/schedules/:id', () => {
 
 describe('5-state lifecycle transitions', () => {
   it('POST creates schedule with status open', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
     const res = await request(app).post('/api/v1/schedules').set('Authorization', `Bearer ${token}`).send({ weekId: TEST_WEEK, generatedBy: 'manual' });
     expect(res.status).toBe(201);
     expect(res.body.schedule.status).toBe('open');
