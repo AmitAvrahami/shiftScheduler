@@ -14,6 +14,7 @@ import ShiftDefinition from '../models/ShiftDefinition';
 import SystemSettings from '../models/SystemSettings';
 import AuditLog from '../models/AuditLog';
 import { runLockNow } from '../services/cronService';
+import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryServer;
 
@@ -182,9 +183,30 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const constraints = await Constraint.find({ weekId: TEST_WEEK });
@@ -195,8 +217,22 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: NEXT_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: NEXT_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const w16 = await Constraint.findOne({ weekId: TEST_WEEK });
@@ -216,8 +252,22 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const log = await AuditLog.findOne({ action: 'constraint_window_locked' });
@@ -501,7 +551,13 @@ describe('assignment_override audit log', () => {
       assignedBy,
       status: 'pending',
     });
-    return { manager, employee, assignment, managerToken: makeToken(manager), employeeToken: makeToken(employee) };
+    return {
+      manager,
+      employee,
+      assignment,
+      managerToken: makeToken(manager),
+      employeeToken: makeToken(employee),
+    };
   }
 
   it('4.1 — manager PATCHes algorithm-assigned → AuditLog has assignment_override', async () => {
@@ -555,7 +611,7 @@ describe('assignment_override audit log', () => {
 describe('schedule_regenerated audit log and draft re-generation', () => {
   it('5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated', async () => {
     const { manager, token } = await seedManager();
-    await seedShiftDef(manager._id as mongoose.Types.ObjectId);
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: '2026-W20',
       startDate: new Date('2026-05-10'),
@@ -590,7 +646,9 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
 
   it('5.3 — regeneration cascades: old shift and assignment are gone from DB', async () => {
     const { manager, token } = await seedManager();
-    const def = await seedShiftDef(manager._id as mongoose.Types.ObjectId);
+    const { morning: def } = await seedDefaultShiftDefinitions(
+      manager._id as mongoose.Types.ObjectId
+    );
     const { employee } = await seedEmployee();
 
     const oldSchedule = await WeeklySchedule.create({
