@@ -46,7 +46,9 @@ export async function generateWeekFromBlueprints(
   const startOfWeek = normalizeWeekStart(startOfWeekDate);
   const endOfWeek = addDays(startOfWeek, 7);
 
-  const schedule = await WeeklySchedule.findOne({ startDate: startOfWeek }).session(session || null).lean();
+  const schedule = await WeeklySchedule.findOne({ startDate: startOfWeek })
+    .session(session || null)
+    .lean();
   if (!schedule) throw new AppError('Schedule not found for blueprint generation week', 404);
 
   const existingCount = await Shift.countDocuments({
@@ -101,7 +103,9 @@ export async function generateWeekShifts(
   ip: string,
   session?: mongoose.ClientSession
 ): Promise<{ created: number }> {
-  const schedule = await WeeklySchedule.findOne({ weekId }).session(session || null).lean();
+  const schedule = await WeeklySchedule.findOne({ weekId })
+    .session(session || null)
+    .lean();
   if (!schedule) throw new AppError(`Schedule not found for week ${weekId}`, 404);
 
   if (!['open', 'locked', 'draft'].includes(schedule.status)) {
@@ -138,7 +142,9 @@ export async function fillMissingTemplateShifts(
   ip: string,
   session?: mongoose.ClientSession
 ): Promise<{ created: number; skipped: number }> {
-  const schedule = await WeeklySchedule.findOne({ weekId }).session(session || null).lean();
+  const schedule = await WeeklySchedule.findOne({ weekId })
+    .session(session || null)
+    .lean();
   if (!schedule) throw new AppError(`Schedule not found for week ${weekId}`, 404);
 
   if (!['open', 'locked', 'draft'].includes(schedule.status)) {

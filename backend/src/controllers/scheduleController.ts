@@ -86,7 +86,9 @@ export async function createSchedule(
     if (existing) {
       const { role } = req.user!;
       if (existing.status === 'draft' && !['admin', 'manager'].includes(role)) {
-        return next(new AppError('Forbidden — draft access restricted to admins and managers', 403));
+        return next(
+          new AppError('Forbidden — draft access restricted to admins and managers', 403)
+        );
       }
 
       if (!['open', 'draft'].includes(existing.status)) {
@@ -194,12 +196,12 @@ export async function updateSchedule(
       const { status: currentStatus } = schedule;
 
       const validTransitions: Record<string, string[]> = {
-        open:       ['locked'],
-        locked:     ['open'],       // 'generating' is auto-only (via generateSchedule)
-        generating: [],             // all exits are auto — PATCH always returns 422
-        draft:      ['published', 'open'],
-        published:  ['archived'],
-        archived:   [],
+        open: ['locked'],
+        locked: ['open'], // 'generating' is auto-only (via generateSchedule)
+        generating: [], // all exits are auto — PATCH always returns 422
+        draft: ['published', 'open'],
+        published: ['archived'],
+        archived: [],
       };
 
       if (!validTransitions[currentStatus].includes(newStatus)) {
@@ -325,7 +327,12 @@ export async function cloneSchedule(
 
     const existingTarget = await WeeklySchedule.findOne({ weekId: targetWeekId });
     if (existingTarget && !['open', 'draft'].includes(existingTarget.status)) {
-      return next(new AppError(`A ${existingTarget.status} schedule already exists for week ${targetWeekId}`, 409));
+      return next(
+        new AppError(
+          `A ${existingTarget.status} schedule already exists for week ${targetWeekId}`,
+          409
+        )
+      );
     }
     if (existingTarget && ['open', 'draft'].includes(existingTarget.status)) {
       await cascadeDeleteSchedule(existingTarget._id as mongoose.Types.ObjectId);
@@ -426,7 +433,9 @@ export async function generateSchedule(
     } else {
       const { role } = req.user!;
       if (schedule.status === 'draft' && !['admin', 'manager'].includes(role)) {
-        return next(new AppError('Forbidden — draft access restricted to admins and managers', 403));
+        return next(
+          new AppError('Forbidden — draft access restricted to admins and managers', 403)
+        );
       }
 
       if (!['open', 'locked', 'draft'].includes(schedule.status)) {
