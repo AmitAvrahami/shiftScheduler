@@ -83,7 +83,10 @@ export async function runScheduler(
       filter: { _id: shift._id },
       update: {
         $set: {
-          status: calculateShiftStatus(shift.requiredCount, countByShift[shift._id.toString()] ?? 0),
+          status: calculateShiftStatus(
+            shift.requiredCount,
+            countByShift[shift._id.toString()] ?? 0
+          ),
         },
       },
     },

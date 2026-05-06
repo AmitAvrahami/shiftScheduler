@@ -2,12 +2,7 @@ import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import {
-  getCurrentWeekId,
-  getNextWeekId,
-  getPrevWeekId,
-  getWeekDates,
-} from '../utils/weekUtils';
+import { getCurrentWeekId, getNextWeekId, getPrevWeekId, getWeekDates } from '../utils/weekUtils';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 
@@ -61,7 +56,10 @@ export default function ScheduleBoardPage() {
           <MaterialIcon name="error" className="text-red-500 text-5xl mb-4" />
           <h3 className="text-xl font-bold text-red-900 mb-2">אופס! משהו השתבש</h3>
           <p className="text-red-700 mb-6">{error}</p>
-          <button onClick={refresh} className="px-6 py-2 bg-red-600 text-white rounded-full font-bold hover:bg-red-700 transition-colors">
+          <button
+            onClick={refresh}
+            className="px-6 py-2 bg-red-600 text-white rounded-full font-bold hover:bg-red-700 transition-colors"
+          >
             נסה שוב
           </button>
         </div>
@@ -85,9 +83,7 @@ export default function ScheduleBoardPage() {
             >
               <MaterialIcon name="chevron_right" />
             </button>
-            <div className="px-3 font-bold text-slate-700 text-xs">
-              {weekId}
-            </div>
+            <div className="px-3 font-bold text-slate-700 text-xs">{weekId}</div>
             <button
               onClick={() => navigate(`/schedules/${getNextWeekId(weekId)}`)}
               className="p-1.5 hover:bg-white hover:shadow-sm rounded-full transition-all"
@@ -135,7 +131,10 @@ export default function ScheduleBoardPage() {
               <MaterialIcon name="calendar_today" className="text-slate-400 text-4xl" />
             </div>
             <h3 className="text-2xl font-black text-[#010636] mb-3">אין סידור עבודה לשבוע זה</h3>
-            <p className="text-slate-500 mb-8 max-w-md mx-auto">טרם נוצר סידור עבודה לשבוע שנבחר. ניתן לייצר סידור חדש המבוסס על תבניות המשמרות הקבועות.</p>
+            <p className="text-slate-500 mb-8 max-w-md mx-auto">
+              טרם נוצר סידור עבודה לשבוע שנבחר. ניתן לייצר סידור חדש המבוסס על תבניות המשמרות
+              הקבועות.
+            </p>
             <button
               onClick={handleInitialize}
               disabled={refreshing}

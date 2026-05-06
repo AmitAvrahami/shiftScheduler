@@ -51,7 +51,13 @@ export default function UsersPage() {
       const res = await userApi.createUser(form);
       setUsers((prev) => [...prev, res.user]);
       setShowForm(false);
-      setForm({ name: '', email: '', password: '', role: 'employee', isFixedMorningEmployee: false });
+      setForm({
+        name: '',
+        email: '',
+        password: '',
+        role: 'employee',
+        isFixedMorningEmployee: false,
+      });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'שגיאה ביצירת משתמש');
     } finally {
@@ -78,10 +84,7 @@ export default function UsersPage() {
   }
 
   return (
-    <MainLayout
-      title="ניהול משתמשים"
-      subtitle="הגדרות צוות"
-    >
+    <MainLayout title="ניהול משתמשים" subtitle="הגדרות צוות">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-blue-700">משתמשי המערכת</h1>
@@ -216,7 +219,9 @@ export default function UsersPage() {
                       className={`w-10 h-5 rounded-full transition-colors relative ${
                         user.isFixedMorningEmployee ? 'bg-blue-500' : 'bg-gray-300'
                       }`}
-                      title={user.isFixedMorningEmployee ? 'הסר עובד בוקר קבוע' : 'הגדר עובד בוקר קבוע'}
+                      title={
+                        user.isFixedMorningEmployee ? 'הסר עובד בוקר קבוע' : 'הגדר עובד בוקר קבוע'
+                      }
                     >
                       <span
                         className={`block w-4 h-4 rounded-full bg-white shadow mx-0.5 transition-transform absolute top-0.5 ${

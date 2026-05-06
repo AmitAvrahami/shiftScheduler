@@ -25,30 +25,22 @@ export async function fetchDashboardData(weekId: string): Promise<AdminDashboard
   const weekEnd = new Date(weekDates[6].getTime() + 24 * 60 * 60 * 1000); // end of Saturday
 
   // ── Batch 1: queries with no inter-dependencies ───────────────────────────
-  const [schedule, employees, constraintDocs, shiftDefinitions, auditLogs] =
-    await Promise.all([
-      WeeklySchedule.findOne({ weekId })
-        .lean<RawScheduleDoc>(),
+  const [schedule, employees, constraintDocs, shiftDefinitions, auditLogs] = await Promise.all([
+    WeeklySchedule.findOne({ weekId }).lean<RawScheduleDoc>(),
 
-      User.find({ isActive: true })
-        .select('-password')
-        .lean<RawUserDoc[]>(),
+    User.find({ isActive: true }).select('-password').lean<RawUserDoc[]>(),
 
-      Constraint.find({ weekId })
-        .select('userId')
-        .lean<RawConstraintDoc[]>(),
+    Constraint.find({ weekId }).select('userId').lean<RawConstraintDoc[]>(),
 
-      ShiftDefinition.find({ isActive: true })
-        .select('name startTime')
-        .lean<RawShiftDefDoc[]>(),
+    ShiftDefinition.find({ isActive: true }).select('name startTime').lean<RawShiftDefDoc[]>(),
 
-      // Audit logs scoped to the week's date range — no global fallback.
-      // Future weeks naturally return [] (no logs yet).
-      AuditLog.find({ createdAt: { $gte: weekStart, $lt: weekEnd } })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean<RawAuditLogDoc[]>(),
-    ]);
+    // Audit logs scoped to the week's date range — no global fallback.
+    // Future weeks naturally return [] (no logs yet).
+    AuditLog.find({ createdAt: { $gte: weekStart, $lt: weekEnd } })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean<RawAuditLogDoc[]>(),
+  ]);
 
   // ── Batch 2: queries that depend on schedule._id ──────────────────────────
   const scheduleId = schedule?._id ?? null;

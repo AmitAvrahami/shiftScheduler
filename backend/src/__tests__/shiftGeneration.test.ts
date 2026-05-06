@@ -9,7 +9,10 @@ import WeeklySchedule from '../models/WeeklySchedule';
 import ShiftDefinition from '../models/ShiftDefinition';
 import Shift from '../models/Shift';
 import AuditLog from '../models/AuditLog';
-import { generateWeekFromBlueprints } from '../services/shiftGenerationService';
+import {
+  fillMissingTemplateShifts,
+  generateWeekFromBlueprints,
+} from '../services/shiftGenerationService';
 
 // Sun 2026-05-10 through Sat 2026-05-16
 const TEST_WEEK = '2026-W20';
@@ -289,8 +292,7 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`);
+    const res = await request(app).post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`);
 
     expect(res.status).toBe(401);
   });
@@ -343,7 +345,10 @@ describe('generateWeekFromBlueprints', () => {
       requiredStaffCount: 1,
     });
 
-    const result = await generateWeekFromBlueprints(new mongoose.Types.ObjectId(), new Date(2026, 4, 10, 15));
+    const result = await generateWeekFromBlueprints(
+      new mongoose.Types.ObjectId(),
+      new Date(2026, 4, 10, 15)
+    );
 
     expect(result.created).toBe(1);
     const shift = await Shift.findOne().lean();
@@ -404,8 +409,97 @@ describe('generateWeekFromBlueprints', () => {
       status: 'empty',
     });
 
-    await expect(generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))).rejects.toMatchObject({
+    await expect(
+      generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))
+    ).rejects.toMatchObject({
       statusCode: 409,
+    });
+  });
+});
+
+describe('fillMissingTemplateShifts', () => {
+  it('is idempotent when all template shifts already exist', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    const first = await fillMissingTemplateShifts(
+      TEST_WEEK,
+      admin._id as mongoose.Types.ObjectId,
+      '127.0.0.1'
+    );
+    const second = await fillMissingTemplateShifts(
+      TEST_WEEK,
+      admin._id as mongoose.Types.ObjectId,
+      '127.0.0.1'
+    );
+
+    expect(first).toEqual({ created: 21, skipped: 0 });
+    expect(second).toEqual({ created: 0, skipped: 21 });
+    expect(await Shift.countDocuments()).toBe(21);
+  });
+
+  it('fills only missing template shifts for a partial schedule', async () => {
+    const { admin } = await seedAdmin();
+    const schedule = await seedSchedule('open');
+    const [morningDef] = await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+    await Shift.create({
+      scheduleId: schedule._id,
+      definitionId: morningDef._id,
+      date: new Date(2026, 4, 10),
+      startTime: morningDef.startTime,
+      endTime: morningDef.endTime,
+      startsAt: new Date(2026, 4, 10, 6, 45),
+      endsAt: new Date(2026, 4, 10, 14, 45),
+      requiredCount: morningDef.requiredStaffCount,
+      status: 'empty',
+    });
+
+    const result = await fillMissingTemplateShifts(
+      TEST_WEEK,
+      admin._id as mongoose.Types.ObjectId,
+      '127.0.0.1'
+    );
+
+    expect(result).toEqual({ created: 20, skipped: 1 });
+    expect(await Shift.countDocuments()).toBe(21);
+  });
+
+  it('calculates overnight endsAt on the following calendar day', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+    await ShiftDefinition.create({
+      name: 'לילה',
+      startTime: '22:00',
+      endTime: '06:00',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: true,
+      color: '#000080',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: admin._id,
+      requiredStaffCount: 1,
+    });
+
+    await fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1');
+
+    const shift = await Shift.findOne().lean();
+    expect(shift!.startsAt).toEqual(new Date(2026, 4, 10, 22, 0));
+    expect(shift!.endsAt).toEqual(new Date(2026, 4, 11, 6, 0));
+    expect(shift!.templateStatus).toBe('matching_template');
+  });
+
+  it('throws 422 when no active ShiftDefinitions exist', async () => {
+    const { admin } = await seedAdmin();
+    await seedSchedule('open');
+
+    await expect(
+      fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1')
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'ERR_NO_SHIFT_TEMPLATES',
+      message: 'Cannot materialize schedule without active shift templates',
     });
   });
 });

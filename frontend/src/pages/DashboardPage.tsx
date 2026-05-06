@@ -64,7 +64,10 @@ function ConstraintCountdownCard({ onClick }: { onClick: () => void }) {
       {/* Countdown display */}
       <div className="text-center py-4 bg-error-container/30 rounded-lg border border-error-container mb-4">
         <p className="text-xs text-on-surface-variant mb-2">הזמן שנותר להגשה</p>
-        <div className="text-error flex justify-center items-baseline gap-1" style={{ fontSize: '32px', lineHeight: 1, fontWeight: 700 }}>
+        <div
+          className="text-error flex justify-center items-baseline gap-1"
+          style={{ fontSize: '32px', lineHeight: 1, fontWeight: 700 }}
+        >
           <span>2</span>
           <span className="text-lg font-semibold">ימים</span>
           <span className="mr-2">14</span>
@@ -87,9 +90,9 @@ function ConstraintCountdownCard({ onClick }: { onClick: () => void }) {
 
 const WEEKLY_SCHEDULE = [
   { day: "היום (ב')", label: 'משמרת עברה', isToday: true },
-  { day: "מחר (ג')",  label: '08:00 - 16:00', isNext: true },
-  { day: 'רביעי',     label: '16:00 - 00:00' },
-  { day: 'חמישי',     label: 'חופש', isDayOff: true },
+  { day: "מחר (ג')", label: '08:00 - 16:00', isNext: true },
+  { day: 'רביעי', label: '16:00 - 00:00' },
+  { day: 'חמישי', label: 'חופש', isDayOff: true },
 ];
 
 /**
@@ -138,9 +141,7 @@ function WeeklyOverviewCard() {
               className="flex justify-between items-center p-3 bg-surface-container-lowest rounded-lg border border-surface-variant hover:border-outline-variant transition-colors"
             >
               <span className="text-on-surface text-sm">{row.day}</span>
-              <span className={`text-sm font-bold text-on-surface-variant`}>
-                {row.label}
-              </span>
+              <span className={`text-sm font-bold text-on-surface-variant`}>{row.label}</span>
             </div>
           );
         })}
@@ -192,10 +193,10 @@ function NotificationsPanel() {
 }
 
 const QUICK_ACTIONS = [
-  { icon: 'flight_takeoff',  label: 'בקשת חופשה',  iconColorClass: 'text-secondary' },
-  { icon: 'medical_services',label: 'דיווח מחלה',  iconColorClass: 'text-error' },
-  { icon: 'person_edit',     label: 'עדכון פרטים', iconColorClass: 'text-primary' },
-  { icon: 'chat',            label: 'פנייה למנהל', iconColorClass: 'text-on-surface-variant' },
+  { icon: 'flight_takeoff', label: 'בקשת חופשה', iconColorClass: 'text-secondary' },
+  { icon: 'medical_services', label: 'דיווח מחלה', iconColorClass: 'text-error' },
+  { icon: 'person_edit', label: 'עדכון פרטים', iconColorClass: 'text-primary' },
+  { icon: 'chat', label: 'פנייה למנהל', iconColorClass: 'text-on-surface-variant' },
 ];
 
 /**

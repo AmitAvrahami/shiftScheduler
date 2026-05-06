@@ -163,7 +163,10 @@ export async function updateFixedMorning(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  logger.info('updateFixedMorning - start', { id: req.params.id, isFixedMorningEmployee: req.body.isFixedMorningEmployee });
+  logger.info('updateFixedMorning - start', {
+    id: req.params.id,
+    isFixedMorningEmployee: req.body.isFixedMorningEmployee,
+  });
   try {
     const parsed = updateFixedMorningSchema.safeParse(req.body);
     if (!parsed.success) {

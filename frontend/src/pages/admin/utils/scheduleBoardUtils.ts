@@ -83,22 +83,22 @@ export function normalizeShiftDay(day: string): WeekDayKey | null {
 export function sortDaysSundayToSaturday(days: string[]): WeekDayKey[] {
   const normalizedDays = new Set<WeekDayKey>();
 
-  days.forEach(day => {
+  days.forEach((day) => {
     const normalizedDay = normalizeShiftDay(day);
     if (normalizedDay) {
       normalizedDays.add(normalizedDay);
     }
   });
 
-  return WEEK_DAYS_ORDER.filter(day => normalizedDays.has(day));
+  return WEEK_DAYS_ORDER.filter((day) => normalizedDays.has(day));
 }
 
 export function groupShiftsByDay(
-  shifts: AdminDashboardShift[],
+  shifts: AdminDashboardShift[]
 ): Record<WeekDayKey, AdminDashboardShift[]> {
   const groupedShifts = createEmptyGroupedShifts();
 
-  shifts.forEach(shift => {
+  shifts.forEach((shift) => {
     const day = normalizeShiftDay(shift.day);
     if (day) {
       groupedShifts[day].push(shift);
@@ -110,25 +110,25 @@ export function groupShiftsByDay(
 
 export function getAssignmentsForShift(
   assignments: AdminDashboardAssignment[],
-  shiftId: string,
+  shiftId: string
 ): AdminDashboardAssignment[] {
-  return assignments.filter(assignment => assignment.shiftId === shiftId);
+  return assignments.filter((assignment) => assignment.shiftId === shiftId);
 }
 
 export function getEmployeesForAssignments(
   employees: AdminDashboardEmployee[],
-  assignments: AdminDashboardAssignment[],
+  assignments: AdminDashboardAssignment[]
 ): AdminDashboardEmployee[] {
-  const employeesById = new Map(employees.map(employee => [employee.id, employee]));
+  const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
 
   return assignments
-    .map(assignment => employeesById.get(assignment.employeeId))
+    .map((assignment) => employeesById.get(assignment.employeeId))
     .filter((employee): employee is AdminDashboardEmployee => Boolean(employee));
 }
 
 export function getShiftFillStatus(
   shift: AdminDashboardShift | undefined,
-  assignments: AdminDashboardAssignment[],
+  assignments: AdminDashboardAssignment[]
 ): ShiftFillStatus {
   if (!shift || shift.type === 'unknown') {
     return 'unknown';
@@ -159,7 +159,7 @@ function createEmptyGroupedShifts(): Record<WeekDayKey, AdminDashboardShift[]> {
       thursday: [],
       friday: [],
       saturday: [],
-    },
+    }
   );
 }
 

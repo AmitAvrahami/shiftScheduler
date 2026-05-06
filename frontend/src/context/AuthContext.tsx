@@ -10,7 +10,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
-    
+
     authApi
       .me()
       .then((res) => setUser(res.user))

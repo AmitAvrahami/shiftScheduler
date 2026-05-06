@@ -13,12 +13,12 @@ import type {
 function mapScheduleStatus(rawStatus: string | undefined): WeekWorkflowState {
   if (!rawStatus) return 'not_created';
   const map: Record<string, WeekWorkflowState> = {
-    open:       'constraints_open',
-    locked:     'constraints_locked',
-    generating: 'draft',   // transient state — surface as draft to the UI
-    draft:      'draft',
-    published:  'published',
-    archived:   'archived',
+    open: 'constraints_open',
+    locked: 'constraints_locked',
+    generating: 'draft', // transient state — surface as draft to the UI
+    draft: 'draft',
+    published: 'published',
+    archived: 'archived',
   };
   return map[rawStatus] ?? 'not_created';
 }
@@ -32,9 +32,10 @@ function typeFromName(name: string): ShiftTypeDTO | null {
   if (
     n.includes('afternoon') ||
     n.includes('צהריים') ||
-    n.includes('ערב') ||    // evening / afternoon in common IST usage
+    n.includes('ערב') || // evening / afternoon in common IST usage
     n.includes('אחה"צ')
-  ) return 'afternoon';
+  )
+    return 'afternoon';
   if (n.includes('night') || n.includes('לילה')) return 'night';
   return null;
 }
@@ -54,10 +55,7 @@ function typeFromStartTime(startTime: string): ShiftTypeDTO | null {
   return null;
 }
 
-function deriveShiftType(
-  shift: RawShiftDoc,
-  defById: Map<string, RawShiftDefDoc>,
-): ShiftTypeDTO {
+function deriveShiftType(shift: RawShiftDoc, defById: Map<string, RawShiftDefDoc>): ShiftTypeDTO {
   const def = defById.get(String(shift.definitionId));
 
   if (def) {
@@ -86,7 +84,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
 
   // Build definition lookup map once
   const defById = new Map<string, RawShiftDefDoc>(
-    raw.shiftDefinitions.map((d) => [String(d._id), d]),
+    raw.shiftDefinitions.map((d) => [String(d._id), d])
   );
 
   // ── Employees ──────────────────────────────────────────────────────────────
@@ -101,7 +99,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
   // ── Shifts ────────────────────────────────────────────────────────────────
   const shifts = raw.shifts.map((s) => ({
     id: String(s._id),
-    day: toDateKey(new Date(s.date)),   // local-time YYYY-MM-DD, no ISO-string split
+    day: toDateKey(new Date(s.date)), // local-time YYYY-MM-DD, no ISO-string split
     type: deriveShiftType(s, defById),
     requiredEmployees: s.requiredCount,
   }));
@@ -134,7 +132,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
   // ── Missing constraints ───────────────────────────────────────────────────
   const submittedSet = new Set(raw.constraintUserIds);
   const missingConstraintUsers = raw.employees.filter(
-    (e) => e.role === 'employee' && !submittedSet.has(String(e._id)),
+    (e) => e.role === 'employee' && !submittedSet.has(String(e._id))
   );
 
   const missingConstraints = missingConstraintUsers.map((u) => ({
@@ -143,8 +141,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
   }));
 
   // ── Readiness ─────────────────────────────────────────────────────────────
-  const canGenerate =
-    scheduleStatus === 'constraints_locked' || scheduleStatus === 'draft';
+  const canGenerate = scheduleStatus === 'constraints_locked' || scheduleStatus === 'draft';
 
   const hasMissingConstraints = missingConstraintUsers.length > 0;
   const hasNoEmployees = employees.length === 0;
@@ -152,9 +149,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
 
   const warnings: string[] = [];
   if (hasMissingConstraints) {
-    warnings.push(
-      `${missingConstraintUsers.length} employees have not submitted constraints`,
-    );
+    warnings.push(`${missingConstraintUsers.length} employees have not submitted constraints`);
   }
   if (hasNoEmployees) {
     warnings.push('No active employees found');

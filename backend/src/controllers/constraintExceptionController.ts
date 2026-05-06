@@ -84,7 +84,9 @@ export async function reviewException(
     if (!exception) return next(new AppError('Exception request not found', 404));
 
     if (exception.status !== 'pending') {
-      return next(new AppError(`Cannot review an exception with status '${exception.status}'`, 422));
+      return next(
+        new AppError(`Cannot review an exception with status '${exception.status}'`, 422)
+      );
     }
 
     const { action, managerNote } = parsed.data;
@@ -136,9 +138,7 @@ export async function getExceptions(
   logger.info('getExceptions - start', { query: req.query, user: req.user?._id });
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
-    const filter: Record<string, unknown> = isManagerOrAdmin
-      ? {}
-      : { employeeId: req.user!._id };
+    const filter: Record<string, unknown> = isManagerOrAdmin ? {} : { employeeId: req.user!._id };
 
     if (req.query.weekId) filter.weekId = req.query.weekId;
     if (req.query.status) filter.status = req.query.status;

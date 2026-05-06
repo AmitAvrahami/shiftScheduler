@@ -78,9 +78,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          לפתיחת חשבון פנה למנהל המשמרות.
-        </p>
+        <p className="mt-6 text-center text-sm text-gray-500">לפתיחת חשבון פנה למנהל המשמרות.</p>
       </div>
     </main>
   );

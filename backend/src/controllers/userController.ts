@@ -51,7 +51,11 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
 
-    const user = await User.findByIdAndUpdate(id, { $set: parsed.data }, { new: true, runValidators: true });
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: parsed.data },
+      { new: true, runValidators: true }
+    );
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
 
     res.json({ success: true, user });
