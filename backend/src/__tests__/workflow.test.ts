@@ -14,6 +14,7 @@ import ShiftDefinition from '../models/ShiftDefinition';
 import SystemSettings from '../models/SystemSettings';
 import AuditLog from '../models/AuditLog';
 import { runLockNow } from '../services/cronService';
+import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryServer;
 
@@ -80,6 +81,8 @@ async function seedShiftDef(managerId: mongoose.Types.ObjectId) {
     crossesMidnight: false,
     color: '#FFD700',
     orderNumber: 1,
+    isActive: true,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     createdBy: managerId,
   });
 }
@@ -574,6 +577,7 @@ describe('assignment_override audit log', () => {
 
   it('4.2 — manager PATCHes manager-assigned → no assignment_override entry', async () => {
     const { assignment, managerToken } = await seedAssignmentFixture('manager');
+    expect(assignment.assignedBy).toBe('manager');
     await request(app)
       .patch(`/api/v1/assignments/${assignment._id}`)
       .set('Authorization', `Bearer ${managerToken}`)
@@ -618,7 +622,8 @@ describe('assignment_override audit log', () => {
 
 describe('schedule_regenerated audit log and draft re-generation', () => {
   it('5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: '2026-W20',
       startDate: new Date('2026-05-10'),
@@ -636,7 +641,8 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
   });
 
   it('5.2 — published schedule; manager POSTs same weekId → 409 (behavior unchanged)', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: '2026-W20',
       startDate: new Date('2026-05-10'),
@@ -653,7 +659,9 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
 
   it('5.3 — regeneration cascades: old shift and assignment are gone from DB', async () => {
     const { manager, token } = await seedManager();
-    const def = await seedShiftDef(manager._id as mongoose.Types.ObjectId);
+    const { morning: def } = await seedDefaultShiftDefinitions(
+      manager._id as mongoose.Types.ObjectId
+    );
     const { employee } = await seedEmployee();
 
     const oldSchedule = await WeeklySchedule.create({

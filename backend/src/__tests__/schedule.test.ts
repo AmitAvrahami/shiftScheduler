@@ -11,6 +11,7 @@ import Assignment from '../models/Assignment';
 import ShiftDefinition from '../models/ShiftDefinition';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryServer;
 
@@ -155,7 +156,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 409 if a published schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: TEST_WEEK,
       startDate: new Date('2026-05-10'),
@@ -171,7 +173,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 201 and re-generates if a draft schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await seedDraftSchedule();
     const res = await request(app)
       .post('/api/v1/schedules')
@@ -183,7 +186,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 201 and re-generates if an open schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await seedOpenSchedule();
     const res = await request(app)
       .post('/api/v1/schedules')
@@ -195,7 +199,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 409 if a locked schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await seedLockedSchedule();
     const res = await request(app)
       .post('/api/v1/schedules')
@@ -205,7 +210,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('manager can create a schedule and audit log is created', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     const res = await request(app)
       .post('/api/v1/schedules')
       .set('Authorization', `Bearer ${token}`)
@@ -367,7 +373,8 @@ describe('DELETE /api/v1/schedules/:id', () => {
 
 describe('5-state lifecycle transitions', () => {
   it('POST creates schedule with status open', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     const res = await request(app)
       .post('/api/v1/schedules')
       .set('Authorization', `Bearer ${token}`)

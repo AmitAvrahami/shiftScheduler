@@ -51,6 +51,11 @@ const shiftSchema = new Schema<IShift>(
       default: 'empty',
     },
     notes: { type: String, trim: true },
+    templateStatus: {
+      type: String,
+      enum: ['matching_template', 'manually_modified'],
+      default: 'matching_template',
+    },
   },
   {
     toJSON: { virtuals: true },
