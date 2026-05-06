@@ -78,6 +78,8 @@ async function seedShiftDef(managerId: mongoose.Types.ObjectId) {
     crossesMidnight: false,
     color: '#FFD700',
     orderNumber: 1,
+    isActive: true,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     createdBy: managerId,
   });
 }
@@ -629,7 +631,8 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
   });
 
   it('5.2 — published schedule; manager POSTs same weekId → 409 (behavior unchanged)', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: '2026-W20',
       startDate: new Date('2026-05-10'),

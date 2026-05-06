@@ -156,7 +156,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 409 if a published schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await WeeklySchedule.create({
       weekId: TEST_WEEK,
       startDate: new Date('2026-05-10'),
@@ -198,7 +199,8 @@ describe('POST /api/v1/schedules', () => {
   });
 
   it('returns 409 if a locked schedule already exists for the week', async () => {
-    const { token } = await seedManager();
+    const { manager, token } = await seedManager();
+    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
     await seedLockedSchedule();
     const res = await request(app)
       .post('/api/v1/schedules')
