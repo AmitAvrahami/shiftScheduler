@@ -46,7 +46,9 @@ export async function generateWeekFromBlueprints(
   const startOfWeek = normalizeWeekStart(startOfWeekDate);
   const endOfWeek = addDays(startOfWeek, 7);
 
-  const schedule = await WeeklySchedule.findOne({ startDate: startOfWeek }).session(session || null).lean();
+  const schedule = await WeeklySchedule.findOne({ startDate: startOfWeek })
+    .session(session || null)
+    .lean();
   if (!schedule) throw new AppError('Schedule not found for blueprint generation week', 404);
 
   const existingCount = await Shift.countDocuments({
@@ -83,6 +85,7 @@ export async function generateWeekFromBlueprints(
         endsAt,
         requiredCount: def.requiredStaffCount,
         status: 'empty' as const,
+        templateStatus: 'matching_template' as const,
       };
     })
   );
@@ -100,7 +103,9 @@ export async function generateWeekShifts(
   ip: string,
   session?: mongoose.ClientSession
 ): Promise<{ created: number }> {
-  const schedule = await WeeklySchedule.findOne({ weekId }).session(session || null).lean();
+  const schedule = await WeeklySchedule.findOne({ weekId })
+    .session(session || null)
+    .lean();
   if (!schedule) throw new AppError(`Schedule not found for week ${weekId}`, 404);
 
   if (!['open', 'locked', 'draft'].includes(schedule.status)) {
@@ -129,6 +134,92 @@ export async function generateWeekShifts(
   );
 
   return { created };
+}
+
+export async function fillMissingTemplateShifts(
+  weekId: string,
+  actorId: mongoose.Types.ObjectId,
+  ip: string,
+  session?: mongoose.ClientSession
+): Promise<{ created: number; skipped: number }> {
+  const schedule = await WeeklySchedule.findOne({ weekId })
+    .session(session || null)
+    .lean();
+  if (!schedule) throw new AppError(`Schedule not found for week ${weekId}`, 404);
+
+  if (!['open', 'locked', 'draft'].includes(schedule.status)) {
+    throw new AppError(`Cannot materialize shifts for a ${schedule.status} schedule`, 422);
+  }
+
+  const definitions = await ShiftDefinition.find({ isActive: true })
+    .session(session || null)
+    .sort({ orderNumber: 1 })
+    .lean();
+  if (definitions.length === 0) {
+    throw new AppError(
+      'Cannot materialize schedule without active shift templates',
+      422,
+      'ERR_NO_SHIFT_TEMPLATES'
+    );
+  }
+
+  const scheduleId = schedule._id as mongoose.Types.ObjectId;
+  const dates = getWeekDates(weekId);
+  const expectedShiftDocs = definitions.flatMap((def) =>
+    def.daysOfWeek.map((dayOfWeek) => {
+      const date = getShiftDateForDay(dates[0], dayOfWeek);
+      const { startsAt, endsAt } = getShiftDateTimes(
+        date,
+        def.startTime,
+        def.endTime,
+        def.crossesMidnight
+      );
+
+      return {
+        scheduleId,
+        definitionId: def._id,
+        date,
+        startTime: def.startTime,
+        endTime: def.endTime,
+        startsAt,
+        endsAt,
+        requiredCount: def.requiredStaffCount,
+        status: 'empty' as const,
+        templateStatus: 'matching_template' as const,
+      };
+    })
+  );
+
+  const existingShifts = await Shift.find({ scheduleId }, 'definitionId date')
+    .session(session || null)
+    .lean();
+  const existingKeys = new Set(
+    existingShifts.map((shift) => `${String(shift.definitionId)}:${shift.date.toISOString()}`)
+  );
+  const missingShiftDocs = expectedShiftDocs.filter(
+    (shift) => !existingKeys.has(`${String(shift.definitionId)}:${shift.date.toISOString()}`)
+  );
+  const skipped = expectedShiftDocs.length - missingShiftDocs.length;
+
+  if (missingShiftDocs.length > 0) {
+    await Shift.insertMany(missingShiftDocs, { session });
+  }
+
+  await AuditLog.create(
+    [
+      {
+        performedBy: actorId,
+        action: 'shifts_filled_from_template',
+        refModel: 'WeeklySchedule',
+        refId: scheduleId,
+        after: { weekId, created: missingShiftDocs.length, skipped },
+        ip,
+      },
+    ],
+    { session }
+  );
+
+  return { created: missingShiftDocs.length, skipped };
 }
 
 /**
@@ -178,7 +269,7 @@ export async function initializeWeeklySchedule(
       { session }
     );
 
-    const { created: shiftCount } = await generateWeekShifts(weekId, actorId, ip, session);
+    const { created: shiftCount } = await fillMissingTemplateShifts(weekId, actorId, ip, session);
 
     await session.commitTransaction();
     return { schedule, shiftCount };

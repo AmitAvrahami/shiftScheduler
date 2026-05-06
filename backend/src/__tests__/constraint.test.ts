@@ -5,10 +5,10 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
 import User from '../models/User';
-import ShiftDefinition from '../models/ShiftDefinition';
 import Constraint from '../models/Constraint';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryServer;
 
@@ -70,17 +70,8 @@ async function seedEmployee() {
 }
 
 async function seedShiftDefinition(managerId: mongoose.Types.ObjectId) {
-  return ShiftDefinition.create({
-    name: 'בוקר',
-    startTime: '06:45',
-    endTime: '14:45',
-    durationMinutes: 480,
-    crossesMidnight: false,
-    color: '#FFD700',
-    isActive: true,
-    orderNumber: 1,
-    createdBy: managerId,
-  });
+  const { morning } = await seedDefaultShiftDefinitions(managerId);
+  return morning;
 }
 
 // ── GET /api/v1/constraints/:weekId ──────────────────────────────────────────
@@ -222,9 +213,7 @@ describe('PUT /api/v1/constraints/:weekId', () => {
   });
 
   it('401 — no token', async () => {
-    const res = await request(app)
-      .put(`/api/v1/constraints/${TEST_WEEK}`)
-      .send({ entries: [] });
+    const res = await request(app).put(`/api/v1/constraints/${TEST_WEEK}`).send({ entries: [] });
 
     expect(res.status).toBe(401);
   });
