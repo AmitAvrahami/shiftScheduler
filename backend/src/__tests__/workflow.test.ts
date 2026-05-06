@@ -37,7 +37,14 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  await mongoose.connection.dropDatabase();
+  const collections = mongoose.connection.collections;
+
+  await Promise.all(
+    Object.keys(collections).map(async (key) => {
+      await collections[key].deleteMany({});
+    })
+  );
+
   jest.restoreAllMocks();
 });
 
@@ -574,11 +581,15 @@ describe('assignment_override audit log', () => {
 
   it('4.2 — manager PATCHes manager-assigned → no assignment_override entry', async () => {
     const { assignment, managerToken } = await seedAssignmentFixture('manager');
+    expect(assignment.assignedBy).toBe('manager');
     await request(app)
       .patch(`/api/v1/assignments/${assignment._id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ status: 'confirmed' });
-    const log = await AuditLog.findOne({ action: 'assignment_override' });
+    const log = await AuditLog.findOne({
+      action: 'assignment_override',
+      refId: assignment._id,
+    });
     expect(log).toBeNull();
   });
 
