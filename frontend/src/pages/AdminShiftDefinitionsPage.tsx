@@ -217,7 +217,9 @@ export default function AdminShiftDefinitionsPage() {
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
                       required
                       value={form.durationMinutes}
-                      onChange={(e) => setForm({ ...form, durationMinutes: parseInt(e.target.value) })}
+                      onChange={(e) =>
+                        setForm({ ...form, durationMinutes: parseInt(e.target.value) })
+                      }
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
@@ -240,7 +242,9 @@ export default function AdminShiftDefinitionsPage() {
                       required
                       min="1"
                       value={form.requiredStaffCount}
-                      onChange={(e) => setForm({ ...form, requiredStaffCount: parseInt(e.target.value) })}
+                      onChange={(e) =>
+                        setForm({ ...form, requiredStaffCount: parseInt(e.target.value) })
+                      }
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">

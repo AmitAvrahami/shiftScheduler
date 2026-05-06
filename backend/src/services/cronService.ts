@@ -22,7 +22,10 @@ async function lockConstraintsForCurrentWeek(): Promise<void> {
   });
   if (alreadyLocked) return;
 
-  const result = await Constraint.updateMany({ weekId, isLocked: false }, { $set: { isLocked: true } });
+  const result = await Constraint.updateMany(
+    { weekId, isLocked: false },
+    { $set: { isLocked: true } }
+  );
 
   await SystemSettings.findOneAndUpdate(
     { key: 'workflow_state' },

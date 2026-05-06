@@ -38,10 +38,7 @@ export function useAdminDashboard(weekId: string) {
     loadDashboard();
   }, [loadDashboard]);
 
-  const refresh = useCallback(
-    () => loadDashboard({ silent: true }),
-    [loadDashboard]
-  );
+  const refresh = useCallback(() => loadDashboard({ silent: true }), [loadDashboard]);
 
   const initializeWeek = useCallback(async () => {
     try {

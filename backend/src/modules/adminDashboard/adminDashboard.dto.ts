@@ -33,7 +33,7 @@ export interface EmployeeDTO {
 
 export interface ShiftDTO {
   id: string;
-  day: string;              // YYYY-MM-DD local time
+  day: string; // YYYY-MM-DD local time
   type: ShiftTypeDTO;
   requiredEmployees: number;
   // TODO: add templateStatus once WeeklySchedule tracks per-template generation state
@@ -52,13 +52,13 @@ export interface MissingConstraintDTO {
 
 export interface KpisDTO {
   totalShifts: number;
-  filledShifts: number;          // shifts where actual assignments >= requiredEmployees
-  missingAssignments: number;    // sum of max(0, required - actual) per shift
+  filledShifts: number; // shifts where actual assignments >= requiredEmployees
+  missingAssignments: number; // sum of max(0, required - actual) per shift
   employeesMissingConstraints: number;
 }
 
 export interface ReadinessDTO {
-  canGenerate: boolean;          // true when state is 'constraints_locked' or 'draft'
+  canGenerate: boolean; // true when state is 'constraints_locked' or 'draft'
   hasMissingConstraints: boolean;
   hasNoEmployees: boolean;
   hasNoShifts: boolean;
@@ -107,7 +107,7 @@ export interface RawShiftDoc {
   scheduleId: Types.ObjectId;
   definitionId: Types.ObjectId;
   date: Date;
-  startTime: string;   // "HH:MM" — used for type derivation fallback
+  startTime: string; // "HH:MM" — used for type derivation fallback
   requiredCount: number;
   status: string;
 }
@@ -115,7 +115,7 @@ export interface RawShiftDoc {
 export interface RawShiftDefDoc {
   _id: Types.ObjectId;
   name: string;
-  startTime: string;   // "HH:MM"
+  startTime: string; // "HH:MM"
 }
 
 export interface RawAssignmentDoc {
@@ -142,6 +142,6 @@ export interface AdminDashboardRaw {
   shiftDefinitions: RawShiftDefDoc[];
   shifts: RawShiftDoc[];
   assignments: RawAssignmentDoc[];
-  constraintUserIds: string[];   // userIds who submitted constraints for this weekId
-  auditLogs: RawAuditLogDoc[];   // scoped to week date range; empty if none found
+  constraintUserIds: string[]; // userIds who submitted constraints for this weekId
+  auditLogs: RawAuditLogDoc[]; // scoped to week date range; empty if none found
 }

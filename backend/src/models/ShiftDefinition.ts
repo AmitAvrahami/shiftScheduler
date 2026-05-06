@@ -27,7 +27,9 @@ const shiftDefinitionSchema = new Schema<IShiftDefinition>(
       default: [0, 1, 2, 3, 4, 5, 6],
       validate: {
         validator(days: number[]): boolean {
-          return days.length > 0 && days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+          return (
+            days.length > 0 && days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+          );
         },
         message: 'daysOfWeek must contain day numbers between 0 and 6',
       },

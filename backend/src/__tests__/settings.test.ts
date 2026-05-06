@@ -26,26 +26,49 @@ afterEach(async () => {
 });
 
 function makeToken(user: { _id: unknown; email: string; role: string }): string {
-  return jwt.sign({ _id: String(user._id), email: user.email, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+  return jwt.sign(
+    { _id: String(user._id), email: user.email, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: '1h' }
+  );
 }
 
 async function seedAdmin() {
-  const admin = await User.create({ name: 'Admin', email: 'admin@test.com', password: 'pass12345', role: 'admin' });
+  const admin = await User.create({
+    name: 'Admin',
+    email: 'admin@test.com',
+    password: 'pass12345',
+    role: 'admin',
+  });
   return { admin, token: makeToken(admin) };
 }
 
 async function seedManager() {
-  const manager = await User.create({ name: 'Manager', email: 'manager@test.com', password: 'pass12345', role: 'manager' });
+  const manager = await User.create({
+    name: 'Manager',
+    email: 'manager@test.com',
+    password: 'pass12345',
+    role: 'manager',
+  });
   return { manager, token: makeToken(manager) };
 }
 
 async function seedEmployee() {
-  const employee = await User.create({ name: 'Employee', email: 'employee@test.com', password: 'pass12345', role: 'employee' });
+  const employee = await User.create({
+    name: 'Employee',
+    email: 'employee@test.com',
+    password: 'pass12345',
+    role: 'employee',
+  });
   return { employee, token: makeToken(employee) };
 }
 
 async function seedSetting() {
-  return SystemSettings.create({ key: 'constraint_deadline', value: 'Monday 23:59', description: 'Constraint submission deadline' });
+  return SystemSettings.create({
+    key: 'constraint_deadline',
+    value: 'Monday 23:59',
+    description: 'Constraint submission deadline',
+  });
 }
 
 describe('GET /api/v1/settings', () => {
@@ -72,14 +95,18 @@ describe('GET /api/v1/settings', () => {
 describe('GET /api/v1/settings/:key', () => {
   it('returns 404 for nonexistent key', async () => {
     const { token } = await seedManager();
-    const res = await request(app).get('/api/v1/settings/nonexistent_key').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/settings/nonexistent_key')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });
 
   it('manager can fetch by key', async () => {
     await seedSetting();
     const { token } = await seedManager();
-    const res = await request(app).get('/api/v1/settings/constraint_deadline').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/settings/constraint_deadline')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.setting.key).toBe('constraint_deadline');
   });
@@ -93,19 +120,28 @@ describe('PUT /api/v1/settings/:key', () => {
 
   it('returns 403 for employee', async () => {
     const { token } = await seedEmployee();
-    const res = await request(app).put('/api/v1/settings/max_shifts').set('Authorization', `Bearer ${token}`).send({ value: 5 });
+    const res = await request(app)
+      .put('/api/v1/settings/max_shifts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 5 });
     expect(res.status).toBe(403);
   });
 
   it('returns 403 for manager (admin only)', async () => {
     const { token } = await seedManager();
-    const res = await request(app).put('/api/v1/settings/max_shifts').set('Authorization', `Bearer ${token}`).send({ value: 5 });
+    const res = await request(app)
+      .put('/api/v1/settings/max_shifts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 5 });
     expect(res.status).toBe(403);
   });
 
   it('admin can create a new setting and audit log is created', async () => {
     const { token } = await seedAdmin();
-    const res = await request(app).put('/api/v1/settings/max_shifts').set('Authorization', `Bearer ${token}`).send({ value: 5, description: 'Max shifts per week' });
+    const res = await request(app)
+      .put('/api/v1/settings/max_shifts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 5, description: 'Max shifts per week' });
     expect(res.status).toBe(200);
     expect(res.body.setting.key).toBe('max_shifts');
     expect(res.body.setting.value).toBe(5);
@@ -116,7 +152,10 @@ describe('PUT /api/v1/settings/:key', () => {
   it('admin can update existing setting', async () => {
     await seedSetting();
     const { token } = await seedAdmin();
-    const res = await request(app).put('/api/v1/settings/constraint_deadline').set('Authorization', `Bearer ${token}`).send({ value: 'Sunday 20:00' });
+    const res = await request(app)
+      .put('/api/v1/settings/constraint_deadline')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'Sunday 20:00' });
     expect(res.status).toBe(200);
     expect(res.body.setting.value).toBe('Sunday 20:00');
   });
@@ -126,20 +165,26 @@ describe('DELETE /api/v1/settings/:key', () => {
   it('returns 403 for manager', async () => {
     await seedSetting();
     const { token } = await seedManager();
-    const res = await request(app).delete('/api/v1/settings/constraint_deadline').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete('/api/v1/settings/constraint_deadline')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns 404 for nonexistent key', async () => {
     const { token } = await seedAdmin();
-    const res = await request(app).delete('/api/v1/settings/nonexistent').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete('/api/v1/settings/nonexistent')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });
 
   it('admin can delete a setting and audit log is created', async () => {
     await seedSetting();
     const { token } = await seedAdmin();
-    const res = await request(app).delete('/api/v1/settings/constraint_deadline').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete('/api/v1/settings/constraint_deadline')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(await SystemSettings.findOne({ key: 'constraint_deadline' })).toBeNull();
     const log = await AuditLog.findOne({ action: 'setting_deleted' });

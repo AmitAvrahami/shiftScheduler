@@ -175,7 +175,9 @@ export const shiftDefinitionApi = {
     return request('/shift-definitions');
   },
 
-  create(body: Partial<ShiftDefinition>): Promise<{ success: boolean; definition: ShiftDefinition }> {
+  create(
+    body: Partial<ShiftDefinition>
+  ): Promise<{ success: boolean; definition: ShiftDefinition }> {
     return request('/shift-definitions', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -237,7 +239,12 @@ export const constraintApi = {
   getForUser(
     weekId: string,
     userId: string
-  ): Promise<{ success: boolean; constraint: Constraint | null; deadline: string; isLocked: boolean }> {
+  ): Promise<{
+    success: boolean;
+    constraint: Constraint | null;
+    deadline: string;
+    isLocked: boolean;
+  }> {
     return request(`/constraints/${weekId}/users/${userId}`);
   },
 
@@ -281,7 +288,10 @@ export const scheduleApi = {
     });
   },
 
-  update(id: string, status: 'open' | 'locked' | 'draft' | 'published' | 'archived'): Promise<{ success: boolean; schedule: Schedule }> {
+  update(
+    id: string,
+    status: 'open' | 'locked' | 'draft' | 'published' | 'archived'
+  ): Promise<{ success: boolean; schedule: Schedule }> {
     return request(`/schedules/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
@@ -355,7 +365,11 @@ export const auditLogApi = {
 export interface AdminDashboardData {
   users: {
     all: User[];
-    stats: { total: number; active: number; byRole: { employee: number; manager: number; admin: number } };
+    stats: {
+      total: number;
+      active: number;
+      byRole: { employee: number; manager: number; admin: number };
+    };
   };
   shiftDefinitions: ShiftDefinition[];
   currentWeek: {
@@ -363,7 +377,13 @@ export interface AdminDashboardData {
     schedule: Schedule | null;
     shifts: Shift[];
     assignments: Assignment[];
-    stats: { total: number; filled: number; partial: number; empty: number; scheduleStatus: string | null };
+    stats: {
+      total: number;
+      filled: number;
+      partial: number;
+      empty: number;
+      scheduleStatus: string | null;
+    };
   };
   nextWeek: {
     weekId: string;
@@ -380,14 +400,18 @@ export const adminApi = {
     ).then((res) => res.data);
   },
 
-  initialize(weekId: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
+  initialize(
+    weekId: string
+  ): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
     return request('/admin/weeks/initialize', {
       method: 'POST',
       body: JSON.stringify({ weekId, generatedBy: 'manual' }),
     });
   },
 
-  initializeFromTemplates(startOfWeek: string): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
+  initializeFromTemplates(
+    startOfWeek: string
+  ): Promise<{ success: boolean; schedule: Schedule; shiftCount: number }> {
     return request('/admin/weeks/initialize', {
       method: 'POST',
       body: JSON.stringify({ weekId: weekIdFromStartOfWeek(startOfWeek), generatedBy: 'manual' }),
@@ -401,7 +425,7 @@ function weekIdFromStartOfWeek(startOfWeek: string): string {
   const thursday = new Date(monday);
   thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
   const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil((((thursday.getTime() - jan1.getTime()) / 86_400_000) + 1) / 7);
+  const weekNum = Math.ceil(((thursday.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
 
   return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 }

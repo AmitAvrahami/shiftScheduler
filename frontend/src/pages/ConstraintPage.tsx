@@ -5,11 +5,7 @@ import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import ShiftCardConstraint from '../components/ShiftCardConstraint';
 import SuccessOverlay from '../components/SuccessOverlay';
-import {
-  getAllowedWeekId,
-  getWeekDates,
-  toDateKey,
-} from '../utils/weekUtils';
+import { getAllowedWeekId, getWeekDates, toDateKey } from '../utils/weekUtils';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -84,7 +80,9 @@ export default function ConstraintPage() {
         setIsLocked(constraintRes.isLocked);
         if (constraintRes.isLocked) {
           setLockReason(
-            constraintRes.weekStatus && constraintRes.weekStatus !== 'open' ? 'schedule' : 'deadline'
+            constraintRes.weekStatus && constraintRes.weekStatus !== 'open'
+              ? 'schedule'
+              : 'deadline'
           );
         } else {
           setLockReason(null);
@@ -127,7 +125,7 @@ export default function ConstraintPage() {
   function handleSubmit() {
     if (isLocked) return;
     setSaveStatus('saving');
-    
+
     const entries: ConstraintEntry[] = Object.entries(checked)
       .filter(([, val]) => val)
       .map(([key]) => {
@@ -156,10 +154,7 @@ export default function ConstraintPage() {
     : null;
 
   return (
-    <MainLayout
-      title="הגשת אילוצים שבועית"
-      subtitle="שבוע נוכחי"
-    >
+    <MainLayout title="הגשת אילוצים שבועית" subtitle="שבוע נוכחי">
       <div className="max-w-[1200px] mx-auto pb-12">
         {/* Deadline Banner */}
         {isLocked ? (
@@ -168,7 +163,9 @@ export default function ConstraintPage() {
             <div>
               <p className="font-semibold text-red-700">הגשת האילוצים נעולה</p>
               {lockReason === 'schedule' ? (
-                <p className="text-sm text-red-500">השבוע עבר לשלב הבא — לא ניתן עוד לשנות אילוצים</p>
+                <p className="text-sm text-red-500">
+                  השבוע עבר לשלב הבא — לא ניתן עוד לשנות אילוצים
+                </p>
               ) : (
                 formattedDeadline && (
                   <p className="text-sm text-red-500">הדדליין עבר: {formattedDeadline}</p>
@@ -191,8 +188,12 @@ export default function ConstraintPage() {
         {/* Header Section */}
         <div className="mb-xl flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <h2 className="text-2xl font-black text-on-surface mb-xs">בחר משמרות בהן לא תוכל לעבוד</h2>
-            <p className="text-on-surface-variant opacity-70">סמן את המשמרות שאינך יכול לעבוד בהן לשבוע הקרוב.</p>
+            <h2 className="text-2xl font-black text-on-surface mb-xs">
+              בחר משמרות בהן לא תוכל לעבוד
+            </h2>
+            <p className="text-on-surface-variant opacity-70">
+              סמן את המשמרות שאינך יכול לעבוד בהן לשבוע הקרוב.
+            </p>
           </div>
           <div className="flex gap-sm w-full md:w-auto">
             <button
@@ -237,11 +238,16 @@ export default function ConstraintPage() {
           {weekDates.map((date, dayIdx) => {
             const dateKey = toDateKey(date);
             return (
-              <div key={dateKey} className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg">
+              <div
+                key={dateKey}
+                className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg"
+              >
                 <div className="w-full md:w-32 shrink-0 border-b md:border-b-0 md:border-l border-outline-variant pb-md md:pb-0 md:pl-md">
                   <h3 className="text-lg font-black text-primary">{DAY_LABELS[dayIdx]}</h3>
                   <p className="text-xs text-on-surface-variant font-bold opacity-60">
-                    {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(date)}
+                    {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(
+                      date
+                    )}
                   </p>
                 </div>
                 <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">

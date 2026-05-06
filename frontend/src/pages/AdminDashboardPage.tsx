@@ -14,13 +14,14 @@ const IST_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 function getCurrentWeekId(): string {
   const nowIST = new Date(Date.now() + IST_OFFSET_MS);
-  const thursday = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()));
+  const thursday = new Date(
+    Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate())
+  );
   thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
   const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
   const weekNum = Math.ceil(((thursday.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
   return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 }
-
 
 function parseWeekNumber(weekId: string): number {
   return parseInt(weekId.split('-W')[1], 10);
@@ -43,12 +44,44 @@ interface ShiftDef {
 // TODO: future dynamic shift definitions should come from the ShiftDefinition API;
 //       remove this static list when the backend exposes shift metadata per week.
 const SHIFTS: ShiftDef[] = [
-  { id: 'morning',   label: 'בוקר',  start: '06:45', end: '14:45', color: '#f59e0b', dimBg: 'rgba(245,158,11,0.15)',  icon: 'wb_sunny'    },
-  { id: 'afternoon', label: 'אחה"צ', start: '14:45', end: '22:45', color: '#8b5cf6', dimBg: 'rgba(139,92,246,0.15)', icon: 'light_mode' },
-  { id: 'night',     label: 'לילה',  start: '22:45', end: '06:45', color: '#06b6d4', dimBg: 'rgba(6,182,212,0.15)',  icon: 'dark_mode'   },
+  {
+    id: 'morning',
+    label: 'בוקר',
+    start: '06:45',
+    end: '14:45',
+    color: '#f59e0b',
+    dimBg: 'rgba(245,158,11,0.15)',
+    icon: 'wb_sunny',
+  },
+  {
+    id: 'afternoon',
+    label: 'אחה"צ',
+    start: '14:45',
+    end: '22:45',
+    color: '#8b5cf6',
+    dimBg: 'rgba(139,92,246,0.15)',
+    icon: 'light_mode',
+  },
+  {
+    id: 'night',
+    label: 'לילה',
+    start: '22:45',
+    end: '06:45',
+    color: '#06b6d4',
+    dimBg: 'rgba(6,182,212,0.15)',
+    icon: 'dark_mode',
+  },
 ];
 
-const WEEK_DAY_KEYS: WeekDayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const WEEK_DAY_KEYS: WeekDayKey[] = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+];
 
 function getCurrentShiftIndex(now: Date): number {
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -96,10 +129,16 @@ function actionToType(action: string): AuditType {
 }
 
 const AUDIT_COLORS: Record<AuditType, string> = {
-  publish: '#10b981', override: '#f59e0b', user: '#3b82f6', edit: '#8b5cf6',
+  publish: '#10b981',
+  override: '#f59e0b',
+  user: '#3b82f6',
+  edit: '#8b5cf6',
 };
 const AUDIT_ICONS: Record<AuditType, string> = {
-  publish: 'check', override: 'warning', user: 'group', edit: 'settings',
+  publish: 'check',
+  override: 'warning',
+  user: 'group',
+  edit: 'settings',
 };
 
 // ─── Shift card ───────────────────────────────────────────────────────────────
@@ -130,8 +169,8 @@ function ShiftCard({
   type: 'prev' | 'current' | 'next';
 }) {
   const isCurrent = type === 'current';
-  const isPrev    = type === 'prev';
-  const isNext    = type === 'next';
+  const isPrev = type === 'prev';
+  const isNext = type === 'next';
 
   const emptySlotsCount = Math.max(0, requiredCount - staff.length);
   const timeLabel = `${shift.start} - ${shift.end}`;
@@ -140,7 +179,10 @@ function ShiftCard({
     return (
       <div
         className="text-white rounded-xl p-md flex flex-col gap-sm relative overflow-hidden h-full"
-        style={{ background: 'linear-gradient(135deg, #010636 0%, #2B358F 100%)', boxShadow: 'rgba(61, 83, 222, 0.35) 0px 8px 24px 0px' }}
+        style={{
+          background: 'linear-gradient(135deg, #010636 0%, #2B358F 100%)',
+          boxShadow: 'rgba(61, 83, 222, 0.35) 0px 8px 24px 0px',
+        }}
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
         <div className="flex justify-between items-center text-[10px] font-bold opacity-90 relative z-10">
@@ -158,17 +200,26 @@ function ShiftCard({
         <h3 className="text-lg font-bold text-white relative z-10">משמרת נוכחית</h3>
         <p className="text-sm opacity-90 relative z-10">{shift.label}</p>
         <div className="mt-auto pt-sm relative z-10 flex items-center justify-between">
-          <span className="text-xs font-medium">{staff.length}/{requiredCount} עובדים</span>
+          <span className="text-xs font-medium">
+            {staff.length}/{requiredCount} עובדים
+          </span>
           <div className="flex -space-x-1.5 space-x-reverse">
             {staff.map((s, i) => (
-              <div key={s.id} className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold" style={{ background: avatarBg(i) }}>
+              <div
+                key={s.id}
+                className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold"
+                style={{ background: avatarBg(i) }}
+              >
                 {avatarInitials(s.name)}
               </div>
             ))}
             {Array.from({ length: emptySlotsCount }).map((_, i) => (
-               <div key={i} className="w-5 h-5 rounded-full ring-1 ring-dashed ring-white/50 bg-white/5 flex items-center justify-center">
-                 <MaterialIcon name="add" className="text-[10px] text-white/50" />
-               </div>
+              <div
+                key={i}
+                className="w-5 h-5 rounded-full ring-1 ring-dashed ring-white/50 bg-white/5 flex items-center justify-center"
+              >
+                <MaterialIcon name="add" className="text-[10px] text-white/50" />
+              </div>
             ))}
           </div>
         </div>
@@ -180,7 +231,9 @@ function ShiftCard({
     <div
       className={`bg-white border border-[#e2e8f0] rounded-xl p-md flex flex-col gap-sm h-full ${isPrev ? 'opacity-70' : 'hover:shadow-md transition-shadow shadow-bezeq-card'}`}
     >
-      <div className={`flex justify-between items-center text-[10px] font-bold ${isNext ? 'text-[#056AE5]' : 'text-on-surface-variant'}`}>
+      <div
+        className={`flex justify-between items-center text-[10px] font-bold ${isNext ? 'text-[#056AE5]' : 'text-on-surface-variant'}`}
+      >
         <span style={{ direction: 'ltr' }}>{timeLabel}</span>
         <MaterialIcon name={isPrev ? 'history' : 'calendar_today'} className="text-[16px]" />
       </div>
@@ -224,7 +277,9 @@ function ShiftCard({
           )}
         </div>
         {isNext && staff.length < requiredCount && (
-          <span className="text-[10px] font-bold text-error bg-error-container text-on-error-container px-2 py-1 rounded">חסר עובד</span>
+          <span className="text-[10px] font-bold text-error bg-error-container text-on-error-container px-2 py-1 rounded">
+            חסר עובד
+          </span>
         )}
       </div>
     </div>
@@ -249,7 +304,7 @@ function ShiftOverview({
     return () => clearInterval(t);
   }, []);
 
-  const curIdx  = getCurrentShiftIndex(now);
+  const curIdx = getCurrentShiftIndex(now);
   const prevIdx = (curIdx + 2) % 3;
   const nextIdx = (curIdx + 1) % 3;
 
@@ -279,32 +334,51 @@ function ShiftOverview({
   }
 
   const prevData = getShiftData(prevIdx);
-  const curData  = getShiftData(curIdx);
+  const curData = getShiftData(curIdx);
   const nextData = getShiftData(nextIdx);
 
   return (
     <section className="flex flex-col gap-md">
-      <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">סטטוס משמרות</h2>
+      <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">
+        סטטוס משמרות
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-        <ShiftCard shift={SHIFTS[prevIdx]} instance={prevData.shift} staff={prevData.staff} requiredCount={prevData.requiredCount} type="prev" />
-        <ShiftCard shift={SHIFTS[curIdx]}  instance={curData.shift}  staff={curData.staff}  requiredCount={curData.requiredCount}  type="current" />
-        <ShiftCard shift={SHIFTS[nextIdx]} instance={nextData.shift} staff={nextData.staff} requiredCount={nextData.requiredCount} type="next" />
+        <ShiftCard
+          shift={SHIFTS[prevIdx]}
+          instance={prevData.shift}
+          staff={prevData.staff}
+          requiredCount={prevData.requiredCount}
+          type="prev"
+        />
+        <ShiftCard
+          shift={SHIFTS[curIdx]}
+          instance={curData.shift}
+          staff={curData.staff}
+          requiredCount={curData.requiredCount}
+          type="current"
+        />
+        <ShiftCard
+          shift={SHIFTS[nextIdx]}
+          instance={nextData.shift}
+          staff={nextData.staff}
+          requiredCount={nextData.requiredCount}
+          type="next"
+        />
       </div>
     </section>
   );
 }
 
-
 // ─── Missing constraints ──────────────────────────────────────────────────────
 
 function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintUser[] | null }) {
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const [reminded, setReminded]   = useState<string[]>([]);
-  const visible = (missingUsers ?? []).filter(u => !dismissed.includes(u.id));
+  const [reminded, setReminded] = useState<string[]>([]);
+  const visible = (missingUsers ?? []).filter((u) => !dismissed.includes(u.id));
 
   function handleRemind(id: string) {
-    setReminded(r => [...r, id]);
-    setTimeout(() => setReminded(r => r.filter(x => x !== id)), 2000);
+    setReminded((r) => [...r, id]);
+    setTimeout(() => setReminded((r) => r.filter((x) => x !== id)), 2000);
   }
 
   return (
@@ -315,14 +389,14 @@ function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintU
             אילוצים חסרים
           </h2>
           {visible.length > 0 && (
-            <span
-              className="flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold bg-error-container text-on-error-container animate-pulse"
-            >
+            <span className="flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold bg-error-container text-on-error-container animate-pulse">
               {visible.length}
             </span>
           )}
         </div>
-        <span className="text-[10px] text-on-surface-variant font-medium">דדליין: שני 23:59 IST</span>
+        <span className="text-[10px] text-on-surface-variant font-medium">
+          דדליין: שני 23:59 IST
+        </span>
       </div>
 
       <div className="flex-1">
@@ -336,7 +410,9 @@ function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintU
             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-50">
               <MaterialIcon name="check" className="text-green-600 text-[16px]" />
             </div>
-            <span className="text-xs text-on-surface-variant">כל הצוות הגיש אילוצים לשבוע הבא.</span>
+            <span className="text-xs text-on-surface-variant">
+              כל הצוות הגיש אילוצים לשבוע הבא.
+            </span>
           </div>
         ) : (
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
@@ -358,7 +434,9 @@ function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintU
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-on-surface font-semibold truncate">{u.name}</span>
+                      <span className="text-sm text-on-surface font-semibold truncate">
+                        {u.name}
+                      </span>
                       <MaterialIcon name="error" className="text-error text-[14px]" />
                     </div>
                     <span className="text-xs text-on-surface-variant">עובד</span>
@@ -375,7 +453,7 @@ function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintU
                       {reminded.includes(u.id) ? 'נשלח!' : 'תזכורת'}
                     </button>
                     <button
-                      onClick={() => setDismissed(d => [...d, u.id])}
+                      onClick={() => setDismissed((d) => [...d, u.id])}
                       className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-surface-container text-on-surface-variant"
                     >
                       <MaterialIcon name="close" className="text-[16px]" />
@@ -405,9 +483,9 @@ function BroadcastCenter({
   recipientCount: number;
   onToast: (t: Toast) => void;
 }) {
-  const [msg, setMsg]           = useState('');
+  const [msg, setMsg] = useState('');
   const [broadcastId, setBroadcastId] = useState<string | null>(null);
-  const [recipients, setRecipients]   = useState<BroadcastRecipient[]>([]);
+  const [recipients, setRecipients] = useState<BroadcastRecipient[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -435,7 +513,10 @@ function BroadcastCenter({
       onToast({ message: 'הודעה הופצה לכל הצוות', type: 'success' });
       setMsg('');
     } catch (err) {
-      onToast({ message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה', type: 'error' });
+      onToast({
+        message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה',
+        type: 'error',
+      });
     }
   }
 
@@ -445,7 +526,7 @@ function BroadcastCenter({
     setRecipients([]);
   }
 
-  const readCount = recipients.filter(r => r.isRead).length;
+  const readCount = recipients.filter((r) => r.isRead).length;
 
   return (
     <section className="flex flex-col h-full">
@@ -469,7 +550,7 @@ function BroadcastCenter({
 
             <textarea
               value={msg}
-              onChange={e => setMsg(e.target.value)}
+              onChange={(e) => setMsg(e.target.value)}
               placeholder="הכנס עדכונים חשובים, הודעות ביקורת, או הוראות כלליות לכל הצוות..."
               className="w-full flex-1 min-h-[120px] rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[rgba(43,53,143,0.1)] focus:border-[#2B358F] transition-all bg-white border border-[#e2e8f0] text-on-surface"
               style={{ direction: 'rtl' }}
@@ -483,7 +564,9 @@ function BroadcastCenter({
                 onClick={handleSend}
                 disabled={!msg.trim()}
                 className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm ${
-                  msg.trim() ? 'bg-[#056AE5] text-white hover:bg-[#0457B8] hover:shadow-md' : 'bg-surface-container text-on-surface-variant/40 cursor-not-allowed'
+                  msg.trim()
+                    ? 'bg-[#056AE5] text-white hover:bg-[#0457B8] hover:shadow-md'
+                    : 'bg-surface-container text-on-surface-variant/40 cursor-not-allowed'
                 }`}
               >
                 <MaterialIcon name="send" className="text-[14px]" />
@@ -526,10 +609,15 @@ function BroadcastCenter({
                     {avatarInitials(r.name)}
                   </div>
                   <span className="flex-1 text-sm font-medium text-on-surface">{r.name}</span>
-                  {r.isRead
-                    ? <div className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-100"><MaterialIcon name="check" className="text-[10px]" /> נקרא</div>
-                    : <div className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant opacity-60 bg-surface-container px-2 py-0.5 rounded border border-outline-variant/20"><MaterialIcon name="schedule" className="text-[10px]" /> ממתין</div>
-                  }
+                  {r.isRead ? (
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-100">
+                      <MaterialIcon name="check" className="text-[10px]" /> נקרא
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant opacity-60 bg-surface-container px-2 py-0.5 rounded border border-outline-variant/20">
+                      <MaterialIcon name="schedule" className="text-[10px]" /> ממתין
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -565,19 +653,31 @@ function GeneratedSchedulePanel({
   if (!result) return null;
 
   const statusColor =
-    result.status === 'OPTIMAL'  ? '#10b981' :
-    result.status === 'FEASIBLE' ? '#f59e0b' :
-    result.status === 'RELAXED'  ? '#f97316' : '#ef4444';
+    result.status === 'OPTIMAL'
+      ? '#10b981'
+      : result.status === 'FEASIBLE'
+        ? '#f59e0b'
+        : result.status === 'RELAXED'
+          ? '#f97316'
+          : '#ef4444';
 
   const statusBg =
-    result.status === 'OPTIMAL'  ? 'rgba(16,185,129,0.1)' :
-    result.status === 'FEASIBLE' ? 'rgba(245,158,11,0.1)' :
-    result.status === 'RELAXED'  ? 'rgba(249,115,22,0.1)' : 'rgba(239,68,68,0.1)';
+    result.status === 'OPTIMAL'
+      ? 'rgba(16,185,129,0.1)'
+      : result.status === 'FEASIBLE'
+        ? 'rgba(245,158,11,0.1)'
+        : result.status === 'RELAXED'
+          ? 'rgba(249,115,22,0.1)'
+          : 'rgba(239,68,68,0.1)';
 
   const statusLabel =
-    result.status === 'OPTIMAL'  ? 'אופטימלי' :
-    result.status === 'FEASIBLE' ? 'ישים' :
-    result.status === 'RELAXED'  ? 'מרופה' : result.status;
+    result.status === 'OPTIMAL'
+      ? 'אופטימלי'
+      : result.status === 'FEASIBLE'
+        ? 'ישים'
+        : result.status === 'RELAXED'
+          ? 'מרופה'
+          : result.status;
 
   return (
     <div
@@ -586,7 +686,10 @@ function GeneratedSchedulePanel({
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: statusBg }}>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: statusBg }}
+          >
             <MaterialIcon name="bolt" className="text-[16px]" style={{ color: statusColor }} />
           </div>
           <span className="text-sm font-bold text-slate-800">תוצאות הפקת לוח שיבוץ</span>
@@ -597,7 +700,10 @@ function GeneratedSchedulePanel({
             {statusLabel}
           </span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 hover:bg-slate-100 p-1.5 rounded-md">
+        <button
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 hover:bg-slate-100 p-1.5 rounded-md"
+        >
           <MaterialIcon name="close" className="text-[16px]" />
         </button>
       </div>
@@ -616,7 +722,10 @@ function GeneratedSchedulePanel({
           <div className="text-xs text-slate-500 font-medium">זמן פתרון</div>
         </div>
         <div className="rounded-xl p-3 border border-slate-100 bg-slate-50">
-          <div className="text-xl font-bold mb-0.5" style={{ color: result.warnings.length ? '#f59e0b' : '#10b981' }}>
+          <div
+            className="text-xl font-bold mb-0.5"
+            style={{ color: result.warnings.length ? '#f59e0b' : '#10b981' }}
+          >
             {result.warnings.length}
           </div>
           <div className="text-xs text-slate-500 font-medium">אזהרות</div>
@@ -686,17 +795,48 @@ function QuickActions({
       await onRefresh();
       onToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
     } catch (err) {
-      onToast({ message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ', type: 'error' });
+      onToast({
+        message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ',
+        type: 'error',
+      });
     } finally {
       setGenerating(false);
     }
   }
 
   const actions = [
-    { id: 'generate',  label: 'ייצור סידור עבודה', icon: 'bolt', onClick: handleGenerate, subtitle: 'אוטומציה מלאה',   isPrimary: true  },
-    { id: 'view_week', label: 'צפייה בסידור השבועי', icon: 'calendar_view_week', onClick: () => navigate(`/schedules/${weekId}`), subtitle: 'לוח שיבוץ מלא', isPrimary: false },
-    { id: 'leaves',    label: 'אישור חופשות',       icon: 'check',    onClick: () => onToast({ message: 'אישור חופשות (בקרוב)', type: 'info' }), subtitle: 'ניהול היעדרויות', isPrimary: false },
-    { id: 'emergency', label: 'משמרת חירום',        icon: 'warning',    onClick: () => onToast({ message: 'הוספת משמרת חירום (בקרוב)', type: 'info' }), subtitle: 'שיבוץ דחוף',       isPrimary: false },
+    {
+      id: 'generate',
+      label: 'ייצור סידור עבודה',
+      icon: 'bolt',
+      onClick: handleGenerate,
+      subtitle: 'אוטומציה מלאה',
+      isPrimary: true,
+    },
+    {
+      id: 'view_week',
+      label: 'צפייה בסידור השבועי',
+      icon: 'calendar_view_week',
+      onClick: () => navigate(`/schedules/${weekId}`),
+      subtitle: 'לוח שיבוץ מלא',
+      isPrimary: false,
+    },
+    {
+      id: 'leaves',
+      label: 'אישור חופשות',
+      icon: 'check',
+      onClick: () => onToast({ message: 'אישור חופשות (בקרוב)', type: 'info' }),
+      subtitle: 'ניהול היעדרויות',
+      isPrimary: false,
+    },
+    {
+      id: 'emergency',
+      label: 'משמרת חירום',
+      icon: 'warning',
+      onClick: () => onToast({ message: 'הוספת משמרת חירום (בקרוב)', type: 'info' }),
+      subtitle: 'שיבוץ דחוף',
+      isPrimary: false,
+    },
   ];
 
   return (
@@ -709,10 +849,10 @@ function QuickActions({
 
       <div className="bg-white border border-[#e2e8f0] rounded-lg p-md shadow-bezeq-card">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {actions.map(a => {
-            const isGenerate  = a.id === 'generate';
+          {actions.map((a) => {
+            const isGenerate = a.id === 'generate';
             const isEmergency = a.id === 'emergency';
-            const isLoading   = isGenerate && generating;
+            const isLoading = isGenerate && generating;
 
             return (
               <button
@@ -723,19 +863,21 @@ function QuickActions({
                   isLoading
                     ? 'bg-[#056AE5]/80 text-white border-transparent cursor-wait'
                     : isGenerate
-                    ? 'bg-[#056AE5] text-white border-transparent hover:bg-[#0457B8] shadow-md'
-                    : isEmergency
-                    ? 'bg-white text-error border-error/40 hover:bg-error/5 hover:border-error'
-                    : 'bg-white text-[#2B358F] border-[#e2e8f0] hover:bg-[#F1F8FF] hover:border-[#056AE5]'
+                      ? 'bg-[#056AE5] text-white border-transparent hover:bg-[#0457B8] shadow-md'
+                      : isEmergency
+                        ? 'bg-white text-error border-error/40 hover:bg-error/5 hover:border-error'
+                        : 'bg-white text-[#2B358F] border-[#e2e8f0] hover:bg-[#F1F8FF] hover:border-[#056AE5]'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  isLoading || isGenerate
-                    ? 'bg-white/20 text-white'
-                    : isEmergency
-                    ? 'bg-error/10 text-error'
-                    : 'bg-[#056AE5]/10 text-[#056AE5]'
-                }`}>
+                <div
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    isLoading || isGenerate
+                      ? 'bg-white/20 text-white'
+                      : isEmergency
+                        ? 'bg-error/10 text-error'
+                        : 'bg-[#056AE5]/10 text-[#056AE5]'
+                  }`}
+                >
                   {isLoading ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
@@ -746,7 +888,9 @@ function QuickActions({
                   <span className="text-sm font-bold whitespace-nowrap">
                     {isLoading ? 'מעבד...' : a.label}
                   </span>
-                  <span className={`text-[10px] font-medium opacity-70 ${isGenerate && !isLoading ? 'text-white' : 'text-on-surface-variant'}`}>
+                  <span
+                    className={`text-[10px] font-medium opacity-70 ${isGenerate && !isLoading ? 'text-white' : 'text-on-surface-variant'}`}
+                  >
                     {a.subtitle}
                   </span>
                 </div>
@@ -770,7 +914,9 @@ function AuditLogWidget({ logs }: { logs: DashboardAuditLog[] | null }) {
         <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">
           פעילות אחרונה
         </h2>
-        <button className="text-[12px] text-secondary hover:underline font-bold transition-colors">צפה בהכל</button>
+        <button className="text-[12px] text-secondary hover:underline font-bold transition-colors">
+          צפה בהכל
+        </button>
       </div>
 
       <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-bezeq-card">
@@ -788,14 +934,17 @@ function AuditLogWidget({ logs }: { logs: DashboardAuditLog[] | null }) {
             </div>
           ))
         ) : logs.length === 0 ? (
-          <div className="px-md py-lg text-sm text-center text-on-surface-variant">אין פעילות עדיין</div>
+          <div className="px-md py-lg text-sm text-center text-on-surface-variant">
+            אין פעילות עדיין
+          </div>
         ) : (
           logs.map((entry, i) => {
             const type = actionToType(entry.action);
             const label = ACTION_LABELS[entry.action] ?? entry.action;
             const performer = 'מערכת';
             const timeStr = new Date(entry.createdAt).toLocaleTimeString('he-IL', {
-              hour: '2-digit', minute: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
             });
             return (
               <div
@@ -804,15 +953,26 @@ function AuditLogWidget({ logs }: { logs: DashboardAuditLog[] | null }) {
               >
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${AUDIT_COLORS[type]}15`, border: `1px solid ${AUDIT_COLORS[type]}30` }}
+                  style={{
+                    background: `${AUDIT_COLORS[type]}15`,
+                    border: `1px solid ${AUDIT_COLORS[type]}30`,
+                  }}
                 >
-                  <MaterialIcon name={AUDIT_ICONS[type]} className="text-[14px]" style={{ color: AUDIT_COLORS[type] }} />
+                  <MaterialIcon
+                    name={AUDIT_ICONS[type]}
+                    className="text-[14px]"
+                    style={{ color: AUDIT_COLORS[type] }}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate text-on-surface">{label}</div>
-                  <div className="text-[10px] truncate text-on-surface-variant opacity-70">{performer}</div>
+                  <div className="text-[10px] truncate text-on-surface-variant opacity-70">
+                    {performer}
+                  </div>
                 </div>
-                <span className="text-[10px] font-medium flex-shrink-0 text-on-surface-variant">{timeStr}</span>
+                <span className="text-[10px] font-medium flex-shrink-0 text-on-surface-variant">
+                  {timeStr}
+                </span>
               </div>
             );
           })
@@ -842,17 +1002,21 @@ function SidebarStats({
   stats: ScheduleStats | null;
 }) {
   const STATS = [
-    { label: 'סה״כ משמרות', value: stats ? String(stats.total)   : '-', color: '#056AE5' },
-    { label: 'מלאות',        value: stats ? String(stats.filled)  : '-', color: '#10b981' },
-    { label: 'חלקיות',       value: stats ? String(stats.partial) : '-', color: '#f59e0b' },
-    { label: 'ריקות',        value: stats ? String(stats.empty)   : '-', color: '#ef4444' },
+    { label: 'סה״כ משמרות', value: stats ? String(stats.total) : '-', color: '#056AE5' },
+    { label: 'מלאות', value: stats ? String(stats.filled) : '-', color: '#10b981' },
+    { label: 'חלקיות', value: stats ? String(stats.partial) : '-', color: '#f59e0b' },
+    { label: 'ריקות', value: stats ? String(stats.empty) : '-', color: '#ef4444' },
   ];
 
   const weekNum = parseWeekNumber(weekId);
   const scheduleStatusLabel =
-    stats?.scheduleStatus === 'published' ? 'פורסם' :
-    stats?.scheduleStatus === 'draft'     ? 'טיוטה' :
-    stats?.scheduleStatus === 'archived'  ? 'ארכיון' : 'לא נוצר';
+    stats?.scheduleStatus === 'published'
+      ? 'פורסם'
+      : stats?.scheduleStatus === 'draft'
+        ? 'טיוטה'
+        : stats?.scheduleStatus === 'archived'
+          ? 'ארכיון'
+          : 'לא נוצר';
   const scheduleStatusOk = stats?.scheduleStatus === 'published';
 
   return (
@@ -865,9 +1029,11 @@ function SidebarStats({
           <MaterialIcon name="calendar_today" className="text-[13px] text-slate-700" />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          {STATS.map(s => (
+          {STATS.map((s) => (
             <div key={s.label} className="rounded-xl p-3 bg-slate-50 border border-slate-100">
-              <div className="text-xl font-bold mb-0.5" style={{ color: s.color }}>{s.value}</div>
+              <div className="text-xl font-bold mb-0.5" style={{ color: s.color }}>
+                {s.value}
+              </div>
               <div className="text-[10px] text-slate-600 font-medium">{s.label}</div>
             </div>
           ))}
@@ -883,17 +1049,19 @@ function SidebarStats({
         </div>
         <div className="space-y-2">
           {[
-            { label: 'מנוע CSP',    status: 'פעיל',              ok: true              },
-            { label: 'לוח שיבוץ',  status: scheduleStatusLabel,  ok: scheduleStatusOk  },
-            { label: 'עובדים',      status: `${totalUsers} פעילים`, ok: true            },
-            { label: 'שבוע',        status: `שבוע ${weekNum}`,    ok: null              },
-            { label: 'דדליין',      status: 'שני 23:59',          ok: null              },
-          ].map(item => (
+            { label: 'מנוע CSP', status: 'פעיל', ok: true },
+            { label: 'לוח שיבוץ', status: scheduleStatusLabel, ok: scheduleStatusOk },
+            { label: 'עובדים', status: `${totalUsers} פעילים`, ok: true },
+            { label: 'שבוע', status: `שבוע ${weekNum}`, ok: null },
+            { label: 'דדליין', status: 'שני 23:59', ok: null },
+          ].map((item) => (
             <div key={item.label} className="flex items-center justify-between">
               <span className="text-xs text-slate-500">{item.label}</span>
               <span
                 className="text-xs font-bold"
-                style={{ color: item.ok === true ? '#056AE5' : item.ok === false ? '#f87171' : '#94a3b8' }}
+                style={{
+                  color: item.ok === true ? '#056AE5' : item.ok === false ? '#f87171' : '#94a3b8',
+                }}
               >
                 {item.status}
               </span>
@@ -908,7 +1076,10 @@ function SidebarStats({
 function getScheduleStats(dashboard: AdminDashboardDTO): ScheduleStats {
   const assignmentsByShiftId = new Map<string, number>();
   dashboard.assignments.forEach((assignment) => {
-    assignmentsByShiftId.set(assignment.shiftId, (assignmentsByShiftId.get(assignment.shiftId) ?? 0) + 1);
+    assignmentsByShiftId.set(
+      assignment.shiftId,
+      (assignmentsByShiftId.get(assignment.shiftId) ?? 0) + 1
+    );
   });
 
   let partial = 0;
@@ -936,23 +1107,25 @@ function getScheduleStats(dashboard: AdminDashboardDTO): ScheduleStats {
 
 export default function AdminDashboardPage() {
   const { weekId: paramWeekId } = useParams<{ weekId: string }>();
-  const [toast, setToast]                           = useState<Toast | null>(null);
-  const [generateResult, setGenerateResult]         = useState<GenerateResult | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
 
-  const weekId    = paramWeekId || getCurrentWeekId();
+  const weekId = paramWeekId || getCurrentWeekId();
   const { dashboard, loading, error, refresh } = useAdminDashboard(weekId);
-  const employees = (dashboard?.employees ?? []).filter(u => u.isActive);
+  const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
   return (
-    <MainLayout
-      title="דאשבורד מנהל"
-      subtitle={`שבוע ${parseWeekNumber(weekId)}`}
-    >
+    <MainLayout title="דאשבורד מנהל" subtitle={`שבוע ${parseWeekNumber(weekId)}`}>
       <div className="space-y-6">
         {/* Quick Actions at the top */}
-        <QuickActions weekId={weekId} onToast={setToast} onGenerateResult={setGenerateResult} onRefresh={refresh} />
-        
+        <QuickActions
+          weekId={weekId}
+          onToast={setToast}
+          onGenerateResult={setGenerateResult}
+          onRefresh={refresh}
+        />
+
         {generateResult && (
           <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
         )}
@@ -978,11 +1151,11 @@ export default function AdminDashboardPage() {
               assignments={dashboard?.assignments ?? []}
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
-                <MissingConstraints missingUsers={dashboard?.missingConstraints ?? null} />
+              <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
+              <MissingConstraints missingUsers={dashboard?.missingConstraints ?? null} />
             </div>
           </div>
-          
+
           {/* Side content column */}
           <div className="xl:col-span-1 space-y-6">
             <SidebarStats weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
@@ -995,12 +1168,18 @@ export default function AdminDashboardPage() {
       {toast && (
         <div
           className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-bold shadow-lg flex items-center gap-2 transition-all ${
-            toast.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
-            toast.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-            'bg-blue-50 text-blue-700 border border-blue-200'
+            toast.type === 'success'
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : toast.type === 'error'
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-blue-50 text-blue-700 border border-blue-200'
           }`}
         >
-          <MaterialIcon name={toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'} />
+          <MaterialIcon
+            name={
+              toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'
+            }
+          />
           {toast.message}
           <button onClick={() => setToast(null)} className="ml-2 opacity-50 hover:opacity-100">
             <MaterialIcon name="close" className="text-[16px]" />

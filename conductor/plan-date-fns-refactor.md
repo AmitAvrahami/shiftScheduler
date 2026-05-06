@@ -1,15 +1,18 @@
 # Implementation Plan: Date Calculations Refactoring
 
 ## Objective
+
 Refactor the backend date calculation logic to use the `date-fns` and `date-fns-tz` libraries. This ensures that the automatic shift generation and schedule boundary calculations correctly handle Daylight Saving Time (DST) and month boundaries, replacing brittle string manipulation and fixed millisecond offsets.
 
 ## Key Files & Context
+
 - `backend/package.json`: Needs new dependencies.
 - `backend/src/services/shiftGenerationService.ts`: Contains custom date math (`normalizeWeekStart`, `addDays`, `buildDateTime`) that runs when a manager initializes a schedule.
 - `backend/src/utils/weekUtils.ts`: Contains fixed offset math (`IST_OFFSET_MS`, `DAY_MS`) and week boundary calculations.
 
 ## Implementation Steps
-1. **Dependencies**: 
+
+1. **Dependencies**:
    - Install `date-fns` and `date-fns-tz` in the `backend` workspace.
 2. **Refactor `shiftGenerationService.ts`**:
    - Replace `normalizeWeekStart` with `startOfWeek` from `date-fns` (configured for Sunday).
@@ -24,5 +27,6 @@ Refactor the backend date calculation logic to use the `date-fns` and `date-fns-
    - Remove unused manual offset constants.
 
 ## Verification & Testing
+
 - Run existing test suites (`npm run test`) to ensure schedule generation and week calculations pass.
 - Manually create a new schedule arrangement via the backend or CLI testing script and inspect the database to verify that the shifts are initialized empty and their `startsAt` / `endsAt` boundaries perfectly align with the `ShiftDefinition` times.

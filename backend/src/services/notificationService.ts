@@ -2,7 +2,13 @@ import mongoose from 'mongoose';
 import Notification from '../models/Notification';
 import User from '../models/User';
 
-export async function broadcastToEmployees(title: string, body: string, type: 'announcement' | 'system_announcement' = 'announcement', refId?: mongoose.Types.ObjectId, refModel?: string) {
+export async function broadcastToEmployees(
+  title: string,
+  body: string,
+  type: 'announcement' | 'system_announcement' = 'announcement',
+  refId?: mongoose.Types.ObjectId,
+  refModel?: string
+) {
   const employees = await User.find({ isActive: true, role: 'employee' }, '_id').lean();
   const targets = employees.map((u) => String(u._id));
 

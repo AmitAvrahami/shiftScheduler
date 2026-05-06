@@ -51,7 +51,7 @@ export function ScheduleBoard({
             <div className="border-l border-slate-200 px-3 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
               משמרת
             </div>
-            {WEEK_DAYS_ORDER.map(day => (
+            {WEEK_DAYS_ORDER.map((day) => (
               <div
                 key={day}
                 className="border-l border-slate-200 px-3 py-3 text-center text-sm font-bold text-slate-800"
@@ -61,21 +61,22 @@ export function ScheduleBoard({
             ))}
           </div>
 
-          {SHIFT_TYPES_ORDER.map(shiftType => (
+          {SHIFT_TYPES_ORDER.map((shiftType) => (
             <div
               key={shiftType}
               className="grid grid-cols-[120px_repeat(7,minmax(132px,1fr))] border-b border-slate-100 last:border-b-0"
             >
               <ShiftRowHeader shiftType={shiftType} />
-              {WEEK_DAYS_ORDER.map(day => {
+              {WEEK_DAYS_ORDER.map((day) => {
                 const shift = getShiftForDayAndType(shiftsByDay, day, shiftType);
-                const shiftAssignments = shift
-                  ? getAssignmentsForShift(assignments, shift.id)
-                  : [];
+                const shiftAssignments = shift ? getAssignmentsForShift(assignments, shift.id) : [];
                 const assignedEmployees = getEmployeesForAssignments(employees, shiftAssignments);
 
                 return (
-                  <div key={`${day}-${shiftType}`} className="border-l border-slate-100 p-2 align-top">
+                  <div
+                    key={`${day}-${shiftType}`}
+                    className="border-l border-slate-100 p-2 align-top"
+                  >
                     <ShiftCell
                       shift={shift}
                       assignments={shiftAssignments}
@@ -110,7 +111,7 @@ function ShiftRowHeader({ shiftType }: { shiftType: OrderedShiftType }) {
 function getShiftForDayAndType(
   shiftsByDay: Record<WeekDayKey, AdminDashboardShift[]>,
   day: WeekDayKey,
-  shiftType: OrderedShiftType,
+  shiftType: OrderedShiftType
 ): AdminDashboardShift | undefined {
-  return shiftsByDay[day].find(shift => shift.type === shiftType);
+  return shiftsByDay[day].find((shift) => shift.type === shiftType);
 }

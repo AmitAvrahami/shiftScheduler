@@ -6,7 +6,7 @@ interface SuccessOverlayProps {
 
 export default function SuccessOverlay({ onClose }: SuccessOverlayProps) {
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-white/90 backdrop-blur-[2px] animate-in fade-in duration-300"
       dir="rtl"
     >

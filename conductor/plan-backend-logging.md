@@ -13,6 +13,7 @@
 ### Task 1: Update adminController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/adminController.ts`
 
 - [ ] **Step 1: Apply logging pattern to adminController.ts**
@@ -21,6 +22,7 @@
 ### Task 2: Update assignmentController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/assignmentController.ts`
 
 - [ ] **Step 1: Apply logging pattern to assignmentController.ts**
@@ -29,6 +31,7 @@
 ### Task 3: Update auditLogController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/auditLogController.ts`
 
 - [ ] **Step 1: Apply logging pattern to auditLogController.ts**
@@ -37,6 +40,7 @@
 ### Task 4: Update authController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/authController.ts`
 
 - [ ] **Step 1: Apply logging pattern to authController.ts**
@@ -45,6 +49,7 @@
 ### Task 5: Update constraintController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/constraintController.ts`
 
 - [ ] **Step 1: Apply logging pattern to constraintController.ts**
@@ -53,6 +58,7 @@
 ### Task 6: Update constraintExceptionController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/constraintExceptionController.ts`
 
 - [ ] **Step 1: Apply logging pattern to constraintExceptionController.ts**
@@ -61,6 +67,7 @@
 ### Task 7: Update notificationController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/notificationController.ts`
 
 - [ ] **Step 1: Apply logging pattern to notificationController.ts**
@@ -69,6 +76,7 @@
 ### Task 8: Update settingsController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/settingsController.ts`
 
 - [ ] **Step 1: Apply logging pattern to settingsController.ts**
@@ -77,6 +85,7 @@
 ### Task 9: Update shiftDefinitionController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/shiftDefinitionController.ts`
 
 - [ ] **Step 1: Apply logging pattern to shiftDefinitionController.ts**
@@ -85,6 +94,7 @@
 ### Task 10: Update swapRequestController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/swapRequestController.ts`
 
 - [ ] **Step 1: Apply logging pattern to swapRequestController.ts**
@@ -93,6 +103,7 @@
 ### Task 11: Update userController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/userController.ts`
 
 - [ ] **Step 1: Apply logging pattern to userController.ts**
@@ -101,6 +112,7 @@
 ### Task 12: Update workflowController.ts
 
 **Files:**
+
 - Modify: `backend/src/controllers/workflowController.ts`
 
 - [ ] **Step 1: Apply logging pattern to workflowController.ts**
@@ -109,4 +121,4 @@
 ### Task 13: Final Verification
 
 - [ ] **Step 1: Run backend build to ensure no regressions**
-Run: `cd backend && npm run build`
+      Run: `cd backend && npm run build`
