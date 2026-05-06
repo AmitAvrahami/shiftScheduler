@@ -1,11 +1,4 @@
-import { 
-  addDays, 
-  subDays, 
-  addWeeks, 
-  format, 
-  getISOWeek, 
-  getISOWeekYear
-} from 'date-fns';
+import { addDays, subDays, addWeeks, format, getISOWeek, getISOWeekYear } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 const TIMEZONE = 'Asia/Jerusalem';
@@ -21,12 +14,12 @@ function getISOWeekMondayUTC(year: number, week: number): Date {
   // Jan 4 is always in ISO week 1
   const jan4 = new Date(Date.UTC(year, 0, 4));
   const jan4DayOfWeek = jan4.getUTCDay() || 7; // ISO: Mon=1 … Sun=7
-  
+
   // Use UTC-safe logic
   const week1Monday = new Date(jan4.getTime());
   week1Monday.setUTCDate(jan4.getUTCDate() - (jan4DayOfWeek - 1));
   week1Monday.setUTCHours(0, 0, 0, 0);
-  
+
   return addWeeks(week1Monday, week - 1);
 }
 
@@ -36,11 +29,11 @@ function getISOWeekMondayUTC(year: number, week: number): Date {
 export function getConstraintDeadline(weekId: string): Date {
   const { year, week } = parseWeekId(weekId);
   const mondayUTC = getISOWeekMondayUTC(year, week);
-  
+
   // Format the date in the target timezone to get the correct YYYY-MM-DD
   const mondayZoned = toZonedTime(mondayUTC, TIMEZONE);
   const dateStr = format(mondayZoned, 'yyyy-MM-dd');
-  
+
   // Construct the deadline at 23:59:59.999 in that timezone
   return fromZonedTime(`${dateStr} 23:59:59.999`, TIMEZONE);
 }
@@ -92,10 +85,10 @@ export function getNextWeekId(weekId: string): string {
   const { year, week } = parseWeekId(weekId);
   const monday = getISOWeekMondayUTC(year, week);
   const nextMonday = addWeeks(monday, 1);
-  
+
   const weekNum = getISOWeek(nextMonday);
   const weekYear = getISOWeekYear(nextMonday);
-  
+
   return `${weekYear}-W${String(weekNum).padStart(2, '0')}`;
 }
 

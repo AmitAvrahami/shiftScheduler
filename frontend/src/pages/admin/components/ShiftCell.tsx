@@ -61,7 +61,9 @@ export function ShiftCell({
             <div className="text-sm font-bold text-slate-600">{shiftLabel}</div>
             <div className="mt-1 text-xs text-slate-400">לא הוגדרה משמרת</div>
           </div>
-          <span className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES.unknown}`}>
+          <span
+            className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES.unknown}`}
+          >
             חסר
           </span>
         </div>
@@ -93,15 +95,17 @@ export function ShiftCell({
             {assignedCount}/{requiredCount} משובצים
           </div>
         </div>
-        <span className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES[status]}`}>
+        <span
+          className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES[status]}`}
+        >
           {getStatusLabel(status)}
         </span>
       </div>
 
       <div className="mt-3 space-y-2">
         {employees.length > 0 ? (
-          employees.map(employee => {
-            const assignment = assignments.find(item => item.employeeId === employee.id);
+          employees.map((employee) => {
+            const assignment = assignments.find((item) => item.employeeId === employee.id);
 
             return (
               <div

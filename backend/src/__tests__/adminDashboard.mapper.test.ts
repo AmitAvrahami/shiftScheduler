@@ -91,7 +91,7 @@ describe('toAdminDashboardDTO', () => {
         shifts: [],
         assignments: [],
         auditLogs: [],
-      }),
+      })
     );
 
     expect(dto.scheduleId).toBeNull();
@@ -113,7 +113,7 @@ describe('toAdminDashboardDTO', () => {
         kpis: expect.any(Object),
         readiness: expect.any(Object),
         auditLogs: expect.any(Array),
-      }),
+      })
     );
   });
 

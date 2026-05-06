@@ -323,11 +323,17 @@ function CreateModal({
       }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.code === 'ERR_NO_SHIFT_TEMPLATES') {
-        showToast("It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.", 'error');
+        showToast(
+          "It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.",
+          'error'
+        );
         navigate('/admin/shift-definitions');
         return;
       }
-      if (err instanceof Error && (err.message.includes('409') || err.message.includes('already exists'))) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('409') || err.message.includes('already exists'))
+      ) {
         showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
       } else {
         showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
@@ -342,7 +348,10 @@ function CreateModal({
       <div className="bg-white rounded-2xl shadow-2xl p-xl w-full max-w-md mx-4 flex flex-col gap-md">
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-xl text-[#101B79]">יצירת סידור חדש</h2>
-          <button onClick={onClose} className="text-outline hover:text-on-surface transition-colors">
+          <button
+            onClick={onClose}
+            className="text-outline hover:text-on-surface transition-colors"
+          >
             <MaterialIcon name="close" />
           </button>
         </div>
@@ -481,10 +490,7 @@ export default function SchedulesPage() {
   // ── Load schedules (runs once on mount; actions use optimistic updates) ──
 
   const refreshScheduleStats = useCallback((s: Schedule) => {
-    Promise.all([
-      shiftApi.getBySchedule(s._id),
-      constraintApi.getAllConstraints(s.weekId),
-    ])
+    Promise.all([shiftApi.getBySchedule(s._id), constraintApi.getAllConstraints(s.weekId)])
       .then(([shiftsRes, constraintsRes]) => {
         const staffed = shiftsRes.shifts.filter((sh) => sh.status === 'filled').length;
         setStatsMap((prev) =>
@@ -496,9 +502,7 @@ export default function SchedulesPage() {
         );
       })
       .catch(() => {
-        setStatsMap((prev) =>
-          new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 })
-        );
+        setStatsMap((prev) => new Map(prev).set(s._id, { staffed: 0, total: 0, constraints: 0 }));
       });
   }, []);
 
@@ -526,8 +530,7 @@ export default function SchedulesPage() {
     }
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     return (
-      start.getMonth() === lastMonth.getMonth() &&
-      start.getFullYear() === lastMonth.getFullYear()
+      start.getMonth() === lastMonth.getMonth() && start.getFullYear() === lastMonth.getFullYear()
     );
   }
 

@@ -46,7 +46,10 @@ export async function createSwapRequest(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  logger.info('createSwapRequest - start', { requesterId: req.user!._id, targetUserId: req.body.targetUserId });
+  logger.info('createSwapRequest - start', {
+    requesterId: req.user!._id,
+    targetUserId: req.body.targetUserId,
+  });
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
@@ -153,7 +156,9 @@ export async function updateSwapRequest(
         userId: swapRequest.requesterId,
         type: 'swap_request_reviewed',
         title: parsed.data.status === 'approved' ? 'בקשת החלפה אושרה' : 'בקשת החלפה נדחתה',
-        body: parsed.data.managerNote ?? `בקשת ההחלפה שלך ${parsed.data.status === 'approved' ? 'אושרה' : 'נדחתה'} על ידי המנהל`,
+        body:
+          parsed.data.managerNote ??
+          `בקשת ההחלפה שלך ${parsed.data.status === 'approved' ? 'אושרה' : 'נדחתה'} על ידי המנהל`,
         refModel: 'SwapRequest',
         refId: swapRequest._id,
       });
@@ -171,7 +176,13 @@ export async function updateSwapRequest(
     } else {
       const cancelSchema = z.object({ status: z.literal('rejected') });
       const parsed = cancelSchema.safeParse(req.body);
-      if (!parsed.success) return next(new AppError('Employees can only cancel (status: rejected) their own pending requests', 400));
+      if (!parsed.success)
+        return next(
+          new AppError(
+            'Employees can only cancel (status: rejected) their own pending requests',
+            400
+          )
+        );
 
       swapRequest.status = 'rejected';
       await swapRequest.save();

@@ -168,9 +168,7 @@ describe('GET /api/v1/auth/me', () => {
   });
 
   it('200 — returns user info with valid token', async () => {
-    const res = await request(app)
-      .get('/api/v1/auth/me')
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.user.email).toBe(validUser.email);
   });

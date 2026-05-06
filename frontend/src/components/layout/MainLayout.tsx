@@ -39,7 +39,8 @@ export default function MainLayout({ children, title, subtitle, actions }: MainL
   const location = useLocation();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  const navItems = user?.role === 'manager' || user?.role === 'admin' ? MANAGER_NAV_ITEMS : EMPLOYEE_NAV_ITEMS;
+  const navItems =
+    user?.role === 'manager' || user?.role === 'admin' ? MANAGER_NAV_ITEMS : EMPLOYEE_NAV_ITEMS;
 
   function handleLogout() {
     logout();
@@ -47,7 +48,10 @@ export default function MainLayout({ children, title, subtitle, actions }: MainL
   }
 
   return (
-    <div className="bg-background text-on-surface font-sans antialiased min-h-screen flex flex-col md:flex-row" dir="rtl">
+    <div
+      className="bg-background text-on-surface font-sans antialiased min-h-screen flex flex-col md:flex-row"
+      dir="rtl"
+    >
       {/* SideNavBar - Desktop */}
       <nav className="flex flex-col h-[calc(100%-4rem)] w-64 fixed right-0 top-16 z-50 rtl bg-[#101B79] dark:bg-slate-950 border-l border-white/10 shadow-2xl hidden md:flex font-['Plus_Jakarta_Sans']">
         <div className="p-lg border-b border-white/10 flex items-center gap-md">
@@ -55,14 +59,14 @@ export default function MainLayout({ children, title, subtitle, actions }: MainL
             {user?.avatarUrl ? (
               <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="text-white font-black text-xl">
-                {user?.name?.charAt(0) || 'B'}
-              </div>
+              <div className="text-white font-black text-xl">{user?.name?.charAt(0) || 'B'}</div>
             )}
           </div>
           <div>
             <div className="text-2xl font-black text-white">בזק HML</div>
-            <div className="text-[10px] text-white/70 uppercase tracking-wider font-bold">ניהול כוח אדם</div>
+            <div className="text-[10px] text-white/70 uppercase tracking-wider font-bold">
+              ניהול כוח אדם
+            </div>
           </div>
         </div>
 
@@ -129,17 +133,18 @@ export default function MainLayout({ children, title, subtitle, actions }: MainL
           <button className="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-slate-500 hover:text-[#056AE5] transition-colors">
             <MaterialIcon name="notifications" />
           </button>
-          <button className="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-slate-500 hover:text-[#056AE5] transition-colors md:hidden" onClick={() => setShowLogoutDialog(true)}>
-             <MaterialIcon name="logout" />
+          <button
+            className="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-slate-500 hover:text-[#056AE5] transition-colors md:hidden"
+            onClick={() => setShowLogoutDialog(true)}
+          >
+            <MaterialIcon name="logout" />
           </button>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="w-full md:mr-64 pt-24 pb-xl px-4 md:px-xl min-h-screen">
-        <div className="max-w-[1200px] mx-auto">
-          {children}
-        </div>
+        <div className="max-w-[1200px] mx-auto">{children}</div>
       </main>
 
       <LogoutConfirmDialog

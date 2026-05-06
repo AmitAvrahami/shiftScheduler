@@ -32,9 +32,7 @@ export async function getAssignments(
   try {
     const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
 
-    const filter: Record<string, unknown> = isManagerOrAdmin
-      ? {}
-      : { userId: req.user!._id };
+    const filter: Record<string, unknown> = isManagerOrAdmin ? {} : { userId: req.user!._id };
 
     if (req.query.scheduleId) filter.scheduleId = req.query.scheduleId;
     if (req.query.userId && isManagerOrAdmin) filter.userId = req.query.userId;

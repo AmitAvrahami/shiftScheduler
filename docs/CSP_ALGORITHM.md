@@ -6,13 +6,13 @@ This document describes the Constraint Satisfaction Problem (CSP) engine that ge
 
 ## Problem Definition
 
-| Element | Description |
-| ------- | ----------- |
-| **Variables** | Each shift slot in the week (date + shift definition). 7 days × 3 shifts = **21 slots**. |
-| **Domain** | For each slot: the set of active employees eligible to work that slot. |
-| **Hard constraints** | Absolute rules that must hold. See `docs/CONSTRAINTS.md`. |
-| **Soft constraints** | Scoring rules that minimise solution cost. See `docs/CONSTRAINTS.md`. |
-| **Objective** | Find a complete assignment with **zero hard violations** and **minimum soft penalty score**. |
+| Element              | Description                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| **Variables**        | Each shift slot in the week (date + shift definition). 7 days × 3 shifts = **21 slots**.     |
+| **Domain**           | For each slot: the set of active employees eligible to work that slot.                       |
+| **Hard constraints** | Absolute rules that must hold. See `docs/CONSTRAINTS.md`.                                    |
+| **Soft constraints** | Scoring rules that minimise solution cost. See `docs/CONSTRAINTS.md`.                        |
+| **Objective**        | Find a complete assignment with **zero hard violations** and **minimum soft penalty score**. |
 
 ---
 
@@ -53,10 +53,10 @@ Used in step 5 to rank candidates. **Lower score = better candidate** (more bala
 
 Linear penalty formula:
 
-| Condition | Penalty |
-| --------- | ------- |
-| Per total shift assigned this week | **+10** |
-| Per night shift assigned this week | **+20** |
+| Condition                                                                      | Penalty |
+| ------------------------------------------------------------------------------ | ------- |
+| Per total shift assigned this week                                             | **+10** |
+| Per night shift assigned this week                                             | **+20** |
 | Friday + Saturday clustering (only when employee already has >1 weekend shift) | **+30** |
 
 **Why linear?** Quadratic penalties (e.g. `2 × nightShifts²`) are too weak at low shift counts and too aggressive at high counts. Linear penalties provide a consistent, predictable gradient.
@@ -76,9 +76,9 @@ These appear in the manager's warnings panel without blocking publication.
 
 ## Key Properties
 
-| Property | Value |
-| -------- | ----- |
-| **Idempotency** | Re-running generation for the same `weekId` replaces the current draft. Constraints and employees are re-loaded fresh each time. |
-| **Partial schedules** | The engine never aborts. If a slot cannot be filled, it is marked `empty` and returned as a hard violation. The manager fills it manually. |
-| **Performance target** | ≤ 5 seconds for 10 employees and 21 slots on a standard cloud instance. |
-| **Variety** | Random tie-breaking in step 5 means successive re-generations can produce different valid schedules. |
+| Property               | Value                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Idempotency**        | Re-running generation for the same `weekId` replaces the current draft. Constraints and employees are re-loaded fresh each time.           |
+| **Partial schedules**  | The engine never aborts. If a slot cannot be filled, it is marked `empty` and returned as a hard violation. The manager fills it manually. |
+| **Performance target** | ≤ 5 seconds for 10 employees and 21 slots on a standard cloud instance.                                                                    |
+| **Variety**            | Random tie-breaking in step 5 means successive re-generations can produce different valid schedules.                                       |

@@ -12,7 +12,7 @@ const weekIdSchema = z.object({
 export async function getAdminDashboard(
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ): Promise<void> {
   logger.info('getAdminDashboard - start', { weekId: req.params.weekId });
   try {

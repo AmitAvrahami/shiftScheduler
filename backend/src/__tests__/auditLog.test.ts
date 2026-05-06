@@ -25,21 +25,40 @@ afterEach(async () => {
 });
 
 function makeToken(user: { _id: unknown; email: string; role: string }): string {
-  return jwt.sign({ _id: String(user._id), email: user.email, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+  return jwt.sign(
+    { _id: String(user._id), email: user.email, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: '1h' }
+  );
 }
 
 async function seedAdmin() {
-  const admin = await User.create({ name: 'Admin', email: 'admin@test.com', password: 'pass12345', role: 'admin' });
+  const admin = await User.create({
+    name: 'Admin',
+    email: 'admin@test.com',
+    password: 'pass12345',
+    role: 'admin',
+  });
   return { admin, token: makeToken(admin) };
 }
 
 async function seedManager() {
-  const manager = await User.create({ name: 'Manager', email: 'manager@test.com', password: 'pass12345', role: 'manager' });
+  const manager = await User.create({
+    name: 'Manager',
+    email: 'manager@test.com',
+    password: 'pass12345',
+    role: 'manager',
+  });
   return { manager, token: makeToken(manager) };
 }
 
 async function seedEmployee() {
-  const employee = await User.create({ name: 'Employee', email: 'employee@test.com', password: 'pass12345', role: 'employee' });
+  const employee = await User.create({
+    name: 'Employee',
+    email: 'employee@test.com',
+    password: 'pass12345',
+    role: 'employee',
+  });
   return { employee, token: makeToken(employee) };
 }
 
@@ -55,13 +74,17 @@ describe('GET /api/v1/audit-logs', () => {
 
   it('returns 403 for employee', async () => {
     const { token } = await seedEmployee();
-    const res = await request(app).get('/api/v1/audit-logs').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/audit-logs')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns 200 for manager (now allowed)', async () => {
     const { token } = await seedManager();
-    const res = await request(app).get('/api/v1/audit-logs').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/audit-logs')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
@@ -70,7 +93,9 @@ describe('GET /api/v1/audit-logs', () => {
     await seedLog(admin._id, 'action_a');
     await seedLog(admin._id, 'action_b');
 
-    const res = await request(app).get('/api/v1/audit-logs?page=1&limit=10').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/audit-logs?page=1&limit=10')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.logs.length).toBe(2);
     expect(res.body.total).toBe(2);
@@ -82,7 +107,9 @@ describe('GET /api/v1/audit-logs', () => {
     await seedLog(admin._id, 'schedule_created');
     await seedLog(admin._id, 'shift_deleted');
 
-    const res = await request(app).get('/api/v1/audit-logs?action=schedule_created').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/audit-logs?action=schedule_created')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.logs.length).toBe(1);
     expect(res.body.logs[0].action).toBe('schedule_created');
@@ -94,7 +121,9 @@ describe('GET /api/v1/audit-logs/:id', () => {
     const { admin } = await seedAdmin();
     const { token } = await seedEmployee();
     const log = await seedLog(admin._id);
-    const res = await request(app).get(`/api/v1/audit-logs/${log._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/audit-logs/${log._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
@@ -102,20 +131,26 @@ describe('GET /api/v1/audit-logs/:id', () => {
     const { admin } = await seedAdmin();
     const { token } = await seedManager();
     const log = await seedLog(admin._id);
-    const res = await request(app).get(`/api/v1/audit-logs/${log._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/audit-logs/${log._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
   it('returns 404 for nonexistent log', async () => {
     const { token } = await seedAdmin();
-    const res = await request(app).get(`/api/v1/audit-logs/${new mongoose.Types.ObjectId()}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/audit-logs/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });
 
   it('admin can fetch a single audit log', async () => {
     const { admin, token } = await seedAdmin();
     const log = await seedLog(admin._id, 'setting_updated');
-    const res = await request(app).get(`/api/v1/audit-logs/${log._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/audit-logs/${log._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.log.action).toBe('setting_updated');
   });

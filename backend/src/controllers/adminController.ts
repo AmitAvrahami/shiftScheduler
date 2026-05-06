@@ -36,7 +36,12 @@ export async function initializeWeek(
     const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
     const { weekId, generatedBy } = parsed.data;
 
-    const result = await initializeWeeklySchedule(weekId, generatedBy, actorId, req.ip ?? 'unknown');
+    const result = await initializeWeeklySchedule(
+      weekId,
+      generatedBy,
+      actorId,
+      req.ip ?? 'unknown'
+    );
     res.status(201).json({ success: true, ...result });
     logger.info('initializeWeek - end', { weekId });
   } catch (err) {
@@ -75,12 +80,17 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
     const nextWeekId = getNextWeekId(weekId);
 
     const [userFacet, scheduleFacet, constraintDocs, auditDocs, shiftDefDocs] = await Promise.all([
-
       // ── Pipeline 1: Users ──────────────────────────────────────────────────
       // Single $facet: full user list (no password) + aggregated stats
       User.aggregate<{
         all: Record<string, unknown>[];
-        stats: Array<{ total: number; active: number; employees: number; managers: number; admins: number }>;
+        stats: Array<{
+          total: number;
+          active: number;
+          employees: number;
+          managers: number;
+          admins: number;
+        }>;
       }>([
         {
           $facet: {
@@ -89,11 +99,11 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
               {
                 $group: {
                   _id: null,
-                  total:     { $sum: 1 },
-                  active:    { $sum: { $cond: ['$isActive', 1, 0] } },
+                  total: { $sum: 1 },
+                  active: { $sum: { $cond: ['$isActive', 1, 0] } },
                   employees: { $sum: { $cond: [{ $eq: ['$role', 'employee'] }, 1, 0] } },
-                  managers:  { $sum: { $cond: [{ $eq: ['$role', 'manager'] }, 1, 0] } },
-                  admins:    { $sum: { $cond: [{ $eq: ['$role', 'admin'] }, 1, 0] } },
+                  managers: { $sum: { $cond: [{ $eq: ['$role', 'manager'] }, 1, 0] } },
+                  admins: { $sum: { $cond: [{ $eq: ['$role', 'admin'] }, 1, 0] } },
                 },
               },
             ],
@@ -173,7 +183,7 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
               $cond: {
                 if: { $gt: [{ $size: '$performerDoc' }, 0] },
                 then: {
-                  _id:  { $arrayElemAt: ['$performerDoc._id',  0] },
+                  _id: { $arrayElemAt: ['$performerDoc._id', 0] },
                   name: { $arrayElemAt: ['$performerDoc.name', 0] },
                 },
                 else: '$performedBy',
@@ -198,26 +208,35 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
     const rawStats = statsArr[0] ?? { total: 0, active: 0, employees: 0, managers: 0, admins: 0 };
 
     // ── Shape current-week data ──────────────────────────────────────────────
-    const { schedule: scheduleDocs, shifts, assignments } = scheduleFacet[0] ?? {
-      schedule: [], shifts: [], assignments: [],
+    const {
+      schedule: scheduleDocs,
+      shifts,
+      assignments,
+    } = scheduleFacet[0] ?? {
+      schedule: [],
+      shifts: [],
+      assignments: [],
     };
     const schedule = scheduleDocs[0] ?? null;
 
     const weekStats: CurrentWeekStats = {
-      total:   shifts.length,
-      filled:  shifts.filter((s) => s.status === 'filled').length,
+      total: shifts.length,
+      filled: shifts.filter((s) => s.status === 'filled').length,
       partial: shifts.filter((s) => s.status === 'partial').length,
-      empty:   shifts.filter((s) => s.status === 'empty').length,
+      empty: shifts.filter((s) => s.status === 'empty').length,
       scheduleStatus: schedule ? (schedule.status as string) : null,
     };
 
-    const definitionById = new Map(shiftDefDocs.map((definition) => [String(definition._id), definition]));
+    const definitionById = new Map(
+      shiftDefDocs.map((definition) => [String(definition._id), definition])
+    );
     const shiftsWithTemplateStatus = shifts.map((shift) => {
       const definition = definitionById.get(String(shift.definitionId));
-      const manuallyModified = !definition
-        || shift.startTime !== definition.startTime
-        || shift.endTime !== definition.endTime
-        || shift.requiredCount !== definition.requiredStaffCount;
+      const manuallyModified =
+        !definition ||
+        shift.startTime !== definition.startTime ||
+        shift.endTime !== definition.endTime ||
+        shift.requiredCount !== definition.requiredStaffCount;
 
       return {
         ...shift,
@@ -228,8 +247,11 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
     // ── Compute missing constraints via set-difference ───────────────────────
     const submittedSet = new Set(constraintDocs.map((c) => String(c.userId)));
     const missingConstraintUserIds = allUsers
-      .filter((u) => (u as { role: string; isActive: boolean }).role === 'employee'
-                  && (u as { role: string; isActive: boolean }).isActive)
+      .filter(
+        (u) =>
+          (u as { role: string; isActive: boolean }).role === 'employee' &&
+          (u as { role: string; isActive: boolean }).isActive
+      )
       .map((u) => String((u as { _id: unknown })._id))
       .filter((id) => !submittedSet.has(id));
 
@@ -239,12 +261,12 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
         users: {
           all: allUsers,
           stats: {
-            total:  rawStats.total,
+            total: rawStats.total,
             active: rawStats.active,
             byRole: {
               employee: rawStats.employees,
-              manager:  rawStats.managers,
-              admin:    rawStats.admins,
+              manager: rawStats.managers,
+              admin: rawStats.admins,
             },
           },
         },

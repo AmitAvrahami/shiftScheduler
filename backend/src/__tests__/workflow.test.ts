@@ -182,9 +182,30 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const constraints = await Constraint.find({ weekId: TEST_WEEK });
@@ -195,8 +216,22 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: NEXT_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: NEXT_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const w16 = await Constraint.findOne({ weekId: TEST_WEEK });
@@ -216,8 +251,22 @@ describe('runLockNow()', () => {
     jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
     const { employee } = await seedEmployee();
     await Constraint.create([
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
-      { userId: employee._id, weekId: TEST_WEEK, isLocked: false, submittedVia: 'self', submittedAt: new Date(), entries: [] },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
+      {
+        userId: employee._id,
+        weekId: TEST_WEEK,
+        isLocked: false,
+        submittedVia: 'self',
+        submittedAt: new Date(),
+        entries: [],
+      },
     ]);
     await runLockNow();
     const log = await AuditLog.findOne({ action: 'constraint_window_locked' });
@@ -501,7 +550,13 @@ describe('assignment_override audit log', () => {
       assignedBy,
       status: 'pending',
     });
-    return { manager, employee, assignment, managerToken: makeToken(manager), employeeToken: makeToken(employee) };
+    return {
+      manager,
+      employee,
+      assignment,
+      managerToken: makeToken(manager),
+      employeeToken: makeToken(employee),
+    };
   }
 
   it('4.1 — manager PATCHes algorithm-assigned → AuditLog has assignment_override', async () => {

@@ -60,7 +60,10 @@ export async function markAllNotificationsRead(
 ): Promise<void> {
   logger.info('markAllNotificationsRead - start', { user: req.user?._id });
   try {
-    await Notification.updateMany({ userId: req.user!._id, isRead: false }, { $set: { isRead: true } });
+    await Notification.updateMany(
+      { userId: req.user!._id, isRead: false },
+      { $set: { isRead: true } }
+    );
     res.json({ success: true, message: 'All notifications marked as read' });
     logger.info('markAllNotificationsRead - end', { user: req.user?._id });
   } catch (err) {
@@ -136,8 +139,15 @@ export async function broadcastMessage(
       }))
     );
 
-    res.json({ success: true, broadcastId: broadcastId.toString(), recipientCount: targets.length });
-    logger.info('broadcastMessage - end', { broadcastId: broadcastId.toString(), count: targets.length });
+    res.json({
+      success: true,
+      broadcastId: broadcastId.toString(),
+      recipientCount: targets.length,
+    });
+    logger.info('broadcastMessage - end', {
+      broadcastId: broadcastId.toString(),
+      count: targets.length,
+    });
   } catch (err) {
     logger.error('broadcastMessage - error', err);
     next(err);

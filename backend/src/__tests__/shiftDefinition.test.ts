@@ -33,12 +33,22 @@ function makeToken(user: { _id: unknown; email: string; role: string }): string 
 }
 
 async function seedManager() {
-  const manager = await User.create({ name: 'Manager', email: 'manager@test.com', password: 'pass12345', role: 'manager' });
+  const manager = await User.create({
+    name: 'Manager',
+    email: 'manager@test.com',
+    password: 'pass12345',
+    role: 'manager',
+  });
   return { manager, token: makeToken(manager) };
 }
 
 async function seedEmployee() {
-  const employee = await User.create({ name: 'Employee', email: 'employee@test.com', password: 'pass12345', role: 'employee' });
+  const employee = await User.create({
+    name: 'Employee',
+    email: 'employee@test.com',
+    password: 'pass12345',
+    role: 'employee',
+  });
   return { employee, token: makeToken(employee) };
 }
 
@@ -82,7 +92,9 @@ describe('GET /api/v1/shift-definitions', () => {
     await seedDefinition(manager._id);
     await ShiftDefinition.create({ ...validPayload, isActive: false, createdBy: manager._id });
 
-    const res = await request(app).get('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.definitions.every((d: { isActive: boolean }) => d.isActive)).toBe(true);
   });
@@ -92,7 +104,9 @@ describe('GET /api/v1/shift-definitions', () => {
     await seedDefinition(manager._id);
     await ShiftDefinition.create({ ...validPayload, isActive: false, createdBy: manager._id });
 
-    const res = await request(app).get('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.definitions.length).toBe(2);
   });
@@ -106,19 +120,28 @@ describe('POST /api/v1/shift-definitions', () => {
 
   it('returns 403 when employee tries to create', async () => {
     const { token } = await seedEmployee();
-    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send(validPayload);
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(validPayload);
     expect(res.status).toBe(403);
   });
 
   it('returns 400 with invalid color', async () => {
     const { token } = await seedManager();
-    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send({ ...validPayload, color: 'notahex' });
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...validPayload, color: 'notahex' });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 with invalid time format', async () => {
     const { token } = await seedManager();
-    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send({ ...validPayload, startTime: '6:45' });
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...validPayload, startTime: '6:45' });
     expect(res.status).toBe(400);
   });
 
@@ -142,7 +165,10 @@ describe('POST /api/v1/shift-definitions', () => {
 
   it('manager can create a shift definition', async () => {
     const { token } = await seedManager();
-    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send(validPayload);
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(validPayload);
     expect(res.status).toBe(201);
     expect(res.body.definition.name).toBe(validPayload.name);
     expect(res.body.definition.daysOfWeek).toEqual(validPayload.daysOfWeek);
@@ -152,7 +178,10 @@ describe('POST /api/v1/shift-definitions', () => {
   it('defaults crossesMidnight to false when frontend form omits it', async () => {
     const { token } = await seedManager();
     const { crossesMidnight, ...payload } = validPayload;
-    const res = await request(app).post('/api/v1/shift-definitions').set('Authorization', `Bearer ${token}`).send(payload);
+    const res = await request(app)
+      .post('/api/v1/shift-definitions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
     expect(res.status).toBe(201);
     expect(res.body.definition.crossesMidnight).toBe(false);
   });
@@ -168,7 +197,9 @@ describe('GET /api/v1/shift-definitions/:id', () => {
 
   it('returns 404 for nonexistent id', async () => {
     const { token } = await seedEmployee();
-    const res = await request(app).get(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });
 
@@ -176,7 +207,9 @@ describe('GET /api/v1/shift-definitions/:id', () => {
     const { manager } = await seedManager();
     const { token } = await seedEmployee();
     const def = await seedDefinition(manager._id);
-    const res = await request(app).get(`/api/v1/shift-definitions/${def._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get(`/api/v1/shift-definitions/${def._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.definition._id).toBe(String(def._id));
   });
@@ -187,20 +220,29 @@ describe('PATCH /api/v1/shift-definitions/:id', () => {
     const { manager } = await seedManager();
     const { token } = await seedEmployee();
     const def = await seedDefinition(manager._id);
-    const res = await request(app).patch(`/api/v1/shift-definitions/${def._id}`).set('Authorization', `Bearer ${token}`).send({ name: 'שונה' });
+    const res = await request(app)
+      .patch(`/api/v1/shift-definitions/${def._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'שונה' });
     expect(res.status).toBe(403);
   });
 
   it('returns 404 for nonexistent definition', async () => {
     const { token } = await seedManager();
-    const res = await request(app).patch(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`).set('Authorization', `Bearer ${token}`).send({ name: 'שונה' });
+    const res = await request(app)
+      .patch(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'שונה' });
     expect(res.status).toBe(404);
   });
 
   it('manager can update a shift definition', async () => {
     const { manager, token } = await seedManager();
     const def = await seedDefinition(manager._id);
-    const res = await request(app).patch(`/api/v1/shift-definitions/${def._id}`).set('Authorization', `Bearer ${token}`).send({ name: 'עדכון' });
+    const res = await request(app)
+      .patch(`/api/v1/shift-definitions/${def._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'עדכון' });
     expect(res.status).toBe(200);
     expect(res.body.definition.name).toBe('עדכון');
   });
@@ -211,20 +253,26 @@ describe('DELETE /api/v1/shift-definitions/:id', () => {
     const { manager } = await seedManager();
     const { token } = await seedEmployee();
     const def = await seedDefinition(manager._id);
-    const res = await request(app).delete(`/api/v1/shift-definitions/${def._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete(`/api/v1/shift-definitions/${def._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it('returns 404 for nonexistent definition', async () => {
     const { token } = await seedManager();
-    const res = await request(app).delete(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete(`/api/v1/shift-definitions/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });
 
   it('manager soft-deletes (sets isActive=false)', async () => {
     const { manager, token } = await seedManager();
     const def = await seedDefinition(manager._id);
-    const res = await request(app).delete(`/api/v1/shift-definitions/${def._id}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .delete(`/api/v1/shift-definitions/${def._id}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     const updated = await ShiftDefinition.findById(def._id);
     expect(updated!.isActive).toBe(false);

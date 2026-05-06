@@ -289,8 +289,7 @@ describe('POST /api/v1/admin/weeks/:weekId/shifts', () => {
   });
 
   it('returns 401 with no token', async () => {
-    const res = await request(app)
-      .post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`);
+    const res = await request(app).post(`/api/v1/admin/weeks/${TEST_WEEK}/shifts`);
 
     expect(res.status).toBe(401);
   });
@@ -343,7 +342,10 @@ describe('generateWeekFromBlueprints', () => {
       requiredStaffCount: 1,
     });
 
-    const result = await generateWeekFromBlueprints(new mongoose.Types.ObjectId(), new Date(2026, 4, 10, 15));
+    const result = await generateWeekFromBlueprints(
+      new mongoose.Types.ObjectId(),
+      new Date(2026, 4, 10, 15)
+    );
 
     expect(result.created).toBe(1);
     const shift = await Shift.findOne().lean();
@@ -404,7 +406,9 @@ describe('generateWeekFromBlueprints', () => {
       status: 'empty',
     });
 
-    await expect(generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))).rejects.toMatchObject({
+    await expect(
+      generateWeekFromBlueprints('ignored-org', new Date(2026, 4, 10))
+    ).rejects.toMatchObject({
       statusCode: 409,
     });
   });

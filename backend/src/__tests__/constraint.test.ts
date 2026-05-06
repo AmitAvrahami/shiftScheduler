@@ -222,9 +222,7 @@ describe('PUT /api/v1/constraints/:weekId', () => {
   });
 
   it('401 — no token', async () => {
-    const res = await request(app)
-      .put(`/api/v1/constraints/${TEST_WEEK}`)
-      .send({ entries: [] });
+    const res = await request(app).put(`/api/v1/constraints/${TEST_WEEK}`).send({ entries: [] });
 
     expect(res.status).toBe(401);
   });

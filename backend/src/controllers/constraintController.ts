@@ -172,7 +172,10 @@ export async function getAllConstraintsForWeek(
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
 
-    const constraints = await Constraint.find({ weekId }).populate('userId', 'name email role avatarUrl');
+    const constraints = await Constraint.find({ weekId }).populate(
+      'userId',
+      'name email role avatarUrl'
+    );
     const deadline = getConstraintDeadline(weekId);
     const deadlinePassed = isConstraintDeadlinePassed(weekId);
 
@@ -235,11 +238,13 @@ export async function toggleWeekLock(
     });
 
     // Send broadcast notification
-    const title = isLocked ? `הגשת אילוצים לשבוע ${weekId} ננעלה` : `הגשת אילוצים לשבוע ${weekId} נפתחה`;
-    const body = isLocked 
-      ? `המנהל נעל את האפשרות להגיש אילוצים לשבוע ${weekId}.` 
+    const title = isLocked
+      ? `הגשת אילוצים לשבוע ${weekId} ננעלה`
+      : `הגשת אילוצים לשבוע ${weekId} נפתחה`;
+    const body = isLocked
+      ? `המנהל נעל את האפשרות להגיש אילוצים לשבוע ${weekId}.`
       : `המנהל פתח את האפשרות להגיש אילוצים לשבוע ${weekId}. ניתן להגיש כעת.`;
-    
+
     await broadcastToEmployees(title, body, 'announcement', setting._id, 'SystemSettings');
 
     res.json({ success: true, isLocked });
@@ -256,7 +261,10 @@ export async function getConstraintsForUser(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  logger.info('getConstraintsForUser - start', { weekId: req.params.weekId, userId: req.params.userId });
+  logger.info('getConstraintsForUser - start', {
+    weekId: req.params.weekId,
+    userId: req.params.userId,
+  });
   try {
     const { weekId, userId } = req.params;
     if (!validateWeekId(weekId, next)) return;
@@ -284,7 +292,10 @@ export async function managerOverrideConstraints(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  logger.info('managerOverrideConstraints - start', { weekId: req.params.weekId, userId: req.params.userId });
+  logger.info('managerOverrideConstraints - start', {
+    weekId: req.params.weekId,
+    userId: req.params.userId,
+  });
   try {
     const { weekId, userId } = req.params;
     if (!validateWeekId(weekId, next)) return;

@@ -1,9 +1,5 @@
 import mongoose from 'mongoose';
-import {
-  SolveRequest,
-  SolveResult,
-  SolverWorker,
-} from './solverClient';
+import { SolveRequest, SolveResult, SolverWorker } from './solverClient';
 import { toDateKey } from '../utils/weekUtils';
 
 // Lean-compatible plain-object shapes — only the fields the mapper actually reads.
@@ -59,9 +55,7 @@ export interface SchedulerInput {
 export function toSolveRequest(input: SchedulerInput): SolveRequest {
   const { schedule, workers, shifts, shiftDefinitions, constraints } = input;
 
-  const constraintByUser = new Map(
-    constraints.map((c) => [c.userId.toString(), c])
-  );
+  const constraintByUser = new Map(constraints.map((c) => [c.userId.toString(), c]));
 
   const solverWorkers: SolverWorker[] = workers.map((user) => {
     const constraint = constraintByUser.get(user._id.toString());

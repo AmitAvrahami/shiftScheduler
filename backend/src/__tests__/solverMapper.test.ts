@@ -107,9 +107,7 @@ describe('toSolveRequest', () => {
   it('maps availability from constraint entries using local-time date key', () => {
     const constraint: LeanConstraint = {
       userId,
-      entries: [
-        { date: shiftDate, definitionId: defId, canWork: false },
-      ],
+      entries: [{ date: shiftDate, definitionId: defId, canWork: false }],
     };
     const req = toSolveRequest(makeInput({ constraints: [constraint] }));
     const avail = req.workers[0].availability;

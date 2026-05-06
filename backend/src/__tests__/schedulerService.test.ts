@@ -36,7 +36,9 @@ const ACTOR_ID = new mongoose.Types.ObjectId('000000000000000000000001');
 
 // ---- Seed helpers ----
 
-async function seedSchedule(status: 'open' | 'locked' | 'generating' | 'draft' | 'published' = 'generating') {
+async function seedSchedule(
+  status: 'open' | 'locked' | 'generating' | 'draft' | 'published' = 'generating'
+) {
   return WeeklySchedule.create({
     weekId: WEEK_ID,
     startDate: new Date(2026, 4, 10),
@@ -134,9 +136,17 @@ describe('runScheduler — RELAXED path', () => {
     const { shift, user } = await seedFullScenario();
     mockCallSolver.mockResolvedValueOnce({
       status: 'RELAXED',
-      assignments: [{ shift_id: shift._id.toString(), worker_id: user._id.toString(), assigned_by: 'algorithm' }],
+      assignments: [
+        {
+          shift_id: shift._id.toString(),
+          worker_id: user._id.toString(),
+          assigned_by: 'algorithm',
+        },
+      ],
       violations: [],
-      warnings: [{ constraint_id: 'MAXIMUM_LOAD', worker_id: null, message: 'Load constraint relaxed' }],
+      warnings: [
+        { constraint_id: 'MAXIMUM_LOAD', worker_id: null, message: 'Load constraint relaxed' },
+      ],
       solve_time_ms: 100,
     });
 
@@ -154,7 +164,9 @@ describe('runScheduler — INFEASIBLE path', () => {
     mockCallSolver.mockResolvedValueOnce({
       status: 'INFEASIBLE',
       assignments: [],
-      violations: [{ constraint_id: 'INFEASIBLE', shift_id: null, worker_id: null, message: 'No solution' }],
+      violations: [
+        { constraint_id: 'INFEASIBLE', shift_id: null, worker_id: null, message: 'No solution' },
+      ],
       warnings: [],
       solve_time_ms: 5,
     });
