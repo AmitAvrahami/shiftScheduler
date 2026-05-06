@@ -36,7 +36,10 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  await mongoose.connection.dropDatabase();
+  await Promise.all(
+    Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({}))
+  );
+
   jest.restoreAllMocks();
 });
 
@@ -575,7 +578,10 @@ describe('assignment_override audit log', () => {
       .patch(`/api/v1/assignments/${assignment._id}`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ status: 'confirmed' });
-    const log = await AuditLog.findOne({ action: 'assignment_override' });
+    const log = await AuditLog.findOne({
+      action: 'assignment_override',
+      refId: assignment._id,
+    });
     expect(log).toBeNull();
   });
 
@@ -598,7 +604,10 @@ describe('assignment_override audit log', () => {
       .patch(`/api/v1/assignments/${assignment._id}`)
       .set('Authorization', `Bearer ${employeeToken}`)
       .send({ status: 'confirmed' });
-    const log = await AuditLog.findOne({ action: 'assignment_override' });
+    const log = await AuditLog.findOne({
+      action: 'assignment_override',
+      refId: assignment._id,
+    });
     expect(log).toBeNull();
   });
 });

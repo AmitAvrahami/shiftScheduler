@@ -37,7 +37,10 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  await mongoose.connection.dropDatabase();
+  await Promise.all(
+    Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({}))
+  );
+
   jest.restoreAllMocks();
 });
 
