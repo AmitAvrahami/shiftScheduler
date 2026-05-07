@@ -110,14 +110,15 @@ export function useAdminDashboard(weekId: string) {
   }, [weekId, refresh]);
 
   const publishSchedule = useCallback(async () => {
+    if (!dashboard?.scheduleId) {
+      setError('הסידור לא נמצא לשבוע זה');
+      return;
+    }
+
     try {
       setActionLoading((current) => ({ ...current, publishing: true }));
       setRefreshing(true);
       setError(null);
-      if (!dashboard?.scheduleId) {
-        setError('הסידור לא נמצא לשבוע זה');
-        return;
-      }
       await scheduleApi.update(dashboard.scheduleId, 'published');
       await refresh();
     } catch {
