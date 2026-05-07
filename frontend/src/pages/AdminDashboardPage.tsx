@@ -1098,15 +1098,8 @@ export default function AdminDashboardPage() {
   const [toast, setToast] = useState<Toast | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
-  const {
-    dashboard,
-    loading,
-    error,
-    actions,
-    generateResult,
-    clearGenerateResult,
-    actionLoading,
-  } = useAdminDashboard(weekId);
+  const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
+    useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
