@@ -55,6 +55,11 @@ export interface AdminDashboardAuditLog {
   createdAt: string;
 }
 
+export interface Toast {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
 export interface AdminDashboardDTO {
   weekId: string;
   scheduleId: string | null;
