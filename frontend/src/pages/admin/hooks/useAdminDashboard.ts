@@ -109,8 +109,10 @@ export function useAdminDashboard(weekId: string) {
     }
   }, [weekId, refresh]);
 
+  const scheduleId = dashboard?.scheduleId;
+
   const publishSchedule = useCallback(async () => {
-    if (!dashboard?.scheduleId) {
+    if (!scheduleId) {
       setError('הסידור לא נמצא לשבוע זה');
       return;
     }
@@ -119,7 +121,7 @@ export function useAdminDashboard(weekId: string) {
       setActionLoading((current) => ({ ...current, publishing: true }));
       setRefreshing(true);
       setError(null);
-      await scheduleApi.update(dashboard.scheduleId, 'published');
+      await scheduleApi.update(scheduleId, 'published');
       await refresh();
     } catch {
       setError(unexpectedErrorMessage);
@@ -127,7 +129,7 @@ export function useAdminDashboard(weekId: string) {
       setActionLoading((current) => ({ ...current, publishing: false }));
       setRefreshing(false);
     }
-  }, [dashboard?.scheduleId, refresh]);
+  }, [scheduleId, refresh]);
 
   return {
     dashboard,
