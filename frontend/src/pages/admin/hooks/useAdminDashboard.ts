@@ -2,14 +2,30 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminApi, scheduleApi } from '../../../lib/api';
 import type { AdminDashboardDTO } from '../types';
 
-function getErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'שגיאה לא צפויה';
-}
+type GenerateResult = Awaited<ReturnType<typeof scheduleApi.generate>>;
+
+type ActionLoading = {
+  initializing: boolean;
+  generating: boolean;
+  regenerating: boolean;
+  publishing: boolean;
+};
+
+const idleActionLoading: ActionLoading = {
+  initializing: false,
+  generating: false,
+  regenerating: false,
+  publishing: false,
+};
+
+const unexpectedErrorMessage = 'שגיאה לא צפויה';
 
 export function useAdminDashboard(weekId: string) {
   const [dashboard, setDashboard] = useState<AdminDashboardDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [actionLoading, setActionLoading] = useState<ActionLoading>(idleActionLoading);
+  const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(
@@ -23,8 +39,8 @@ export function useAdminDashboard(weekId: string) {
         setError(null);
         const data = await adminApi.getDashboard(weekId);
         setDashboard(data);
-      } catch (err) {
-        setError(getErrorMessage(err));
+      } catch {
+        setError(unexpectedErrorMessage);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -40,64 +56,89 @@ export function useAdminDashboard(weekId: string) {
 
   const refresh = useCallback(() => loadDashboard({ silent: true }), [loadDashboard]);
 
+  const clearGenerateResult = useCallback(() => {
+    setGenerateResult(null);
+  }, []);
+
   const initializeWeek = useCallback(async () => {
     try {
+      setActionLoading((current) => ({ ...current, initializing: true }));
       setRefreshing(true);
       setError(null);
       await adminApi.initialize(weekId);
-      await loadDashboard({ silent: true });
-    } catch (err) {
-      setError(getErrorMessage(err));
+      await refresh();
+    } catch {
+      setError(unexpectedErrorMessage);
     } finally {
+      setActionLoading((current) => ({ ...current, initializing: false }));
       setRefreshing(false);
     }
-  }, [weekId, loadDashboard]);
+  }, [weekId, refresh]);
 
   const generateSchedule = useCallback(async () => {
     try {
+      setActionLoading((current) => ({ ...current, generating: true }));
       setRefreshing(true);
       setError(null);
-      await scheduleApi.generate(weekId);
-      await loadDashboard({ silent: true });
-    } catch (err) {
-      setError(getErrorMessage(err));
+      const result = await scheduleApi.generate(weekId);
+      setGenerateResult(result);
+      await refresh();
+      return result;
+    } catch {
+      setError(unexpectedErrorMessage);
     } finally {
+      setActionLoading((current) => ({ ...current, generating: false }));
       setRefreshing(false);
     }
-  }, [weekId, loadDashboard]);
+  }, [weekId, refresh]);
 
   const regenerateSchedule = useCallback(async () => {
     try {
+      setActionLoading((current) => ({ ...current, regenerating: true }));
       setRefreshing(true);
       setError(null);
-      await scheduleApi.generate(weekId);
-      await loadDashboard({ silent: true });
-    } catch (err) {
-      setError(getErrorMessage(err));
+      const result = await scheduleApi.generate(weekId);
+      setGenerateResult(result);
+      await refresh();
+      return result;
+    } catch {
+      setError(unexpectedErrorMessage);
     } finally {
+      setActionLoading((current) => ({ ...current, regenerating: false }));
       setRefreshing(false);
     }
-  }, [weekId, loadDashboard]);
+  }, [weekId, refresh]);
+
+  const scheduleId = dashboard?.scheduleId;
 
   const publishSchedule = useCallback(async () => {
+    if (!scheduleId) {
+      setError('הסידור לא נמצא לשבוע זה');
+      return;
+    }
+
     try {
+      setActionLoading((current) => ({ ...current, publishing: true }));
       setRefreshing(true);
       setError(null);
-      if (!dashboard?.scheduleId) throw new Error('לא נמצא לו"ז לשבוע זה');
-      await scheduleApi.update(dashboard.scheduleId, 'published');
-      await loadDashboard({ silent: true });
-    } catch (err) {
-      setError(getErrorMessage(err));
+      await scheduleApi.update(scheduleId, 'published');
+      await refresh();
+    } catch {
+      setError(unexpectedErrorMessage);
     } finally {
+      setActionLoading((current) => ({ ...current, publishing: false }));
       setRefreshing(false);
     }
-  }, [dashboard, loadDashboard]);
+  }, [scheduleId, refresh]);
 
   return {
     dashboard,
     loading,
     error,
     refreshing,
+    actionLoading,
+    generateResult,
+    clearGenerateResult,
     refresh,
     actions: {
       initializeWeek,
