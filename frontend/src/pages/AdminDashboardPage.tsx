@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { notificationApi, scheduleApi } from '../lib/api';
+import { notificationApi } from '../lib/api';
 import type { BroadcastRecipient, GenerateResult } from '../lib/api';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import type { AdminDashboardDTO, ShiftType, WeekWorkflowState } from './admin/types';
@@ -774,33 +774,21 @@ function GeneratedSchedulePanel({
 function QuickActions({
   weekId,
   onToast,
-  onGenerateResult,
-  onRefresh,
+  onGenerate,
+  isGenerating,
 }: {
   weekId: string;
   onToast: (t: Toast) => void;
-  onGenerateResult: (r: GenerateResult) => void;
-  onRefresh: () => Promise<void> | void;
+  onGenerate: () => Promise<GenerateResult | undefined>;
+  isGenerating: boolean;
 }) {
-  const [generating, setGenerating] = useState(false);
   const navigate = useNavigate();
 
   async function handleGenerate() {
-    if (generating) return;
-    setGenerating(true);
-    try {
-      // Temporary compatibility layer: keep the legacy result panel until generation UI is moved into useAdminDashboard.
-      const result = await scheduleApi.generate(weekId);
-      onGenerateResult(result);
-      await onRefresh();
+    if (isGenerating) return;
+    const result = await onGenerate();
+    if (result) {
       onToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
-    } catch (err) {
-      onToast({
-        message: err instanceof Error ? err.message : 'שגיאה בהפקת לוח שיבוץ',
-        type: 'error',
-      });
-    } finally {
-      setGenerating(false);
     }
   }
 
@@ -852,7 +840,7 @@ function QuickActions({
           {actions.map((a) => {
             const isGenerate = a.id === 'generate';
             const isEmergency = a.id === 'emergency';
-            const isLoading = isGenerate && generating;
+            const isLoading = isGenerate && isGenerating;
 
             return (
               <button
@@ -1108,10 +1096,10 @@ function getScheduleStats(dashboard: AdminDashboardDTO): ScheduleStats {
 export default function AdminDashboardPage() {
   const { weekId: paramWeekId } = useParams<{ weekId: string }>();
   const [toast, setToast] = useState<Toast | null>(null);
-  const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
-  const { dashboard, loading, error, refresh } = useAdminDashboard(weekId);
+  const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
+    useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
@@ -1122,12 +1110,12 @@ export default function AdminDashboardPage() {
         <QuickActions
           weekId={weekId}
           onToast={setToast}
-          onGenerateResult={setGenerateResult}
-          onRefresh={refresh}
+          onGenerate={actions.generateSchedule}
+          isGenerating={actionLoading.generating}
         />
 
         {generateResult && (
-          <GeneratedSchedulePanel result={generateResult} onClose={() => setGenerateResult(null)} />
+          <GeneratedSchedulePanel result={generateResult} onClose={clearGenerateResult} />
         )}
 
         {loading && !dashboard && (

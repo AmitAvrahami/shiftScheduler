@@ -50,8 +50,11 @@ export function useAdminDashboard(weekId: string) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setGenerateResult(null);
+    setError(null);
     loadDashboard();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [loadDashboard]);
 
   const refresh = useCallback(() => loadDashboard({ silent: true }), [loadDashboard]);
