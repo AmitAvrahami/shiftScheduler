@@ -8,7 +8,9 @@ import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import type { AdminDashboardDTO, ShiftType, Toast } from './admin/types';
 import { QuickActionsPanel } from './admin/components/QuickActionsPanel';
 import { DashboardSummaryPanel } from './admin/components/DashboardSummaryPanel';
+import { MissingConstraintsPanel } from './admin/components/MissingConstraintsPanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
+import { avatarBg, avatarInitials } from './admin/utils/avatarUtils';
 import { normalizeShiftDay, type WeekDayKey } from './admin/utils/scheduleBoardUtils';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -93,19 +95,6 @@ function getCurrentShiftIndex(now: Date): number {
   return 2;
 }
 
-// ─── Avatar helpers ───────────────────────────────────────────────────────────
-
-const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
-
-function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length >= 2 ? parts[0][0] + parts[1][0] : name.slice(0, 2);
-}
-
-function avatarBg(idx: number): string {
-  return AVATAR_COLORS[idx % AVATAR_COLORS.length];
-}
-
 // ─── Action label mapping ─────────────────────────────────────────────────────
 
 const ACTION_LABELS: Record<string, string> = {
@@ -156,7 +145,6 @@ type DashboardShift = AdminDashboardDTO['shifts'][number];
 type DashboardAssignment = AdminDashboardDTO['assignments'][number];
 type DashboardEmployee = AdminDashboardDTO['employees'][number];
 type DashboardAuditLog = AdminDashboardDTO['auditLogs'][number];
-type MissingConstraintUser = AdminDashboardDTO['missingConstraints'][number];
 
 function ShiftCard({
   shift,
@@ -367,106 +355,6 @@ function ShiftOverview({
           requiredCount={nextData.requiredCount}
           type="next"
         />
-      </div>
-    </section>
-  );
-}
-
-// ─── Missing constraints ──────────────────────────────────────────────────────
-
-function MissingConstraints({ missingUsers }: { missingUsers: MissingConstraintUser[] | null }) {
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  const [reminded, setReminded] = useState<string[]>([]);
-  const visible = (missingUsers ?? []).filter((u) => !dismissed.includes(u.id));
-
-  function handleRemind(id: string) {
-    setReminded((r) => [...r, id]);
-    setTimeout(() => setReminded((r) => r.filter((x) => x !== id)), 2000);
-  }
-
-  return (
-    <section className="flex flex-col">
-      <div className="flex items-center justify-between mb-md">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">
-            אילוצים חסרים
-          </h2>
-          {visible.length > 0 && (
-            <span className="flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold bg-error-container text-on-error-container animate-pulse">
-              {visible.length}
-            </span>
-          )}
-        </div>
-        <span className="text-[10px] text-on-surface-variant font-medium">
-          דדליין: שני 23:59 IST
-        </span>
-      </div>
-
-      <div className="flex-1">
-        {missingUsers === null ? (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-surface-container animate-pulse" />
-            <span className="text-xs text-on-surface-variant">טוען נתונים...</span>
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-3 shadow-sm">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-50">
-              <MaterialIcon name="check" className="text-green-600 text-[16px]" />
-            </div>
-            <span className="text-xs text-on-surface-variant">
-              כל הצוות הגיש אילוצים לשבוע הבא.
-            </span>
-          </div>
-        ) : (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
-            <div className="bg-surface-container-high px-md py-sm flex justify-between text-[10px] font-bold text-on-surface-variant">
-              <span>שם העובד</span>
-              <span>פעולות</span>
-            </div>
-            <div className="divide-y divide-outline-variant">
-              {visible.map((u, i) => (
-                <div
-                  key={u.id}
-                  className="flex items-center gap-3 px-md py-md transition-colors hover:bg-surface-container-low"
-                >
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                    style={{ background: avatarBg(i) }}
-                  >
-                    {avatarInitials(u.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-on-surface font-semibold truncate">
-                        {u.name}
-                      </span>
-                      <MaterialIcon name="error" className="text-error text-[14px]" />
-                    </div>
-                    <span className="text-xs text-on-surface-variant">עובד</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleRemind(u.id)}
-                      className={`text-[12px] px-4 py-2 rounded-full transition-all border font-bold ${
-                        reminded.includes(u.id)
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-[#056AE5] text-white border-[#056AE5] hover:bg-[#0457B8]'
-                      }`}
-                    >
-                      {reminded.includes(u.id) ? 'נשלח!' : 'תזכורת'}
-                    </button>
-                    <button
-                      onClick={() => setDismissed((d) => [...d, u.id])}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-surface-container text-on-surface-variant"
-                    >
-                      <MaterialIcon name="close" className="text-[16px]" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </section>
   );
@@ -896,7 +784,7 @@ export default function AdminDashboardPage() {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <BroadcastCenter recipientCount={employees.length} onToast={setToast} />
-              <MissingConstraints missingUsers={dashboard?.missingConstraints ?? null} />
+              <MissingConstraintsPanel missingUsers={dashboard?.missingConstraints ?? null} />
             </div>
           </div>
 
