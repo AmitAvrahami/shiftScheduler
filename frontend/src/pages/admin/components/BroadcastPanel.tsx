@@ -16,18 +16,28 @@ export function BroadcastCenterPanel({
   const [broadcastId, setBroadcastId] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<BroadcastRecipient[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!broadcastId) return;
+    let active = true;
     pollRef.current = setInterval(async () => {
       try {
         const res = await notificationApi.getBroadcastStatus(broadcastId);
+        if (!active) return;
         setRecipients(res.recipients);
       } catch {
         // ignore poll errors
       }
     }, 5000);
     return () => {
+      active = false;
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [broadcastId]);
@@ -38,10 +48,12 @@ export function BroadcastCenterPanel({
       const res = await notificationApi.broadcast('הודעה לצוות', msg.trim());
       setBroadcastId(res.broadcastId);
       const statusRes = await notificationApi.getBroadcastStatus(res.broadcastId);
+      if (!mountedRef.current) return;
       setRecipients(statusRes.recipients);
       onToast({ message: 'הודעה הופצה לכל הצוות', type: 'success' });
       setMsg('');
     } catch (err) {
+      if (!mountedRef.current) return;
       onToast({
         message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה',
         type: 'error',
