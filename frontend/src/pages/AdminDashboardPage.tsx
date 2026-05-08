@@ -21,63 +21,80 @@ export default function AdminDashboardPage() {
   const [toast, setToast] = useState<Toast | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
-  const weekNumber = parseWeekId(weekId).week;
+  let weekNumber: number | null = null;
+  let weekIdError: string | null = null;
+  try {
+    weekNumber = parseWeekId(weekId).week;
+  } catch {
+    weekIdError = `מזהה שבוע לא תקין: ${weekId}`;
+  }
   const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
     useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
   return (
-    <MainLayout title="דאשבורד מנהל" subtitle={`שבוע ${weekNumber}`}>
+    <MainLayout title="דאשבורד מנהל" subtitle={weekNumber !== null ? `שבוע ${weekNumber}` : ''}>
       <div className="space-y-6">
-        {/* Quick Actions at the top */}
-        <QuickActionsPanel
-          weekId={weekId}
-          onToast={setToast}
-          onGenerate={actions.generateSchedule}
-          isGenerating={actionLoading.generating}
-        />
-
-        {generateResult && (
-          <GeneratedSchedulePanel result={generateResult} onClose={clearGenerateResult} />
-        )}
-
-        {loading && !dashboard && (
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-6 text-sm text-on-surface-variant shadow-bezeq-card">
-            טוען נתוני דאשבורד...
-          </div>
-        )}
-
-        {error && (
+        {weekIdError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">
-            {error}
+            {weekIdError}
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Main content column */}
-          <div className="xl:col-span-2 space-y-6">
-            <ShiftOverviewPanel
-              employees={employees}
-              shifts={dashboard?.shifts ?? []}
-              assignments={dashboard?.assignments ?? []}
+        {!weekIdError && (
+          <>
+            {/* Quick Actions at the top */}
+            <QuickActionsPanel
+              weekId={weekId}
+              onToast={setToast}
+              onGenerate={actions.generateSchedule}
+              isGenerating={actionLoading.generating}
             />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <BroadcastCenterPanel recipientCount={employees.length} onToast={setToast} />
-              <MissingConstraintsPanel missingUsers={dashboard?.missingConstraints ?? null} />
-            </div>
-          </div>
 
-          {/* Side content column */}
-          <div className="xl:col-span-1 space-y-6">
-            <DashboardSummaryPanel
-              weekNumber={weekNumber}
-              totalUsers={employees.length}
-              stats={scheduleStats}
-            />
-            <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
-          </div>
-        </div>
+            {generateResult && (
+              <GeneratedSchedulePanel result={generateResult} onClose={clearGenerateResult} />
+            )}
+
+            {loading && !dashboard && (
+              <div className="bg-white border border-[#e2e8f0] rounded-xl p-6 text-sm text-on-surface-variant shadow-bezeq-card">
+                טוען נתוני דאשבורד...
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Main content column */}
+              <div className="xl:col-span-2 space-y-6">
+                <ShiftOverviewPanel
+                  weekId={weekId}
+                  employees={employees}
+                  shifts={dashboard?.shifts ?? []}
+                  assignments={dashboard?.assignments ?? []}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <BroadcastCenterPanel recipientCount={employees.length} onToast={setToast} />
+                  <MissingConstraintsPanel missingUsers={dashboard?.missingConstraints ?? null} />
+                </div>
+              </div>
+
+              {/* Side content column */}
+              <div className="xl:col-span-1 space-y-6">
+                <DashboardSummaryPanel
+                  weekNumber={weekNumber ?? 0}
+                  totalUsers={employees.length}
+                  stats={scheduleStats}
+                />
+                <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Toast Notification */}
