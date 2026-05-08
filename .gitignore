@@ -20,3 +20,4 @@ scratch_dashboard.html
 stitch_downloads/
 download_stitch_assets.sh
 design/
+.claude/settings.local.json
