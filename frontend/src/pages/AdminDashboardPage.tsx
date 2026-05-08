@@ -5,8 +5,10 @@ import MaterialIcon from '../components/MaterialIcon';
 import { notificationApi } from '../lib/api';
 import type { BroadcastRecipient, GenerateResult } from '../lib/api';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
-import type { AdminDashboardDTO, ShiftType, Toast, WeekWorkflowState } from './admin/types';
+import type { AdminDashboardDTO, ShiftType, Toast } from './admin/types';
 import { QuickActionsPanel } from './admin/components/QuickActionsPanel';
+import { DashboardSummaryPanel } from './admin/components/DashboardSummaryPanel';
+import { getScheduleStats } from './admin/utils/scheduleStats';
 import { normalizeShiftDay, type WeekDayKey } from './admin/utils/scheduleBoardUtils';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -844,127 +846,6 @@ function AuditLogWidget({ logs }: { logs: DashboardAuditLog[] | null }) {
   );
 }
 
-// ─── Sidebar Stats ──────────────────────────────────────────────────────────
-
-interface ScheduleStats {
-  total: number;
-  filled: number;
-  partial: number;
-  empty: number;
-  scheduleStatus: WeekWorkflowState | null;
-}
-
-function SidebarStats({
-  weekId,
-  totalUsers,
-  stats,
-}: {
-  weekId: string;
-  totalUsers: number;
-  stats: ScheduleStats | null;
-}) {
-  const STATS = [
-    { label: 'סה״כ משמרות', value: stats ? String(stats.total) : '-', color: '#056AE5' },
-    { label: 'מלאות', value: stats ? String(stats.filled) : '-', color: '#10b981' },
-    { label: 'חלקיות', value: stats ? String(stats.partial) : '-', color: '#f59e0b' },
-    { label: 'ריקות', value: stats ? String(stats.empty) : '-', color: '#ef4444' },
-  ];
-
-  const weekNum = parseWeekNumber(weekId);
-  const scheduleStatusLabel =
-    stats?.scheduleStatus === 'published'
-      ? 'פורסם'
-      : stats?.scheduleStatus === 'draft'
-        ? 'טיוטה'
-        : stats?.scheduleStatus === 'archived'
-          ? 'ארכיון'
-          : 'לא נוצר';
-  const scheduleStatusOk = stats?.scheduleStatus === 'published';
-
-  return (
-    <div className="space-y-3">
-      <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-bezeq-card">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            סטטיסטיקות שבועיות
-          </span>
-          <MaterialIcon name="calendar_today" className="text-[13px] text-slate-700" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {STATS.map((s) => (
-            <div key={s.label} className="rounded-xl p-3 bg-slate-50 border border-slate-100">
-              <div className="text-xl font-bold mb-0.5" style={{ color: s.color }}>
-                {s.value}
-              </div>
-              <div className="text-[10px] text-slate-600 font-medium">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-bezeq-card">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            סטטוס מערכת
-          </span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        </div>
-        <div className="space-y-2">
-          {[
-            { label: 'מנוע CSP', status: 'פעיל', ok: true },
-            { label: 'לוח שיבוץ', status: scheduleStatusLabel, ok: scheduleStatusOk },
-            { label: 'עובדים', status: `${totalUsers} פעילים`, ok: true },
-            { label: 'שבוע', status: `שבוע ${weekNum}`, ok: null },
-            { label: 'דדליין', status: 'שני 23:59', ok: null },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">{item.label}</span>
-              <span
-                className="text-xs font-bold"
-                style={{
-                  color: item.ok === true ? '#056AE5' : item.ok === false ? '#f87171' : '#94a3b8',
-                }}
-              >
-                {item.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function getScheduleStats(dashboard: AdminDashboardDTO): ScheduleStats {
-  const assignmentsByShiftId = new Map<string, number>();
-  dashboard.assignments.forEach((assignment) => {
-    assignmentsByShiftId.set(
-      assignment.shiftId,
-      (assignmentsByShiftId.get(assignment.shiftId) ?? 0) + 1
-    );
-  });
-
-  let partial = 0;
-  let empty = 0;
-
-  dashboard.shifts.forEach((shift) => {
-    const assignedCount = assignmentsByShiftId.get(shift.id) ?? 0;
-    if (assignedCount === 0) {
-      empty += 1;
-    } else if (assignedCount < Math.max(0, shift.requiredEmployees)) {
-      partial += 1;
-    }
-  });
-
-  return {
-    total: dashboard.kpis.totalShifts,
-    filled: dashboard.kpis.filledShifts,
-    partial,
-    empty,
-    scheduleStatus: dashboard.scheduleStatus,
-  };
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
@@ -972,13 +853,14 @@ export default function AdminDashboardPage() {
   const [toast, setToast] = useState<Toast | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
+  const weekNumber = parseWeekNumber(weekId);
   const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
     useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
 
   return (
-    <MainLayout title="דאשבורד מנהל" subtitle={`שבוע ${parseWeekNumber(weekId)}`}>
+    <MainLayout title="דאשבורד מנהל" subtitle={`שבוע ${weekNumber}`}>
       <div className="space-y-6">
         {/* Quick Actions at the top */}
         <QuickActionsPanel
@@ -1020,7 +902,11 @@ export default function AdminDashboardPage() {
 
           {/* Side content column */}
           <div className="xl:col-span-1 space-y-6">
-            <SidebarStats weekId={weekId} totalUsers={employees.length} stats={scheduleStats} />
+            <DashboardSummaryPanel
+              weekNumber={weekNumber}
+              totalUsers={employees.length}
+              stats={scheduleStats}
+            />
             <AuditLogWidget logs={dashboard?.auditLogs ?? null} />
           </div>
         </div>
