@@ -103,3 +103,20 @@ export function getAllowedWeekId(): string {
   const current = getCurrentWeekId();
   return isConstraintDeadlinePassed(current) ? getNextWeekId(current) : current;
 }
+
+/**
+ * Returns the current time expressed in IST (UTC+3) as discrete parts.
+ * day is 0=Sunday … 6=Saturday, matching WEEK_DAYS_ORDER.
+ */
+export function getNowInIsraelParts(now: Date = new Date()): {
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return {
+    day: ist.getUTCDay(),
+    hour: ist.getUTCHours(),
+    minute: ist.getUTCMinutes(),
+  };
+}

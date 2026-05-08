@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AdminDashboardDTO } from '../types';
 import { ShiftCard, type ShiftDef, type StaffEntry } from './ShiftCard';
 import { normalizeShiftDay, WEEK_DAYS_ORDER } from '../utils/scheduleBoardUtils';
+import { getCurrentWeekId, getNowInIsraelParts } from '../../../utils/weekUtils';
 
 type DashboardShift = AdminDashboardDTO['shifts'][number];
 type DashboardAssignment = AdminDashboardDTO['assignments'][number];
@@ -41,34 +42,49 @@ const SHIFTS: ShiftDef[] = [
   },
 ];
 
-function getCurrentShiftIndex(now: Date): number {
-  const mins = now.getHours() * 60 + now.getMinutes();
+function getCurrentShiftIndex(parts: { hour: number; minute: number }): number {
+  const mins = parts.hour * 60 + parts.minute;
   if (mins >= 6 * 60 + 45 && mins < 14 * 60 + 45) return 0;
   if (mins >= 14 * 60 + 45 && mins < 22 * 60 + 45) return 1;
   return 2;
 }
 
 export function ShiftOverviewPanel({
+  weekId,
   employees,
   shifts,
   assignments,
 }: {
+  weekId: string;
   employees: DashboardEmployee[];
   shifts: DashboardShift[];
   assignments: DashboardAssignment[];
 }) {
-  const [now, setNow] = useState(new Date());
+  const [nowParts, setNowParts] = useState(() => getNowInIsraelParts());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
+    const t = setInterval(() => setNowParts(getNowInIsraelParts()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const curIdx = getCurrentShiftIndex(now);
+  const isCurrentWeek = weekId === getCurrentWeekId();
+
+  if (!isCurrentWeek) {
+    return (
+      <section className="flex flex-col gap-md">
+        <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">
+          סטטוס משמרות
+        </h2>
+        <p className="text-sm text-gray-500">תצוגת שבוע — לא השבוע הנוכחי</p>
+      </section>
+    );
+  }
+
+  const curIdx = getCurrentShiftIndex(nowParts);
   const prevIdx = (curIdx + 2) % 3;
   const nextIdx = (curIdx + 1) % 3;
 
-  const todayDay = WEEK_DAYS_ORDER[now.getDay()];
+  const todayDay = WEEK_DAYS_ORDER[nowParts.day];
 
   function getShiftData(defIdx: number) {
     const shiftDef = SHIFTS[defIdx];
