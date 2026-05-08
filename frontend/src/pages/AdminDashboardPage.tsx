@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { getCurrentWeekId, parseWeekId } from '../utils/weekUtils';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import type { Toast } from './admin/types';
 import { AuditLogPanel } from './admin/components/AuditLogPanel';
@@ -13,25 +14,6 @@ import { GeneratedSchedulePanel } from './admin/components/GeneratedSchedulePane
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
 
-// ─── Week utilities ───────────────────────────────────────────────────────────
-
-const IST_OFFSET_MS = 3 * 60 * 60 * 1000;
-
-function getCurrentWeekId(): string {
-  const nowIST = new Date(Date.now() + IST_OFFSET_MS);
-  const thursday = new Date(
-    Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate())
-  );
-  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((thursday.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
-  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-}
-
-function parseWeekNumber(weekId: string): number {
-  return parseInt(weekId.split('-W')[1], 10);
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
@@ -39,7 +21,7 @@ export default function AdminDashboardPage() {
   const [toast, setToast] = useState<Toast | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
-  const weekNumber = parseWeekNumber(weekId);
+  const weekNumber = parseWeekId(weekId).week;
   const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
     useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
