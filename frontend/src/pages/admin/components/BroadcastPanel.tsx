@@ -16,18 +16,28 @@ export function BroadcastCenterPanel({
   const [broadcastId, setBroadcastId] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<BroadcastRecipient[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!broadcastId) return;
+    let active = true;
     pollRef.current = setInterval(async () => {
       try {
         const res = await notificationApi.getBroadcastStatus(broadcastId);
+        if (!active) return;
         setRecipients(res.recipients);
       } catch {
         // ignore poll errors
       }
     }, 5000);
     return () => {
+      active = false;
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [broadcastId]);
@@ -36,12 +46,15 @@ export function BroadcastCenterPanel({
     if (!msg.trim()) return;
     try {
       const res = await notificationApi.broadcast('הודעה לצוות', msg.trim());
+      if (!isMountedRef.current) return;
       setBroadcastId(res.broadcastId);
       const statusRes = await notificationApi.getBroadcastStatus(res.broadcastId);
+      if (!isMountedRef.current) return;
       setRecipients(statusRes.recipients);
       onToast({ message: 'הודעה הופצה לכל הצוות', type: 'success' });
       setMsg('');
     } catch (err) {
+      if (!isMountedRef.current) return;
       onToast({
         message: err instanceof Error ? err.message : 'שגיאה בשליחת הודעה',
         type: 'error',
