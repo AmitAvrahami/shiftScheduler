@@ -2,6 +2,8 @@ import MaterialIcon from '../../../components/MaterialIcon';
 import { avatarBg, avatarInitials } from '../utils/avatarUtils';
 import type { AdminDashboardDTO, ShiftType } from '../types';
 
+const MAX_VISIBLE_EMPTY_SLOTS = 5;
+
 export interface ShiftDef {
   id: Exclude<ShiftType, 'unknown'>;
   label: string;
@@ -34,6 +36,8 @@ export function ShiftCard({ shift, instance, staff, requiredCount, type }: Shift
   const isNext = type === 'next';
 
   const emptySlotsCount = Math.max(0, requiredCount - staff.length);
+  const visibleEmptySlotsCount = Math.min(emptySlotsCount, MAX_VISIBLE_EMPTY_SLOTS);
+  const hiddenEmptySlotsCount = Math.max(emptySlotsCount - MAX_VISIBLE_EMPTY_SLOTS, 0);
   const timeLabel = `${shift.start} - ${shift.end}`;
 
   if (isCurrent) {
@@ -74,7 +78,7 @@ export function ShiftCard({ shift, instance, staff, requiredCount, type }: Shift
                 {avatarInitials(s.name)}
               </div>
             ))}
-            {Array.from({ length: emptySlotsCount }).map((_, i) => (
+            {Array.from({ length: visibleEmptySlotsCount }).map((_, i) => (
               <div
                 key={i}
                 className="w-5 h-5 rounded-full ring-1 ring-dashed ring-white/50 bg-white/5 flex items-center justify-center"
@@ -82,6 +86,11 @@ export function ShiftCard({ shift, instance, staff, requiredCount, type }: Shift
                 <MaterialIcon name="add" className="text-[10px] text-white/50" />
               </div>
             ))}
+            {hiddenEmptySlotsCount > 0 && (
+              <div className="w-5 h-5 rounded-full ring-1 ring-white/30 bg-white/10 flex items-center justify-center text-[7px] font-bold">
+                +{hiddenEmptySlotsCount}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -125,7 +134,7 @@ export function ShiftCard({ shift, instance, staff, requiredCount, type }: Shift
                   </div>
                 </div>
               ))}
-              {Array.from({ length: emptySlotsCount }).map((_, i) => (
+              {Array.from({ length: visibleEmptySlotsCount }).map((_, i) => (
                 <div
                   key={`empty-${i}`}
                   className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-50 border border-dashed border-slate-300 flex items-center justify-center"
@@ -134,6 +143,14 @@ export function ShiftCard({ shift, instance, staff, requiredCount, type }: Shift
                   <MaterialIcon name="add" className="text-[12px] text-slate-400" />
                 </div>
               ))}
+              {hiddenEmptySlotsCount > 0 && (
+                <div
+                  className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-100 border border-slate-300 flex items-center justify-center text-[9px] font-bold text-slate-600"
+                  title={`עוד ${hiddenEmptySlotsCount} מקומות פנויים`}
+                >
+                  +{hiddenEmptySlotsCount}
+                </div>
+              )}
             </>
           )}
         </div>
