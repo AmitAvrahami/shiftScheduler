@@ -72,11 +72,13 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               {/* Main content column */}
               <div className="xl:col-span-2 space-y-6">
-                <ScheduleBoard
-                  shifts={dashboard?.shifts ?? []}
-                  assignments={dashboard?.assignments ?? []}
-                  employees={dashboard?.employees ?? []}
-                />
+                {dashboard && (
+                  <ScheduleBoard
+                    shifts={dashboard.shifts}
+                    assignments={dashboard.assignments}
+                    employees={employees}
+                  />
+                )}
                 <ShiftOverviewPanel
                   weekId={weekId}
                   employees={employees}
