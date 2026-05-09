@@ -88,5 +88,7 @@ shiftSchema.pre('validate', async function fillTimeSnapshot(next) {
   }
 });
 
+shiftSchema.index({ scheduleId: 1, date: 1, definitionId: 1 }, { unique: true });
+
 const Shift: Model<IShift> = mongoose.model<IShift>('Shift', shiftSchema);
 export default Shift;
