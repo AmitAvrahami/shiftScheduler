@@ -11,6 +11,7 @@ import { QuickActionsPanel } from './admin/components/QuickActionsPanel';
 import { DashboardSummaryPanel } from './admin/components/DashboardSummaryPanel';
 import { MissingConstraintsPanel } from './admin/components/MissingConstraintsPanel';
 import { GeneratedSchedulePanel } from './admin/components/GeneratedSchedulePanel';
+import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
 
@@ -71,6 +72,13 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               {/* Main content column */}
               <div className="xl:col-span-2 space-y-6">
+                {dashboard && (
+                  <ScheduleBoard
+                    shifts={dashboard.shifts}
+                    assignments={dashboard.assignments}
+                    employees={employees}
+                  />
+                )}
                 <ShiftOverviewPanel
                   weekId={weekId}
                   employees={employees}
