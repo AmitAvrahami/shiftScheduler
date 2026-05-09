@@ -1,4 +1,5 @@
 import MaterialIcon from '../../../components/MaterialIcon';
+import { formatIsraelTime } from '../../../utils/weekUtils';
 import type { AdminDashboardDTO } from '../types';
 
 type DashboardAuditLog = AdminDashboardDTO['auditLogs'][number];
@@ -77,10 +78,7 @@ export function AuditLogPanel({ logs }: { logs: DashboardAuditLog[] | null }) {
             const type = actionToType(entry.action);
             const label = ACTION_LABELS[entry.action] ?? entry.action;
             const performer = 'מערכת';
-            const timeStr = new Date(entry.createdAt).toLocaleTimeString('he-IL', {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+            const timeStr = formatIsraelTime(entry.createdAt);
             return (
               <div
                 key={entry.id}

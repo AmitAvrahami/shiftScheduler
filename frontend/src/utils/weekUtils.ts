@@ -95,6 +95,14 @@ export function getConstraintDeadline(weekId: string): Date {
   );
 }
 
+export function formatIsraelTime(value: string | Date): string {
+  return new Date(value).toLocaleTimeString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function isConstraintDeadlinePassed(weekId: string): boolean {
   return Date.now() > getConstraintDeadline(weekId).getTime();
 }
