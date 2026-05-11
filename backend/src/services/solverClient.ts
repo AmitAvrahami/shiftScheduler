@@ -66,9 +66,21 @@ export interface SolveResult {
   solve_time_ms: number;
 }
 
+export const SOLVER_ERROR_CODES = {
+  CONFIG_MISSING: 'ERR_SOLVER_CONFIG_MISSING',
+  TIMEOUT: 'ERR_SOLVER_TIMEOUT',
+  UNAVAILABLE: 'ERR_SOLVER_UNAVAILABLE',
+  INVALID_REQUEST: 'ERR_SOLVER_INVALID_REQUEST',
+  INTERNAL: 'ERR_SOLVER_INTERNAL',
+  UNEXPECTED_STATUS: 'ERR_SOLVER_UNEXPECTED_STATUS',
+  MALFORMED_RESPONSE: 'ERR_SOLVER_MALFORMED_RESPONSE',
+} as const;
+
 export async function callSolver(payload: SolveRequest): Promise<SolveResult> {
   const solverUrl = process.env.SOLVER_URL;
-  if (!solverUrl) throw new AppError('SOLVER_URL is not configured', 500);
+  if (!solverUrl) {
+    throw new AppError('SOLVER_URL is not configured', 500, SOLVER_ERROR_CODES.CONFIG_MISSING);
+  }
 
   const timeoutMs = parseInt(process.env.SOLVER_TIMEOUT_MS ?? '30000', 10) || 30000;
 
@@ -86,23 +98,47 @@ export async function callSolver(payload: SolveRequest): Promise<SolveResult> {
       });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new AppError(`Solver timed out after ${timeoutMs}ms`, 504);
+        throw new AppError(
+          `Solver timed out after ${timeoutMs}ms`,
+          504,
+          SOLVER_ERROR_CODES.TIMEOUT
+        );
       }
-      throw new AppError('Solver unavailable', 503);
+      throw new AppError('Solver unavailable', 503, SOLVER_ERROR_CODES.UNAVAILABLE);
     }
 
     if (response.status === 422) {
-      const body = (await response.json()) as { detail?: string };
-      throw new AppError(`Invalid solver request: ${body.detail ?? 'validation error'}`, 400);
+      let detail = 'validation error';
+      try {
+        const body = (await response.json()) as { detail?: string };
+        if (typeof body.detail === 'string' && body.detail.length > 0) {
+          detail = body.detail;
+        }
+      } catch {
+        // Body wasn't valid JSON; keep the generic validation message.
+      }
+      throw new AppError(
+        `Invalid solver request: ${detail}`,
+        400,
+        SOLVER_ERROR_CODES.INVALID_REQUEST
+      );
     }
     if (response.status >= 500) {
-      throw new AppError('Solver internal error', 502);
+      throw new AppError('Solver internal error', 502, SOLVER_ERROR_CODES.INTERNAL);
     }
     if (!response.ok) {
-      throw new AppError(`Unexpected solver response: ${response.status}`, 502);
+      throw new AppError(
+        `Unexpected solver response: ${response.status}`,
+        502,
+        SOLVER_ERROR_CODES.UNEXPECTED_STATUS
+      );
     }
 
-    return (await response.json()) as SolveResult;
+    try {
+      return (await response.json()) as SolveResult;
+    } catch {
+      throw new AppError('Malformed solver response', 502, SOLVER_ERROR_CODES.MALFORMED_RESPONSE);
+    }
   } finally {
     clearTimeout(timer);
   }
