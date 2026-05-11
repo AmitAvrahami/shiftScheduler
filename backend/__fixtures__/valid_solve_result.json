@@ -1,0 +1,19 @@
+{
+  "status": "FEASIBLE",
+  "assignments": [
+    {
+      "shift_id": "shift_1",
+      "worker_id": "worker_1",
+      "assigned_by": "algorithm"
+    }
+  ],
+  "violations": [],
+  "warnings": [
+    {
+      "constraint_id": "CONTRACT_TEST_WARNING",
+      "worker_id": "worker_1",
+      "message": "Contract test warning"
+    }
+  ],
+  "solve_time_ms": 12
+}

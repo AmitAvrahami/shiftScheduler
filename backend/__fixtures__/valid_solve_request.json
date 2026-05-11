@@ -1,0 +1,48 @@
+{
+  "schedule_id": "schedule_contract_test",
+  "week_id": "2026-W18",
+  "workers": [
+    {
+      "id": "worker_1",
+      "role": "employee",
+      "is_fixed_morning": false,
+      "availability": [
+        {
+          "date": "2026-04-27",
+          "definition_id": "shift_def_morning",
+          "can_work": true
+        }
+      ]
+    },
+    {
+      "id": "manager_1",
+      "role": "manager",
+      "is_fixed_morning": true,
+      "availability": [
+        {
+          "date": "2026-04-27",
+          "definition_id": "shift_def_morning",
+          "can_work": true
+        }
+      ]
+    }
+  ],
+  "shift_definitions": [
+    {
+      "id": "shift_def_morning",
+      "name": "Morning",
+      "start_time": "06:00",
+      "end_time": "14:00",
+      "duration_minutes": 480,
+      "crosses_midnight": false
+    }
+  ],
+  "shifts": [
+    {
+      "id": "shift_1",
+      "date": "2026-04-27",
+      "definition_id": "shift_def_morning",
+      "required_count": 1
+    }
+  ]
+}
