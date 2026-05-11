@@ -127,7 +127,13 @@ describe('runScheduler — OPTIMAL success path', () => {
 
     const auditLog = await AuditLog.findOne({ action: 'schedule_generated' });
     expect(auditLog).not.toBeNull();
-    expect((auditLog!.after as Record<string, unknown>).weekId).toBe(WEEK_ID);
+    const after = auditLog!.after as Record<string, unknown>;
+    expect(after.weekId).toBe(WEEK_ID);
+    expect(after.solverStatus).toBe('OPTIMAL');
+    expect(after.solveTimeMs).toBe(42);
+    expect(after.warnings).toEqual([]);
+    expect(after.violations).toEqual([]);
+    expect(after.assignmentCount).toBe(1);
   });
 });
 
@@ -155,6 +161,15 @@ describe('runScheduler — RELAXED path', () => {
     expect(result.status).toBe('RELAXED');
     expect(result.warnings).toHaveLength(1);
     expect(await Assignment.countDocuments()).toBe(1);
+
+    const auditLog = await AuditLog.findOne({ action: 'schedule_generated' });
+    expect(auditLog).not.toBeNull();
+    const after = auditLog!.after as Record<string, unknown>;
+    expect(after.solverStatus).toBe('RELAXED');
+    expect(after.solveTimeMs).toBe(100);
+    expect(after.warnings).toHaveLength(1);
+    expect(after.violations).toEqual([]);
+    expect(after.assignmentCount).toBe(1);
   });
 });
 
