@@ -9,6 +9,7 @@ import {
 type FetchMock = jest.SpyInstance<ReturnType<typeof fetch>, Parameters<typeof fetch>>;
 
 let originalSolverUrl: string | undefined;
+let originalSolverTimeoutMs: string | undefined;
 let fetchSpy: FetchMock;
 
 const SOLVER_URL = 'http://solver.test';
@@ -40,6 +41,7 @@ function makeResponse(
 
 beforeEach(() => {
   originalSolverUrl = process.env.SOLVER_URL;
+  originalSolverTimeoutMs = process.env.SOLVER_TIMEOUT_MS;
   process.env.SOLVER_URL = SOLVER_URL;
   // Force a short timeout so timeout-related branches stay quick — not used by most tests.
   process.env.SOLVER_TIMEOUT_MS = '5000';
@@ -53,7 +55,11 @@ afterEach(() => {
   } else {
     process.env.SOLVER_URL = originalSolverUrl;
   }
-  delete process.env.SOLVER_TIMEOUT_MS;
+  if (originalSolverTimeoutMs === undefined) {
+    delete process.env.SOLVER_TIMEOUT_MS;
+  } else {
+    process.env.SOLVER_TIMEOUT_MS = originalSolverTimeoutMs;
+  }
 });
 
 describe('callSolver — config errors', () => {
