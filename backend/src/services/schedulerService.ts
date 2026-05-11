@@ -7,8 +7,9 @@ import Constraint from '../models/Constraint';
 import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
-import { callSolver, SolveStatus, SolverViolation, SolverWarning } from './solverClient';
+import { SolveStatus, SolverViolation, SolverWarning } from './solverClient';
 import { toSolveRequest, toAssignmentDocs, calculateShiftStatus } from './solverMapper';
+import { getSolver } from './solver/SolverFactory';
 
 export interface SchedulerResult {
   status: SolveStatus;
@@ -51,8 +52,8 @@ export async function runScheduler(
   // Phase 2: map MongoDB documents to solver wire format
   const solveRequest = toSolveRequest({ schedule, workers, shifts, shiftDefinitions, constraints });
 
-  // Phase 3: call Python solver (errors propagate as AppError instances)
-  const result = await callSolver(solveRequest);
+  // Phase 3: call solver through factory (errors propagate as AppError instances)
+  const result = await getSolver().solve(solveRequest);
 
   if (result.status === 'INFEASIBLE') {
     throw new AppError(
