@@ -12,6 +12,7 @@ import User from '../models/User';
 import AppError from '../utils/AppError';
 import { parseWeekId, getWeekDates } from '../utils/weekUtils';
 import { runScheduler } from '../services/schedulerService';
+import { runDemoScheduler } from '../services/demoSchedulerService';
 import { fillMissingTemplateShifts } from '../services/shiftGenerationService';
 import { logger } from '../utils/logger';
 
@@ -461,6 +462,80 @@ export async function generateSchedule(
     logger.info('generateSchedule - end', { weekId: req.params.weekId });
   } catch (err) {
     logger.error('generateSchedule - error', err);
+    next(err);
+  }
+}
+
+export async function generateDemoSchedule(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  logger.info('generateDemoSchedule - start', { weekId: req.params.weekId });
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+
+    const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
+    const ip = req.ip ?? 'unknown';
+
+    // Ensure a schedule exists before invoking the demo scheduler
+    let schedule = await WeeklySchedule.findOne({ weekId });
+    if (!schedule) {
+      await assertActiveShiftTemplates();
+      const dates = getWeekDates(weekId);
+      schedule = await WeeklySchedule.create({
+        weekId,
+        startDate: dates[0],
+        endDate: dates[6],
+        status: 'open',
+        generatedBy: 'auto',
+      });
+      await AuditLog.create({
+        performedBy: actorId,
+        action: 'schedule_created',
+        refModel: 'WeeklySchedule',
+        refId: schedule._id,
+        after: { weekId, generatedBy: 'auto', status: 'open' },
+        ip,
+      });
+    } else {
+      const { role } = req.user!;
+      if (schedule.status === 'draft' && !['admin', 'manager'].includes(role)) {
+        return next(
+          new AppError('Forbidden — draft access restricted to admins and managers', 403)
+        );
+      }
+
+      if (!['open', 'locked', 'draft', 'published'].includes(schedule.status)) {
+        return next(new AppError(`Cannot re-generate a ${schedule.status} schedule`, 422));
+      }
+    }
+
+    const priorStatus = schedule.status;
+
+    let result: Awaited<ReturnType<typeof runDemoScheduler>>;
+    try {
+      if (priorStatus === 'published') {
+        await WeeklySchedule.findOneAndUpdate({ weekId }, { $set: { status: 'draft' } });
+      }
+
+      await fillMissingTemplateShifts(weekId, actorId, ip);
+
+      // Transition to 'generating' before invoking the demo scheduler
+      await WeeklySchedule.findOneAndUpdate({ weekId }, { $set: { status: 'generating' } });
+
+      result = await runDemoScheduler(weekId, actorId, ip);
+      await WeeklySchedule.findOneAndUpdate({ weekId }, { $set: { status: 'draft' } });
+    } catch (demoErr) {
+      await WeeklySchedule.findOneAndUpdate({ weekId }, { $set: { status: priorStatus } });
+      throw demoErr;
+    }
+
+    res.json({ success: true, ...result });
+    logger.info('generateDemoSchedule - end', { weekId: req.params.weekId });
+  } catch (err) {
+    logger.error('generateDemoSchedule - error', err);
     next(err);
   }
 }

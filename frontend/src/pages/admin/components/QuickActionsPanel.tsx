@@ -7,14 +7,18 @@ interface QuickActionsPanelProps {
   weekId: string;
   onToast: (t: Toast) => void;
   onGenerate: () => Promise<GenerateResult | undefined>;
+  onGenerateDemo: () => Promise<GenerateResult | undefined>;
   isGenerating: boolean;
+  isGeneratingDemo: boolean;
 }
 
 export function QuickActionsPanel({
   weekId,
   onToast,
   onGenerate,
+  onGenerateDemo,
   isGenerating,
+  isGeneratingDemo,
 }: QuickActionsPanelProps) {
   const navigate = useNavigate();
 
@@ -26,6 +30,14 @@ export function QuickActionsPanel({
     }
   }
 
+  async function handleGenerateDemo() {
+    if (isGeneratingDemo) return;
+    const result = await onGenerateDemo();
+    if (result) {
+      onToast({ message: 'סידור דמו נוצר בהצלחה', type: 'success' });
+    }
+  }
+
   const actions = [
     {
       id: 'generate',
@@ -34,6 +46,14 @@ export function QuickActionsPanel({
       onClick: handleGenerate,
       subtitle: 'אוטומציה מלאה',
       isPrimary: true,
+    },
+    {
+      id: 'generate-demo',
+      label: 'צור סידור דמו',
+      icon: 'auto_awesome',
+      onClick: handleGenerateDemo,
+      subtitle: 'הפקה באמצעות אלגוריתם CSP',
+      isPrimary: false,
     },
     {
       id: 'view_week',
@@ -73,8 +93,9 @@ export function QuickActionsPanel({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {actions.map((a) => {
             const isGenerate = a.id === 'generate';
+            const isGenerateDemo = a.id === 'generate-demo';
             const isEmergency = a.id === 'emergency';
-            const isLoading = isGenerate && isGenerating;
+            const isLoading = (isGenerate && isGenerating) || (isGenerateDemo && isGeneratingDemo);
 
             return (
               <button

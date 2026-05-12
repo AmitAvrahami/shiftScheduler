@@ -8,6 +8,7 @@ import User from '../models/User';
 import WeeklySchedule from '../models/WeeklySchedule';
 import ShiftDefinition from '../models/ShiftDefinition';
 import Shift from '../models/Shift';
+import Assignment from '../models/Assignment';
 import { callSolver } from '../services/solverClient';
 
 jest.mock('../services/solverClient');
@@ -210,6 +211,180 @@ describe('POST /api/v1/schedules/:weekId/generate', () => {
     expect(res.status).toBe(422);
     expect(res.body.code).toBe('ERR_NO_SHIFT_TEMPLATES');
     expect(await WeeklySchedule.countDocuments({ weekId: '2026-W20' })).toBe(0);
+    expect(mockCallSolver).not.toHaveBeenCalled();
+  });
+
+  it('production /generate still rejects re-generating a published schedule (422)', async () => {
+    const manager = await User.create({
+      name: 'Published Manager',
+      email: 'published-manager@test.com',
+      password: 'Password123!',
+      role: 'manager',
+      isActive: true,
+    });
+    await User.create({
+      name: 'Published Employee',
+      email: 'published-employee@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: manager._id,
+      requiredStaffCount: 1,
+    });
+    await WeeklySchedule.create({
+      weekId: '2026-W20',
+      startDate: new Date(2026, 4, 10),
+      endDate: new Date(2026, 4, 16),
+      status: 'published',
+      generatedBy: 'auto',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/schedules/2026-W20/generate')
+      .set('Authorization', `Bearer ${makeToken(manager)}`);
+
+    expect(res.status).toBe(422);
+    expect(res.body.message).toContain('Cannot re-generate a published schedule');
+    expect(mockCallSolver).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/schedules/:weekId/generate-demo', () => {
+  it('materializes shifts and generates demo assignments without calling the solver', async () => {
+    const manager = await User.create({
+      name: 'Demo Manager',
+      email: 'demo-manager@test.com',
+      password: 'Password123!',
+      role: 'manager',
+      isActive: true,
+    });
+    await User.create({
+      name: 'Demo Employee',
+      email: 'demo-employee@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: manager._id,
+      requiredStaffCount: 1,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/schedules/2026-W20/generate-demo')
+      .set('Authorization', `Bearer ${makeToken(manager)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      status: 'OPTIMAL',
+      assignmentCount: 1,
+      violations: [],
+    });
+    expect(mockCallSolver).not.toHaveBeenCalled();
+
+    const schedule = await WeeklySchedule.findOne({ weekId: '2026-W20' }).lean();
+    expect(schedule!.status).toBe('draft');
+    expect(await Shift.countDocuments({ scheduleId: schedule!._id })).toBe(1);
+  });
+
+  it('regenerates demo assignments on an already-published schedule, preserving manual assignments', async () => {
+    const manager = await User.create({
+      name: 'Demo Published Manager',
+      email: 'demo-published-manager@test.com',
+      password: 'Password123!',
+      role: 'manager',
+      isActive: true,
+    });
+    const employee = await User.create({
+      name: 'Demo Published Employee',
+      email: 'demo-published-employee@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    await User.create({
+      name: 'Demo Published Employee 2',
+      email: 'demo-published-employee-2@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: manager._id,
+      requiredStaffCount: 2,
+    });
+
+    const firstRes = await request(app)
+      .post('/api/v1/schedules/2026-W20/generate-demo')
+      .set('Authorization', `Bearer ${makeToken(manager)}`);
+
+    expect(firstRes.status).toBe(200);
+
+    const schedule = await WeeklySchedule.findOne({ weekId: '2026-W20' }).lean();
+    expect(schedule!.status).toBe('draft');
+
+    await WeeklySchedule.findByIdAndUpdate(schedule!._id, { $set: { status: 'published' } });
+
+    const shift = await Shift.findOne({ scheduleId: schedule!._id }).lean();
+    const manualAssignment = await Assignment.create({
+      shiftId: shift!._id,
+      userId: employee._id,
+      scheduleId: schedule!._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+
+    const algorithmAssignment = await Assignment.findOne({
+      scheduleId: schedule!._id,
+      assignedBy: 'algorithm',
+    }).lean();
+    expect(algorithmAssignment).not.toBeNull();
+    const replacedAlgorithmAssignmentId = algorithmAssignment!._id;
+
+    const secondRes = await request(app)
+      .post('/api/v1/schedules/2026-W20/generate-demo')
+      .set('Authorization', `Bearer ${makeToken(manager)}`);
+
+    expect(secondRes.status).toBe(200);
+
+    const regeneratedSchedule = await WeeklySchedule.findOne({ weekId: '2026-W20' }).lean();
+    expect(regeneratedSchedule!.status).toBe('draft');
+    expect(await Assignment.findById(manualAssignment._id)).not.toBeNull();
+    expect(await Assignment.findById(replacedAlgorithmAssignmentId)).toBeNull();
     expect(mockCallSolver).not.toHaveBeenCalled();
   });
 });

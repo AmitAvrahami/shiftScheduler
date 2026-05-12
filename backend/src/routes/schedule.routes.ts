@@ -7,6 +7,7 @@ import {
   updateSchedule,
   deleteSchedule,
   generateSchedule,
+  generateDemoSchedule,
   cloneSchedule,
 } from '../controllers/scheduleController';
 
@@ -15,6 +16,7 @@ const router = Router();
 router.get('/', verifyToken, getSchedules);
 router.post('/', verifyToken, isManager, createSchedule);
 router.post('/:weekId/generate', verifyToken, isManager, generateSchedule);
+router.post('/:weekId/generate-demo', verifyToken, isManager, generateDemoSchedule);
 router.post('/:id/clone', verifyToken, isManager, cloneSchedule);
 router.get('/:id', verifyToken, getScheduleById);
 router.patch('/:id', verifyToken, isManager, updateSchedule);

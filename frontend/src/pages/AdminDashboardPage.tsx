@@ -50,7 +50,9 @@ export default function AdminDashboardPage() {
               weekId={weekId}
               onToast={setToast}
               onGenerate={actions.generateSchedule}
+              onGenerateDemo={actions.generateDemoSchedule}
               isGenerating={actionLoading.generating}
+              isGeneratingDemo={actionLoading.generatingDemo}
             />
 
             {generateResult && (

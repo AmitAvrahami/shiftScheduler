@@ -7,6 +7,7 @@ type GenerateResult = Awaited<ReturnType<typeof scheduleApi.generate>>;
 type ActionLoading = {
   initializing: boolean;
   generating: boolean;
+  generatingDemo: boolean;
   regenerating: boolean;
   publishing: boolean;
 };
@@ -14,6 +15,7 @@ type ActionLoading = {
 const idleActionLoading: ActionLoading = {
   initializing: false,
   generating: false,
+  generatingDemo: false,
   regenerating: false,
   publishing: false,
 };
@@ -95,6 +97,23 @@ export function useAdminDashboard(weekId: string) {
     }
   }, [weekId, refresh]);
 
+  const generateDemoSchedule = useCallback(async () => {
+    try {
+      setActionLoading((current) => ({ ...current, generatingDemo: true }));
+      setRefreshing(true);
+      setError(null);
+      const result = await scheduleApi.generateDemo(weekId);
+      setGenerateResult(result);
+      await refresh();
+      return result;
+    } catch {
+      setError(unexpectedErrorMessage);
+    } finally {
+      setActionLoading((current) => ({ ...current, generatingDemo: false }));
+      setRefreshing(false);
+    }
+  }, [weekId, refresh]);
+
   const regenerateSchedule = useCallback(async () => {
     try {
       setActionLoading((current) => ({ ...current, regenerating: true }));
@@ -146,6 +165,7 @@ export function useAdminDashboard(weekId: string) {
     actions: {
       initializeWeek,
       generateSchedule,
+      generateDemoSchedule,
       regenerateSchedule,
       publishSchedule,
     },

@@ -277,6 +277,10 @@ export const scheduleApi = {
     return request(`/schedules/${weekId}/generate`, { method: 'POST' });
   },
 
+  generateDemo(weekId: string): Promise<GenerateResult> {
+    return request(`/schedules/${weekId}/generate-demo`, { method: 'POST' });
+  },
+
   getAll(): Promise<{ success: boolean; schedules: Schedule[] }> {
     return request('/schedules');
   },
