@@ -13,6 +13,7 @@
 ### Task 1: Create Demo Scheduler Service
 
 **Files:**
+
 - Create: `backend/src/services/demoSchedulerService.ts`
 
 - [ ] **Step 1: Write the minimal implementation**
@@ -41,10 +42,10 @@ export async function runDemoScheduler(
   ip: string
 ): Promise<SchedulerResult> {
   const startTime = Date.now();
-  
+
   const schedule = await WeeklySchedule.findOne({ weekId }).lean();
   if (!schedule) throw new AppError(`Schedule not found for week ${weekId}`, 404);
-  
+
   const scheduleId = schedule._id as mongoose.Types.ObjectId;
 
   const [shifts, workers] = await Promise.all([
@@ -60,61 +61,65 @@ export async function runDemoScheduler(
   // Simple round-robin logic
   const assignmentDocs: any[] = [];
   const countByShift: Record<string, number> = {};
-  
+
   // Sort shifts by date and shiftType (morning, afternoon, night)
-  const sortedShifts = [...shifts].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  
+  const sortedShifts = [...shifts].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
   // Map of worker ID to their total assigned shifts
-  const shiftCounts = new Map<string, number>(workers.map(w => [w._id.toString(), 0]));
-  
+  const shiftCounts = new Map<string, number>(workers.map((w) => [w._id.toString(), 0]));
+
   for (const shift of sortedShifts) {
     const shiftIdStr = shift._id.toString();
     const dateStr = new Date(shift.date).toISOString().split('T')[0];
-    
+
     let needed = shift.requiredCount;
     if (needed === 0) continue;
-    
+
     // Demo overrides for needed capacity
     // Sun-Thu: 2/2/1, Fri: 2/1/1, Sat: 1/1/1
     const dayOfWeek = new Date(shift.date).getDay();
-    if (dayOfWeek >= 0 && dayOfWeek <= 4) { // Sun-Thu
+    if (dayOfWeek >= 0 && dayOfWeek <= 4) {
+      // Sun-Thu
       if (shift.type === 'morning') needed = 2;
       if (shift.type === 'afternoon') needed = 2;
       if (shift.type === 'night') needed = 1;
-    } else if (dayOfWeek === 5) { // Fri
+    } else if (dayOfWeek === 5) {
+      // Fri
       if (shift.type === 'morning') needed = 2;
       if (shift.type === 'afternoon') needed = 1;
       if (shift.type === 'night') needed = 1;
-    } else if (dayOfWeek === 6) { // Sat
+    } else if (dayOfWeek === 6) {
+      // Sat
       if (shift.type === 'morning') needed = 1;
       if (shift.type === 'afternoon') needed = 1;
       if (shift.type === 'night') needed = 1;
     }
 
     countByShift[shiftIdStr] = 0;
-    
+
     for (let i = 0; i < needed; i++) {
       // Find worker with least shifts who isn't already assigned today
       let bestWorker = null;
       let minShifts = Infinity;
-      
+
       for (const worker of workers) {
         const workerIdStr = worker._id.toString();
         // Check if assigned today
-        const assignedToday = assignmentDocs.some(a => 
-           a.userId.toString() === workerIdStr && 
-           a._dateStr === dateStr
+        const assignedToday = assignmentDocs.some(
+          (a) => a.userId.toString() === workerIdStr && a._dateStr === dateStr
         );
-        
+
         if (assignedToday) continue;
-        
+
         const count = shiftCounts.get(workerIdStr) || 0;
         if (count < minShifts) {
           minShifts = count;
           bestWorker = worker;
         }
       }
-      
+
       if (bestWorker) {
         assignmentDocs.push({
           shiftId: shift._id,
@@ -122,7 +127,7 @@ export async function runDemoScheduler(
           scheduleId: scheduleId,
           assignedBy: 'algorithm',
           status: 'pending',
-          _dateStr: dateStr // temp for checking today
+          _dateStr: dateStr, // temp for checking today
         });
         shiftCounts.set(bestWorker._id.toString(), minShifts + 1);
         countByShift[shiftIdStr]++;
@@ -166,7 +171,7 @@ export async function runDemoScheduler(
       solveTimeMs: Date.now() - startTime,
       warnings: [],
       violations: [],
-      demoMode: true
+      demoMode: true,
     },
     ip,
   });
@@ -184,6 +189,7 @@ export async function runDemoScheduler(
 ### Task 2: Update Controller & Routes
 
 **Files:**
+
 - Modify: `backend/src/controllers/scheduleController.ts`
 - Modify: `backend/src/routes/schedule.routes.ts`
 
@@ -252,6 +258,7 @@ router.post('/:weekId/generate-demo', verifyToken, isManager, generateDemoSchedu
 ### Task 3: Update Frontend API & Hook
 
 **Files:**
+
 - Modify: `frontend/src/lib/api.ts`
 - Modify: `frontend/src/pages/admin/hooks/useAdminDashboard.ts`
 
@@ -270,26 +277,28 @@ In `api.ts`, add:
 In `useAdminDashboard.ts`, add:
 
 ```typescript
-  const generateDemoSchedule = useCallback(async () => {
-    if (!weekId) return;
-    setActionLoading('generate');
-    try {
-      const result = await scheduleApi.generateDemo(weekId);
-      setGenerateResult(result);
-      await loadDashboard();
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to generate demo schedule'));
-    } finally {
-      setActionLoading(null);
-    }
-  }, [weekId, loadDashboard]);
+const generateDemoSchedule = useCallback(async () => {
+  if (!weekId) return;
+  setActionLoading('generate');
+  try {
+    const result = await scheduleApi.generateDemo(weekId);
+    setGenerateResult(result);
+    await loadDashboard();
+    return result;
+  } catch (err) {
+    setError(err instanceof Error ? err : new Error('Failed to generate demo schedule'));
+  } finally {
+    setActionLoading(null);
+  }
+}, [weekId, loadDashboard]);
 ```
+
 Export it in the returned actions object.
 
 ### Task 4: Add Button to UI
 
 **Files:**
+
 - Modify: `frontend/src/pages/admin/components/QuickActionsPanel.tsx`
 - Modify: `frontend/src/pages/AdminDashboardPage.tsx`
 
@@ -298,6 +307,7 @@ Export it in the returned actions object.
 In `QuickActionsPanel.tsx`, add `onGenerateDemo: () => Promise<GenerateResult | undefined>;` to props.
 
 Add to `actions` array:
+
 ```typescript
     {
       id: 'generate-demo',
