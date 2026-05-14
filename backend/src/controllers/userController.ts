@@ -6,6 +6,13 @@ import { logger } from '../utils/logger';
 
 const managerUpdateSchema = z.object({
   name: z.string().min(1).optional(),
+  email: z
+    .string()
+    .trim()
+    .email('כתובת אימייל לא תקינה')
+    .transform((email) => email.toLowerCase())
+    .optional(),
+  role: z.enum(['employee', 'manager']).optional(),
   phone: z.string().optional(),
   avatarUrl: z.string().url('avatarUrl must be a valid URL').optional(),
 });
@@ -40,20 +47,42 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
   logger.info('updateUser - start', { id: req.params.id, body: req.body });
   try {
     const { id } = req.params;
-    const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
+    const isAdmin = req.user!.role === 'admin';
+    const isManagerOrAdmin = req.user!.role === 'manager' || isAdmin;
     const isSelf = id === req.user!._id;
 
     if (!isManagerOrAdmin && !isSelf) {
       return next(new AppError('Forbidden', 403));
     }
 
-    const schema = isManagerOrAdmin ? managerUpdateSchema : selfUpdateSchema;
-    const parsed = schema.safeParse(req.body);
+    const parsed = isManagerOrAdmin
+      ? managerUpdateSchema.safeParse(req.body)
+      : selfUpdateSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
+
+    if (isManagerOrAdmin && !isSelf) {
+      const target = await User.findById(id);
+      if (!target) return next(new AppError('משתמש לא נמצא', 404));
+      if (!isAdmin && target.role !== 'employee') {
+        return next(new AppError('Forbidden', 403));
+      }
+    }
+
+    const updateData: Record<string, unknown> = parsed.data;
+    const newEmail = typeof updateData.email === 'string' ? updateData.email : null;
+    if (newEmail) {
+      const existing = await User.findOne({
+        email: newEmail,
+        _id: { $ne: id },
+      });
+      if (existing) {
+        return next(new AppError('כתובת האימייל כבר בשימוש', 409));
+      }
+    }
 
     const user = await User.findByIdAndUpdate(
       id,
-      { $set: parsed.data },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
     if (!user) return next(new AppError('משתמש לא נמצא', 404));
