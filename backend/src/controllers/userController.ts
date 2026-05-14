@@ -47,7 +47,8 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
   logger.info('updateUser - start', { id: req.params.id, body: req.body });
   try {
     const { id } = req.params;
-    const isManagerOrAdmin = req.user!.role === 'manager' || req.user!.role === 'admin';
+    const isAdmin = req.user!.role === 'admin';
+    const isManagerOrAdmin = req.user!.role === 'manager' || isAdmin;
     const isSelf = id === req.user!._id;
 
     if (!isManagerOrAdmin && !isSelf) {
@@ -58,6 +59,14 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
       ? managerUpdateSchema.safeParse(req.body)
       : selfUpdateSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
+
+    if (isManagerOrAdmin && !isSelf) {
+      const target = await User.findById(id);
+      if (!target) return next(new AppError('משתמש לא נמצא', 404));
+      if (!isAdmin && target.role !== 'employee') {
+        return next(new AppError('Forbidden', 403));
+      }
+    }
 
     const updateData: Record<string, unknown> = parsed.data;
     const newEmail = typeof updateData.email === 'string' ? updateData.email : null;

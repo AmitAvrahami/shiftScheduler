@@ -169,7 +169,7 @@ export const userApi = {
 
   updateUser(
     id: string,
-    body: { name?: string; email?: string; role?: 'employee' | 'manager' | 'admin' }
+    body: { name?: string; email?: string; role?: 'employee' | 'manager' }
   ): Promise<{ success: boolean; user: User }> {
     return request(`/users/${id}`, {
       method: 'PATCH',

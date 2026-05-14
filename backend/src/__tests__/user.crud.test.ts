@@ -175,7 +175,7 @@ describe('PATCH /api/v1/users/:id', () => {
     expect(res.body.user.email).toBe('newemail@test.com');
   });
 
-  it('manager can update role to employee', async () => {
+  it('admin can update a manager (downgrade role to employee)', async () => {
     const { manager } = await seedManager();
     const { token } = await seedAdmin();
     const res = await request(app)
@@ -186,7 +186,7 @@ describe('PATCH /api/v1/users/:id', () => {
     expect(res.body.user.role).toBe('employee');
   });
 
-  it('manager can update role to manager', async () => {
+  it('manager can promote an employee to manager', async () => {
     const { employee } = await seedEmployee();
     const { token } = await seedManager();
     const res = await request(app)
@@ -195,6 +195,66 @@ describe('PATCH /api/v1/users/:id', () => {
       .send({ role: 'manager' });
     expect(res.status).toBe(200);
     expect(res.body.user.role).toBe('manager');
+  });
+
+  it('manager can update an employee', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed Employee' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.name).toBe('Renamed Employee');
+  });
+
+  it('manager cannot update another manager', async () => {
+    const other = await User.create({
+      name: 'Other Manager',
+      email: 'other-manager@test.com',
+      password: 'pass12345',
+      role: 'manager',
+    });
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${other._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Hacked' });
+    expect(res.status).toBe(403);
+    const after = await User.findById(other._id);
+    expect(after!.name).toBe('Other Manager');
+  });
+
+  it('manager cannot update an admin', async () => {
+    const { admin } = await seedAdmin();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${admin._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Hacked' });
+    expect(res.status).toBe(403);
+    const after = await User.findById(admin._id);
+    expect(after!.name).toBe('Admin');
+  });
+
+  it('admin can update a manager', async () => {
+    const { manager } = await seedManager();
+    const { token } = await seedAdmin();
+    const res = await request(app)
+      .patch(`/api/v1/users/${manager._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed Manager' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.name).toBe('Renamed Manager');
+  });
+
+  it('returns 404 when manager updates nonexistent user', async () => {
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'X' });
+    expect(res.status).toBe(404);
   });
 
   it('returns 400 when manager tries to update role to admin', async () => {
