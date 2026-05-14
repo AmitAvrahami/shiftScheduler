@@ -34,10 +34,7 @@
  * @module constraint.types
  */
 
-import type {
-  HardConstraintCategory,
-  SoftConstraintCategory,
-} from './constraint.categories';
+import type { HardConstraintCategory, SoftConstraintCategory } from './constraint.categories';
 import type { ConstraintId, WorkerId } from './constraint.ids';
 import type { ConstraintTargetSet } from './constraint.targets';
 import type { ConstraintWeight } from './constraint.weights';

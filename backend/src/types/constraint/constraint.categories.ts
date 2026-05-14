@@ -88,75 +88,77 @@ export interface ConstraintCategoryMetadata {
  * Kept exhaustive via the `Record<…>` index signature — adding a new category
  * to either union above without updating this table is a TypeScript error.
  */
-export const CONSTRAINT_CATEGORY_METADATA: Record<ConstraintCategory, ConstraintCategoryMetadata> = {
-  // Hard
-  availability: {
-    kind: 'hard',
-    description: 'Worker is unavailable for a specific shift slot.',
-    solverRule: 'HC2 — _enforce_availability_blocks',
-  },
-  role_restriction: {
-    kind: 'hard',
-    description: 'Worker may only be assigned to shifts compatible with their role.',
-    solverRule: 'HC3 — _enforce_manager_rule',
-  },
-  fixed_assignment: {
-    kind: 'hard',
-    description: 'Worker must be assigned to a specific recurring shift unless explicitly excluded.',
-    solverRule: 'HC4 — _enforce_fixed_morning_rule',
-  },
-  min_rest: {
-    kind: 'hard',
-    description: 'Minimum rest period between consecutive shifts (default 480 min).',
-    solverRule: 'HC1 — _enforce_min_rest',
-  },
-  one_shift_per_day: {
-    kind: 'hard',
-    description: 'A worker holds at most one shift on any given calendar day.',
-    solverRule: 'HC5 — _enforce_one_shift_per_day',
-  },
-  weekly_shift_cap: {
-    kind: 'hard',
-    description: 'A worker holds at most N shifts per week (default 6).',
-    solverRule: 'HC6 — _enforce_weekly_cap',
-  },
-  coverage: {
-    kind: 'hard',
-    description: 'Every shift slot must be staffed up to its required count.',
-    solverRule: 'HC7 — _enforce_coverage',
-  },
-  // Soft
-  shift_balance: {
-    kind: 'soft',
-    description: 'Distribute total shifts evenly across workers.',
-    solverRule: 'SOFT — W_SHIFT_BALANCE',
-  },
-  type_diversity: {
-    kind: 'soft',
-    description: 'Avoid concentrating one shift type (>60%) on a single worker.',
-    solverRule: 'SOFT — W_TYPE_DIVERSITY',
-  },
-  rest_optimisation: {
-    kind: 'soft',
-    description: 'Prefer ≥16h rest between consecutive shifts even when 8h is legal.',
-    solverRule: 'SOFT — W_REST_OPTIMISATION',
-  },
-  weekend_balance: {
-    kind: 'soft',
-    description: 'Distribute weekend shifts evenly; penalise workers above team average + 2.',
-    solverRule: 'SOFT — W_WEEKEND_BALANCE',
-  },
-  night_overcap: {
-    kind: 'soft',
-    description: 'Penalise >2 night shifts per worker per week.',
-    solverRule: 'SOFT — W_NIGHT_OVERCAP',
-  },
-  fri_sat_cluster: {
-    kind: 'soft',
-    description: 'Penalise the same worker holding both Friday and Saturday shifts.',
-    solverRule: 'SOFT — W_FRI_SAT_CLUSTER',
-  },
-};
+export const CONSTRAINT_CATEGORY_METADATA: Record<ConstraintCategory, ConstraintCategoryMetadata> =
+  {
+    // Hard
+    availability: {
+      kind: 'hard',
+      description: 'Worker is unavailable for a specific shift slot.',
+      solverRule: 'HC2 — _enforce_availability_blocks',
+    },
+    role_restriction: {
+      kind: 'hard',
+      description: 'Worker may only be assigned to shifts compatible with their role.',
+      solverRule: 'HC3 — _enforce_manager_rule',
+    },
+    fixed_assignment: {
+      kind: 'hard',
+      description:
+        'Worker must be assigned to a specific recurring shift unless explicitly excluded.',
+      solverRule: 'HC4 — _enforce_fixed_morning_rule',
+    },
+    min_rest: {
+      kind: 'hard',
+      description: 'Minimum rest period between consecutive shifts (default 480 min).',
+      solverRule: 'HC1 — _enforce_min_rest',
+    },
+    one_shift_per_day: {
+      kind: 'hard',
+      description: 'A worker holds at most one shift on any given calendar day.',
+      solverRule: 'HC5 — _enforce_one_shift_per_day',
+    },
+    weekly_shift_cap: {
+      kind: 'hard',
+      description: 'A worker holds at most N shifts per week (default 6).',
+      solverRule: 'HC6 — _enforce_weekly_cap',
+    },
+    coverage: {
+      kind: 'hard',
+      description: 'Every shift slot must be staffed up to its required count.',
+      solverRule: 'HC7 — _enforce_coverage',
+    },
+    // Soft
+    shift_balance: {
+      kind: 'soft',
+      description: 'Distribute total shifts evenly across workers.',
+      solverRule: 'SOFT — W_SHIFT_BALANCE',
+    },
+    type_diversity: {
+      kind: 'soft',
+      description: 'Avoid concentrating one shift type (>60%) on a single worker.',
+      solverRule: 'SOFT — W_TYPE_DIVERSITY',
+    },
+    rest_optimisation: {
+      kind: 'soft',
+      description: 'Prefer ≥16h rest between consecutive shifts even when 8h is legal.',
+      solverRule: 'SOFT — W_REST_OPTIMISATION',
+    },
+    weekend_balance: {
+      kind: 'soft',
+      description: 'Distribute weekend shifts evenly; penalise workers above team average + 2.',
+      solverRule: 'SOFT — W_WEEKEND_BALANCE',
+    },
+    night_overcap: {
+      kind: 'soft',
+      description: 'Penalise >2 night shifts per worker per week.',
+      solverRule: 'SOFT — W_NIGHT_OVERCAP',
+    },
+    fri_sat_cluster: {
+      kind: 'soft',
+      description: 'Penalise the same worker holding both Friday and Saturday shifts.',
+      solverRule: 'SOFT — W_FRI_SAT_CLUSTER',
+    },
+  };
 
 /** Type guard: narrows a category to the hard subset. */
 export const isHardCategory = (c: ConstraintCategory): c is HardConstraintCategory =>
