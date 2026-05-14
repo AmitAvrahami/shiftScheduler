@@ -6,6 +6,7 @@ import ShiftDefinition from '../models/ShiftDefinition';
 import User from '../models/User';
 import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
+import Constraint from '../models/Constraint';
 import AppError from '../utils/AppError';
 import { runScheduler } from '../services/schedulerService';
 
@@ -279,6 +280,67 @@ describe('runScheduler — guard: no shifts', () => {
     });
 
     expect(mockCallSolver).not.toHaveBeenCalled();
+  });
+});
+
+describe('runScheduler — dual-payload transport (PR #3)', () => {
+  it('sends compiled forbidden_assignments, penalties, and relaxation_weights alongside legacy availability', async () => {
+    const { schedule, shift, user } = await seedFullScenario();
+
+    // Seed a canWork=false constraint so the compiler emits one
+    // forbidden_assignments entry for this (worker, shift) cell.
+    await Constraint.create({
+      userId: user._id,
+      weekId: WEEK_ID,
+      entries: [{ date: shift.date, definitionId: shift.definitionId, canWork: false }],
+      isLocked: true,
+      submittedVia: 'self',
+    });
+
+    mockCallSolver.mockResolvedValueOnce(
+      makeOptimalResult(shift._id.toString(), user._id.toString())
+    );
+
+    await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    expect(mockCallSolver).toHaveBeenCalledTimes(1);
+    const payload = mockCallSolver.mock.calls[0][0];
+
+    // Legacy field still present — source of truth in PR #3.
+    expect(payload.workers[0].availability).toEqual([
+      {
+        date: '2026-05-10',
+        definition_id: shift.definitionId.toString(),
+        can_work: false,
+      },
+    ]);
+
+    // New generic payload appended.
+    expect(payload.forbidden_assignments).toEqual([
+      { worker_id: user._id.toString(), shift_id: shift._id.toString() },
+    ]);
+    expect(Array.isArray(payload.penalties)).toBe(true);
+    expect(payload.relaxation_weights).toEqual({
+      load: expect.any(Number),
+      coverage: expect.any(Number),
+    });
+
+    // Schedule scheduleId reference used in stored docs.
+    expect(payload.schedule_id).toBe(schedule._id.toString());
+  });
+
+  it('sends empty forbidden_assignments and penalties when no constraints exist', async () => {
+    const { shift, user } = await seedFullScenario();
+    mockCallSolver.mockResolvedValueOnce(
+      makeOptimalResult(shift._id.toString(), user._id.toString())
+    );
+
+    await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    const payload = mockCallSolver.mock.calls[0][0];
+    expect(payload.forbidden_assignments).toEqual([]);
+    expect(payload.penalties).toEqual([]);
+    expect(payload.relaxation_weights).toBeDefined();
   });
 });
 

@@ -31,6 +31,46 @@ def test_valid_solve_request_parses() -> None:
     assert req.shifts[0].required_count == 1
 
 
+def test_valid_solve_request_parses_with_generic_payload_fields() -> None:
+    """PR #3 — the SolveRequest model accepts the additive generic payload
+    fields produced by the Node compiler. The solver itself does not consume
+    them yet; this test only verifies parsing."""
+    raw = _load("valid_solve_request.json")
+    raw["forbidden_assignments"] = [{"worker_id": "worker_1", "shift_id": "shift_1"}]
+    raw["penalties"] = [
+        {"category": "shift_balance", "weight": 10, "worker_id": "worker_1"},
+        {"category": "weekend_balance", "weight": 5},
+    ]
+    raw["relaxation_weights"] = {"load": 10000, "coverage": 10000}
+
+    req = SolveRequest.model_validate(raw)
+
+    assert len(req.forbidden_assignments) == 1
+    assert req.forbidden_assignments[0].worker_id == "worker_1"
+    assert req.forbidden_assignments[0].shift_id == "shift_1"
+
+    assert len(req.penalties) == 2
+    assert req.penalties[0].category == "shift_balance"
+    assert req.penalties[0].weight == 10
+    assert req.penalties[1].worker_id is None
+
+    assert req.relaxation_weights is not None
+    assert req.relaxation_weights.load == 10000
+    assert req.relaxation_weights.coverage == 10000
+
+
+def test_valid_solve_request_parses_without_generic_payload_fields() -> None:
+    """A pre-PR-3 payload (no generic fields) must still parse — defaults
+    fill the gap so the model stays backward-compatible."""
+    raw = _load("valid_solve_request.json")
+
+    req = SolveRequest.model_validate(raw)
+
+    assert req.forbidden_assignments == []
+    assert req.penalties == []
+    assert req.relaxation_weights is None
+
+
 def test_valid_solve_result_parses() -> None:
     raw = _load("valid_solve_result.json")
     result = SolveResult.model_validate(raw)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -37,12 +37,51 @@ class ShiftSlotInput(BaseModel):
     required_count: int
 
 
+class ForbiddenAssignmentEntry(BaseModel):
+    """A single forbidden (worker, shift) cell emitted by the Node compiler.
+
+    Accepted as part of the PR #3 dual-payload transport. The solver still
+    enforces availability via the legacy ``WorkerInput.availability`` path —
+    these entries are parsed but not consumed by the CP-SAT model yet.
+    """
+
+    worker_id: str
+    shift_id: str
+
+
+class PenaltyTerm(BaseModel):
+    """A single soft-constraint penalty term emitted by the Node compiler.
+
+    ``category`` is intentionally typed as ``str`` (not a ``Literal``) so the
+    solver does not need to be redeployed whenever Node introduces a new
+    soft-constraint category. The solver ignores the value in PR #3.
+    """
+
+    category: str
+    weight: float
+    worker_id: Optional[str] = None
+    shift_id: Optional[str] = None
+
+
+class RelaxationWeights(BaseModel):
+    """Relaxation weights mirrored from Node for the future generic path."""
+
+    load: int
+    coverage: int
+
+
 class SolveRequest(BaseModel):
     schedule_id: str
     week_id: str         # "2025-W18"
     workers: list[WorkerInput]
     shift_definitions: list[ShiftDefInput]
     shifts: list[ShiftSlotInput]  # 21 slots — 7 days × 3 shift types
+
+    # PR #3 — dual-payload transport. Accepted and parsed, but the solver
+    # still uses the legacy availability path as the source of truth.
+    forbidden_assignments: list[ForbiddenAssignmentEntry] = Field(default_factory=list)
+    penalties: list[PenaltyTerm] = Field(default_factory=list)
+    relaxation_weights: Optional[RelaxationWeights] = None
 
 
 # ---------------------------------------------------------------------------
