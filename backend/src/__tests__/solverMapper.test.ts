@@ -156,6 +156,31 @@ describe('toSolveRequest', () => {
     expect(s.required_count).toBe(2);
   });
 
+  it('prefers the availabilityByWorker override over the constraint fallback', () => {
+    const constraint: LeanConstraint = {
+      userId,
+      entries: [{ date: shiftDate, definitionId: defId, canWork: false }],
+    };
+    const override = new Map<
+      string,
+      { date: string; definition_id: string; can_work: boolean }[]
+    >();
+    override.set(userId.toString(), [
+      { date: '2099-12-31', definition_id: 'overridden', can_work: true },
+    ]);
+
+    const req = toSolveRequest(makeInput({ constraints: [constraint] }), override);
+    expect(req.workers[0].availability).toEqual([
+      { date: '2099-12-31', definition_id: 'overridden', can_work: true },
+    ]);
+  });
+
+  it('emits empty availability for a worker missing from the override map', () => {
+    const override = new Map();
+    const req = toSolveRequest(makeInput(), override);
+    expect(req.workers[0].availability).toEqual([]);
+  });
+
   it('matches constraint availability to the correct worker by userId', () => {
     const constraint1: LeanConstraint = {
       userId,

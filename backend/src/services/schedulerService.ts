@@ -10,6 +10,7 @@ import AppError from '../utils/AppError';
 import { SolveStatus, SolverViolation, SolverWarning } from './solverClient';
 import { toSolveRequest, toAssignmentDocs, calculateShiftStatus } from './solverMapper';
 import { getSolver } from './solver/SolverFactory';
+import { compileConstraints } from './compiler/compileConstraints';
 
 export interface SchedulerResult {
   status: SolveStatus;
@@ -49,8 +50,23 @@ export async function runScheduler(
     Constraint.find({ weekId, userId: { $in: userIds } }).lean(),
   ]);
 
-  // Phase 2: map MongoDB documents to solver wire format
-  const solveRequest = toSolveRequest({ schedule, workers, shifts, shiftDefinitions, constraints });
+  // Phase 2a: compile constraints via the Node-side compiler. PR #2 only
+  // consumes the legacy availability map it produces; the generic DTO is
+  // built but not yet sent on the wire (PR #3 will append it).
+  const compiled = compileConstraints({
+    weekId: schedule.weekId,
+    workers,
+    shifts,
+    shiftDefinitions,
+    constraints,
+  });
+  void compiled.generic; // TODO(PR #3): send forbidden_assignments + penalties on the wire
+
+  // Phase 2b: map MongoDB documents to solver wire format
+  const solveRequest = toSolveRequest(
+    { schedule, workers, shifts, shiftDefinitions, constraints },
+    compiled.availabilityByWorker
+  );
 
   // Phase 3: call solver through factory (errors propagate as AppError instances)
   const result = await getSolver().solve(solveRequest);

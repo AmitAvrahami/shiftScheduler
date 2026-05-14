@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { SolveRequest, SolveResult, SolverWorker } from './solverClient';
+import { SolveRequest, SolveResult, SolverAvailabilityEntry, SolverWorker } from './solverClient';
 import { toDateKey } from '../utils/weekUtils';
 
 // Lean-compatible plain-object shapes — only the fields the mapper actually reads.
@@ -52,24 +52,38 @@ export interface SchedulerInput {
   constraints: LeanConstraint[];
 }
 
-export function toSolveRequest(input: SchedulerInput): SolveRequest {
+export function toSolveRequest(
+  input: SchedulerInput,
+  availabilityByWorker?: Map<string, SolverAvailabilityEntry[]>
+): SolveRequest {
   const { schedule, workers, shifts, shiftDefinitions, constraints } = input;
 
-  const constraintByUser = new Map(constraints.map((c) => [c.userId.toString(), c]));
+  const constraintByUser = availabilityByWorker
+    ? null
+    : new Map(constraints.map((c) => [c.userId.toString(), c]));
 
   const solverWorkers: SolverWorker[] = workers.map((user) => {
-    const constraint = constraintByUser.get(user._id.toString());
-    return {
-      id: user._id.toString(),
-      role: user.role === 'admin' ? 'manager' : user.role,
-      is_fixed_morning: user.isFixedMorningEmployee,
-      availability: constraint
+    const userIdStr = user._id.toString();
+    let availability: SolverAvailabilityEntry[];
+
+    if (availabilityByWorker) {
+      availability = availabilityByWorker.get(userIdStr) ?? [];
+    } else {
+      const constraint = constraintByUser!.get(userIdStr);
+      availability = constraint
         ? constraint.entries.map((entry) => ({
             date: toDateKey(entry.date),
             definition_id: entry.definitionId.toString(),
             can_work: entry.canWork,
           }))
-        : [],
+        : [];
+    }
+
+    return {
+      id: userIdStr,
+      role: user.role === 'admin' ? 'manager' : user.role,
+      is_fixed_morning: user.isFixedMorningEmployee,
+      availability,
     };
   });
 
