@@ -6,8 +6,13 @@ import { logger } from '../utils/logger';
 
 const managerUpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email('כתובת אימייל לא תקינה').optional(),
-  role: z.enum(['employee', 'manager', 'admin']).optional(),
+  email: z
+    .string()
+    .trim()
+    .email('כתובת אימייל לא תקינה')
+    .transform((email) => email.toLowerCase())
+    .optional(),
+  role: z.enum(['employee', 'manager']).optional(),
   phone: z.string().optional(),
   avatarUrl: z.string().url('avatarUrl must be a valid URL').optional(),
 });
@@ -58,7 +63,7 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     const newEmail = typeof updateData.email === 'string' ? updateData.email : null;
     if (newEmail) {
       const existing = await User.findOne({
-        email: newEmail.toLowerCase(),
+        email: newEmail,
         _id: { $ne: id },
       });
       if (existing) {

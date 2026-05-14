@@ -15,7 +15,7 @@ interface CreateForm {
 interface EditForm {
   name: string;
   email: string;
-  role: 'employee' | 'manager' | 'admin';
+  role: 'employee' | 'manager';
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -94,7 +94,7 @@ export default function UsersPage() {
     setEditForm({
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.role === 'manager' ? 'manager' : 'employee',
     });
   }
 
@@ -359,7 +359,6 @@ export default function UsersPage() {
                             >
                               <option value="employee">עובד</option>
                               <option value="manager">מנהל</option>
-                              {user.role === 'admin' && <option value="admin">מנהל מערכת</option>}
                             </select>
                           </div>
                           <div className="flex gap-2">

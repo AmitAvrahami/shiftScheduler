@@ -175,7 +175,18 @@ describe('PATCH /api/v1/users/:id', () => {
     expect(res.body.user.email).toBe('newemail@test.com');
   });
 
-  it('manager can update role', async () => {
+  it('manager can update role to employee', async () => {
+    const { manager } = await seedManager();
+    const { token } = await seedAdmin();
+    const res = await request(app)
+      .patch(`/api/v1/users/${manager._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'employee' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe('employee');
+  });
+
+  it('manager can update role to manager', async () => {
     const { employee } = await seedEmployee();
     const { token } = await seedManager();
     const res = await request(app)
@@ -184,6 +195,16 @@ describe('PATCH /api/v1/users/:id', () => {
       .send({ role: 'manager' });
     expect(res.status).toBe(200);
     expect(res.body.user.role).toBe('manager');
+  });
+
+  it('returns 400 when manager tries to update role to admin', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'admin' });
+    expect(res.status).toBe(400);
   });
 
   it('returns 400 for invalid email', async () => {
@@ -213,6 +234,30 @@ describe('PATCH /api/v1/users/:id', () => {
       .patch(`/api/v1/users/${employee._id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ email: manager.email });
+    expect(res.status).toBe(409);
+  });
+
+  it('saves updated email normalized to lowercase', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ email: '  NewEmail@Test.Com  ' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe('newemail@test.com');
+
+    const after = await User.findById(employee._id);
+    expect(after!.email).toBe('newemail@test.com');
+  });
+
+  it('returns 409 when normalized email is already in use', async () => {
+    const { employee } = await seedEmployee();
+    const { manager, token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ email: `  ${manager.email.toUpperCase()}  ` });
     expect(res.status).toBe(409);
   });
 
