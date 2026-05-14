@@ -6,6 +6,8 @@ import { logger } from '../utils/logger';
 
 const managerUpdateSchema = z.object({
   name: z.string().min(1).optional(),
+  email: z.string().email('כתובת אימייל לא תקינה').optional(),
+  role: z.enum(['employee', 'manager', 'admin']).optional(),
   phone: z.string().optional(),
   avatarUrl: z.string().url('avatarUrl must be a valid URL').optional(),
 });
@@ -47,13 +49,26 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
       return next(new AppError('Forbidden', 403));
     }
 
-    const schema = isManagerOrAdmin ? managerUpdateSchema : selfUpdateSchema;
-    const parsed = schema.safeParse(req.body);
+    const parsed = isManagerOrAdmin
+      ? managerUpdateSchema.safeParse(req.body)
+      : selfUpdateSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
+
+    const updateData: Record<string, unknown> = parsed.data;
+    const newEmail = typeof updateData.email === 'string' ? updateData.email : null;
+    if (newEmail) {
+      const existing = await User.findOne({
+        email: newEmail.toLowerCase(),
+        _id: { $ne: id },
+      });
+      if (existing) {
+        return next(new AppError('כתובת האימייל כבר בשימוש', 409));
+      }
+    }
 
     const user = await User.findByIdAndUpdate(
       id,
-      { $set: parsed.data },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
     if (!user) return next(new AppError('משתמש לא נמצא', 404));

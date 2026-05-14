@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { userApi } from '../lib/api';
 import type { User } from '../types/auth';
 import MainLayout from '../components/layout/MainLayout';
@@ -10,6 +10,12 @@ interface CreateForm {
   password: string;
   role: 'employee' | 'manager';
   isFixedMorningEmployee: boolean;
+}
+
+interface EditForm {
+  name: string;
+  email: string;
+  role: 'employee' | 'manager' | 'admin';
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -31,6 +37,14 @@ export default function UsersPage() {
   });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({
+    name: '',
+    email: '',
+    role: 'employee',
+  });
+  const [editError, setEditError] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     userApi
@@ -71,6 +85,45 @@ export default function UsersPage() {
       setUsers((prev) => prev.map((u) => (u._id === user._id ? res.user : u)));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'שגיאה בעדכון סטטוס');
+    }
+  }
+
+  function startEdit(user: User) {
+    setEditingId(user._id);
+    setEditError('');
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError('');
+  }
+
+  function setEditField<K extends keyof EditForm>(key: K, value: EditForm[K]) {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditError('');
+    setEditLoading(true);
+    try {
+      const res = await userApi.updateUser(editingId, {
+        name: editForm.name,
+        email: editForm.email,
+        role: editForm.role,
+      });
+      setUsers((prev) => prev.map((u) => (u._id === editingId ? res.user : u)));
+      setEditingId(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'שגיאה בעדכון משתמש');
+    } finally {
+      setEditLoading(false);
     }
   }
 
@@ -198,51 +251,138 @@ export default function UsersPage() {
                 <th className="px-4 py-3 text-right">תפקיד</th>
                 <th className="px-4 py-3 text-center">עובד בוקר קבוע</th>
                 <th className="px-4 py-3 text-center">סטטוס</th>
+                <th className="px-4 py-3 text-center">פעולות</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
                     אין משתמשים
                   </td>
                 </tr>
               )}
               {users.map((user) => (
-                <tr key={user._id} className={user.isActive ? '' : 'opacity-50'}>
-                  <td className="px-4 py-3 font-medium text-gray-800">{user.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{user.email}</td>
-                  <td className="px-4 py-3 text-gray-600">{ROLE_LABELS[user.role] ?? user.role}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => toggleFixedMorning(user)}
-                      className={`w-10 h-5 rounded-full transition-colors relative ${
-                        user.isFixedMorningEmployee ? 'bg-blue-500' : 'bg-gray-300'
-                      }`}
-                      title={
-                        user.isFixedMorningEmployee ? 'הסר עובד בוקר קבוע' : 'הגדר עובד בוקר קבוע'
-                      }
-                    >
-                      <span
-                        className={`block w-4 h-4 rounded-full bg-white shadow mx-0.5 transition-transform absolute top-0.5 ${
-                          user.isFixedMorningEmployee ? 'right-0.5' : 'left-0.5'
+                <Fragment key={user._id}>
+                  <tr className={user.isActive ? '' : 'opacity-50'}>
+                    <td className="px-4 py-3 font-medium text-gray-800">{user.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{user.email}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {ROLE_LABELS[user.role] ?? user.role}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleFixedMorning(user)}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${
+                          user.isFixedMorningEmployee ? 'bg-blue-500' : 'bg-gray-300'
                         }`}
-                      />
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => toggleStatus(user)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        user.isActive
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-red-100 text-red-700 hover:bg-red-200'
-                      }`}
-                    >
-                      {user.isActive ? 'פעיל' : 'מושהה'}
-                    </button>
-                  </td>
-                </tr>
+                        title={
+                          user.isFixedMorningEmployee ? 'הסר עובד בוקר קבוע' : 'הגדר עובד בוקר קבוע'
+                        }
+                      >
+                        <span
+                          className={`block w-4 h-4 rounded-full bg-white shadow mx-0.5 transition-transform absolute top-0.5 ${
+                            user.isFixedMorningEmployee ? 'right-0.5' : 'left-0.5'
+                          }`}
+                        />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleStatus(user)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          user.isActive
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        }`}
+                      >
+                        {user.isActive ? 'פעיל' : 'מושהה'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => (editingId === user._id ? cancelEdit() : startEdit(user))}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                        title="ערוך משתמש"
+                      >
+                        <MaterialIcon name={editingId === user._id ? 'close' : 'edit'} />
+                        {editingId === user._id ? 'ביטול' : 'ערוך'}
+                      </button>
+                    </td>
+                  </tr>
+                  {editingId === user._id && (
+                    <tr className="bg-blue-50/40">
+                      <td colSpan={6} className="px-4 py-4">
+                        {editError && (
+                          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                            {editError}
+                          </div>
+                        )}
+                        <form
+                          onSubmit={handleEditSave}
+                          className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end"
+                        >
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              שם מלא
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.name}
+                              onChange={(e) => setEditField('name', e.target.value)}
+                              required
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              אימייל
+                            </label>
+                            <input
+                              type="email"
+                              value={editForm.email}
+                              onChange={(e) => setEditField('email', e.target.value)}
+                              required
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              תפקיד
+                            </label>
+                            <select
+                              value={editForm.role}
+                              onChange={(e) =>
+                                setEditField('role', e.target.value as EditForm['role'])
+                              }
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="employee">עובד</option>
+                              <option value="manager">מנהל</option>
+                              {user.role === 'admin' && <option value="admin">מנהל מערכת</option>}
+                            </select>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              disabled={editLoading}
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                            >
+                              {editLoading ? 'שומר...' : 'שמור'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-lg transition-colors"
+                            >
+                              ביטול
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

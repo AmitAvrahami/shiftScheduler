@@ -166,6 +166,16 @@ export const userApi = {
       body: JSON.stringify({ isFixedMorningEmployee }),
     });
   },
+
+  updateUser(
+    id: string,
+    body: { name?: string; email?: string; role?: 'employee' | 'manager' | 'admin' }
+  ): Promise<{ success: boolean; user: User }> {
+    return request(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
 };
 
 // ─── Shift definitions ────────────────────────────────────────────────────────

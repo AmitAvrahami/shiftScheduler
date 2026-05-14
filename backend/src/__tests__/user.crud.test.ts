@@ -163,6 +163,95 @@ describe('PATCH /api/v1/users/:id', () => {
       .send({ avatarUrl: 'not-a-url' });
     expect(res.status).toBe(400);
   });
+
+  it('manager can update email', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ email: 'newemail@test.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe('newemail@test.com');
+  });
+
+  it('manager can update role', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'manager' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe('manager');
+  });
+
+  it('returns 400 for invalid email', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ email: 'not-an-email' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for invalid role', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'superuser' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 when email is already in use', async () => {
+    const { employee } = await seedEmployee();
+    const { manager, token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ email: manager.email });
+    expect(res.status).toBe(409);
+  });
+
+  it('manager update does not change password through this endpoint', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const before = await User.findById(employee._id).select('+password');
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed', password: 'newpass1234' });
+    expect(res.status).toBe(200);
+    const after = await User.findById(employee._id).select('+password');
+    expect(after!.password).toBe(before!.password);
+  });
+
+  it('manager update does not change isActive through this endpoint', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed', isActive: false });
+    expect(res.status).toBe(200);
+    const after = await User.findById(employee._id);
+    expect(after!.isActive).toBe(true);
+  });
+
+  it('manager update does not change isFixedMorningEmployee through this endpoint', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedManager();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Renamed', isFixedMorningEmployee: true });
+    expect(res.status).toBe(200);
+    const after = await User.findById(employee._id);
+    expect(after!.isFixedMorningEmployee).toBe(false);
+  });
 });
 
 describe('DELETE /api/v1/users/:id', () => {
