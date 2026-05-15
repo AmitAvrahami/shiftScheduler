@@ -11,6 +11,7 @@ import { SolveRequest, SolveStatus, SolverViolation, SolverWarning } from './sol
 import { toSolveRequest, toAssignmentDocs, calculateShiftStatus } from './solverMapper';
 import { getSolver } from './solver/SolverFactory';
 import { compileConstraints } from './compiler/compileConstraints';
+import type { Constraint as DomainConstraint } from '../types/constraint';
 import { logger } from '../utils/logger';
 
 export interface SchedulerResult {
@@ -21,10 +22,15 @@ export interface SchedulerResult {
   solveTimeMs: number;
 }
 
+export interface RunSchedulerOptions {
+  domainConstraints?: DomainConstraint[];
+}
+
 export async function runScheduler(
   weekId: string,
   actorId: mongoose.Types.ObjectId,
-  ip: string
+  ip: string,
+  options: RunSchedulerOptions = {}
 ): Promise<SchedulerResult> {
   // Phase 1: load data — schedule first (gate), then remaining reads in parallel
   const schedule = await WeeklySchedule.findOne({ weekId }).lean();
@@ -60,6 +66,7 @@ export async function runScheduler(
     shifts,
     shiftDefinitions,
     constraints,
+    domainConstraints: options.domainConstraints,
   });
 
   logger.info('compileConstraints produced generic payload', {
