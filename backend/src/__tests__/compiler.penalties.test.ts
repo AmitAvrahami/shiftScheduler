@@ -7,11 +7,19 @@ import type { LeanShift, LeanShiftDefinition, LeanUser } from '../services/solve
 const id = (hex: string) => new mongoose.Types.ObjectId(hex.padStart(24, '0'));
 
 const userA = id('a1');
+const userB = id('a2');
 const defMorning = id('b1');
+const defEvening = id('b2');
 const shiftMorning = id('c1');
+const shiftMorningParallel = id('c2');
+const shiftEvening = id('c3');
 const sunday = new Date(2026, 4, 10, 0, 0, 0, 0);
+const monday = new Date(2026, 4, 11, 0, 0, 0, 0);
 
-const workers: LeanUser[] = [{ _id: userA, role: 'employee', isFixedMorningEmployee: false }];
+const workers: LeanUser[] = [
+  { _id: userA, role: 'employee', isFixedMorningEmployee: false },
+  { _id: userB, role: 'employee', isFixedMorningEmployee: false },
+];
 
 const shiftDefinitions: LeanShiftDefinition[] = [
   {
@@ -19,6 +27,14 @@ const shiftDefinitions: LeanShiftDefinition[] = [
     name: 'Morning',
     startTime: '06:45',
     endTime: '14:45',
+    durationMinutes: 480,
+    crossesMidnight: false,
+  },
+  {
+    _id: defEvening,
+    name: 'Evening',
+    startTime: '14:45',
+    endTime: '22:45',
     durationMinutes: 480,
     crossesMidnight: false,
   },
@@ -67,6 +83,182 @@ describe('buildPenalties', () => {
       {
         worker_id: userA.toString(),
         shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+    ]);
+  });
+
+  it('emits penalties for every employee target in an assignment_preference constraint', () => {
+    const out = buildPenalties(
+      [
+        {
+          ...makeAssignmentPreferenceConstraint(),
+          targets: {
+            scope: 'all',
+            targets: [
+              { kind: 'employee', employeeId: workerId(userA.toString()) },
+              { kind: 'employee', employeeId: workerId(userB.toString()) },
+              {
+                kind: 'slot',
+                date: '2026-05-10' as CalendarDateString,
+                definitionId: defMorning.toString(),
+              },
+            ],
+          },
+        },
+      ],
+      { workers, shifts, shiftDefinitions }
+    );
+
+    expect(out).toEqual([
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userB.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+    ]);
+  });
+
+  it('emits penalties for every resolved slot target in an assignment_preference constraint', () => {
+    const out = buildPenalties(
+      [
+        {
+          ...makeAssignmentPreferenceConstraint(),
+          targets: {
+            scope: 'all',
+            targets: [
+              { kind: 'employee', employeeId: workerId(userA.toString()) },
+              {
+                kind: 'slot',
+                date: '2026-05-10' as CalendarDateString,
+                definitionId: defMorning.toString(),
+              },
+              {
+                kind: 'slot',
+                date: '2026-05-11' as CalendarDateString,
+                definitionId: defEvening.toString(),
+              },
+            ],
+          },
+        },
+      ],
+      {
+        workers,
+        shifts: [
+          ...shifts,
+          { _id: shiftEvening, date: monday, definitionId: defEvening, requiredCount: 1 },
+        ],
+        shiftDefinitions,
+      }
+    );
+
+    expect(out).toEqual([
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftEvening.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+    ]);
+  });
+
+  it('emits employee × slot penalties for every resolved assignment pair', () => {
+    const out = buildPenalties(
+      [
+        {
+          ...makeAssignmentPreferenceConstraint(),
+          targets: {
+            scope: 'all',
+            targets: [
+              { kind: 'employee', employeeId: workerId(userA.toString()) },
+              { kind: 'employee', employeeId: workerId(userB.toString()) },
+              {
+                kind: 'slot',
+                date: '2026-05-10' as CalendarDateString,
+                definitionId: defMorning.toString(),
+              },
+              {
+                kind: 'slot',
+                date: '2026-05-11' as CalendarDateString,
+                definitionId: defEvening.toString(),
+              },
+            ],
+          },
+        },
+      ],
+      {
+        workers,
+        shifts: [
+          ...shifts,
+          { _id: shiftEvening, date: monday, definitionId: defEvening, requiredCount: 1 },
+        ],
+        shiftDefinitions,
+      }
+    );
+
+    expect(out).toHaveLength(4);
+    expect(out).toEqual([
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftEvening.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userB.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userB.toString(),
+        shift_id: shiftEvening.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+    ]);
+  });
+
+  it('emits multiple penalties when a slot target resolves to parallel shift instances', () => {
+    const out = buildPenalties([makeAssignmentPreferenceConstraint()], {
+      workers,
+      shifts: [
+        ...shifts,
+        { _id: shiftMorningParallel, date: sunday, definitionId: defMorning, requiredCount: 1 },
+      ],
+      shiftDefinitions,
+    });
+
+    expect(out).toEqual([
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorningParallel.toString(),
         category: 'assignment_preference',
         weight: 25,
       },

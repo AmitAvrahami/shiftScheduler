@@ -12,10 +12,10 @@ import type { CompilerContext } from './forbiddenAssignmentsBuilder';
 /**
  * Translate soft constraints into objective-function penalty terms.
  *
- * `assignment_preference` is intentionally narrow: it only applies to one
- * worker × shift surface at a time. Existing aggregate soft categories remain
- * Python-owned and are rejected here until Node can faithfully express their
- * semantics.
+ * `assignment_preference` is intentionally narrow: it only applies to
+ * employee-target × slot-target assignment surfaces. Existing aggregate soft
+ * categories remain Python-owned and are rejected here until Node can
+ * faithfully express their semantics.
  */
 export function buildPenalties(constraints: Constraint[], ctx: CompilerContext): PenaltyTermDTO[] {
   const out: PenaltyTermDTO[] = [];
@@ -39,25 +39,30 @@ export function buildPenalties(constraints: Constraint[], ctx: CompilerContext):
     const category = constraint.category;
     switch (category) {
       case 'assignment_preference': {
-        const employee = constraint.targets.targets.find(
+        const employees = constraint.targets.targets.filter(
           (t): t is EmployeeTarget => t.kind === 'employee'
         );
-        const slot = constraint.targets.targets.find((t): t is SlotTarget => t.kind === 'slot');
+        const slots = constraint.targets.targets.filter(
+          (t): t is SlotTarget => t.kind === 'slot'
+        );
 
-        if (!employee || !slot) continue;
-        if (!knownWorkerIds.has(employee.employeeId)) continue;
+        for (const employee of employees) {
+          if (!knownWorkerIds.has(employee.employeeId)) continue;
 
-        const slotKey = `${slot.date}|${slot.definitionId}`;
-        const matchingShifts = shiftsBySlot.get(slotKey);
-        if (!matchingShifts) continue;
+          for (const slot of slots) {
+            const slotKey = `${slot.date}|${slot.definitionId}`;
+            const matchingShifts = shiftsBySlot.get(slotKey);
+            if (!matchingShifts) continue;
 
-        for (const shift of matchingShifts) {
-          out.push({
-            worker_id: employee.employeeId,
-            shift_id: shift._id.toString(),
-            category,
-            weight: constraint.weight,
-          });
+            for (const shift of matchingShifts) {
+              out.push({
+                worker_id: employee.employeeId,
+                shift_id: shift._id.toString(),
+                category,
+                weight: constraint.weight,
+              });
+            }
+          }
         }
         break;
       }
