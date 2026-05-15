@@ -41,7 +41,7 @@ export interface SolveRequest {
   shift_definitions: SolverShiftDefinition[];
   shifts: SolverShift[];
   // PR #3 — dual-payload transport. Sent on the wire alongside the legacy
-  // `availability` field; Python parses but does not yet consume these.
+  // `availability` field; Python consumes forbidden_assignments additively.
   forbidden_assignments?: ForbiddenAssignmentDTO[];
   penalties?: PenaltyTermDTO[];
   relaxation_weights?: RelaxationWeightsDTO;

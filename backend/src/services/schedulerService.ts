@@ -53,7 +53,7 @@ export async function runScheduler(
 
   // Phase 2a: compile constraints via the Node-side compiler. PR #3 sends
   // the generic DTO on the wire alongside the legacy availability fields;
-  // the Python solver parses it but does not yet consume it.
+  // Python consumes forbidden assignments additively during migration.
   const compiled = compileConstraints({
     weekId: schedule.weekId,
     workers,
@@ -69,7 +69,7 @@ export async function runScheduler(
   });
 
   // Phase 2b: map MongoDB documents to solver wire format and append the
-  // generic payload. Legacy availability remains the source of truth.
+  // generic payload. Legacy availability remains present for compatibility.
   const baseRequest = toSolveRequest(
     { schedule, workers, shifts, shiftDefinitions, constraints },
     compiled.availabilityByWorker

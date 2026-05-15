@@ -40,9 +40,8 @@ class ShiftSlotInput(BaseModel):
 class ForbiddenAssignmentEntry(BaseModel):
     """A single forbidden (worker, shift) cell emitted by the Node compiler.
 
-    Accepted as part of the PR #3 dual-payload transport. The solver still
-    enforces availability via the legacy ``WorkerInput.availability`` path —
-    these entries are parsed but not consumed by the CP-SAT model yet.
+    Accepted as part of the PR #3 dual-payload transport and consumed by the
+    CP-SAT model as an additive hard block.
     """
 
     worker_id: str
@@ -77,8 +76,8 @@ class SolveRequest(BaseModel):
     shift_definitions: list[ShiftDefInput]
     shifts: list[ShiftSlotInput]  # 21 slots — 7 days × 3 shift types
 
-    # PR #3 — dual-payload transport. Accepted and parsed, but the solver
-    # still uses the legacy availability path as the source of truth.
+    # PR #3 — dual-payload transport. Legacy availability remains supported,
+    # and forbidden_assignments provides additive generic hard blocks.
     forbidden_assignments: list[ForbiddenAssignmentEntry] = Field(default_factory=list)
     penalties: list[PenaltyTerm] = Field(default_factory=list)
     relaxation_weights: Optional[RelaxationWeights] = None

@@ -121,6 +121,10 @@ class ShiftSolver:
         self.slot_by_key: dict[tuple[str, str], ShiftSlotInput] = {
             (s.date, s.definition_id): s for s in self.slots
         }
+        # Slot index: shift_id → ShiftSlotInput
+        self.slot_by_id: dict[str, ShiftSlotInput] = {
+            s.id: s for s in self.slots
+        }
 
         # Weekend day indices (Friday=5, Saturday=6 in Sun-based 0-indexed week)
         self.weekend_day_idxs: set[int] = set()
@@ -185,6 +189,7 @@ class ShiftSolver:
         # Hard constraints
         self._enforce_single_shift_per_day()
         self._enforce_availability_blocks()
+        self._enforce_forbidden_assignments()
         self._enforce_manager_rule()
         self._enforce_fixed_morning_rule()
         self._enforce_minimum_rest()
@@ -287,6 +292,22 @@ class ShiftSolver:
                     can = self.avail.get((w.id, date, d.id), True)
                     if not can:
                         self.model.Add(self.shifts[key] == 0)
+
+    def _enforce_forbidden_assignments(self) -> None:
+        """Generic hard blocks: forbidden (worker, shift) cell → variable forced to 0."""
+        for forbidden in self.request.forbidden_assignments:
+            slot = self.slot_by_id.get(forbidden.shift_id)
+            if slot is None:
+                continue
+
+            day_idx = self.date_to_idx.get(slot.date)
+            if day_idx is None:
+                continue
+
+            key = (forbidden.worker_id, day_idx, slot.definition_id)
+            var = self.shifts.get(key)
+            if var is not None:
+                self.model.Add(var == 0)
 
     def _enforce_manager_rule(self) -> None:
         """

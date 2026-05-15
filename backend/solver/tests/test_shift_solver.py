@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from models import ShiftSlotInput, SolveRequest
+from models import ForbiddenAssignmentEntry, ShiftSlotInput, SolveRequest
 from shift_solver import ShiftSolver
 from tests.conftest import (
     AFTERNOON,
@@ -82,7 +82,93 @@ def test_availability_block():
 
 
 # ---------------------------------------------------------------------------
-# 3. MANAGER_RULE — manager only in morning, never weekends
+# 3. FORBIDDEN_ASSIGNMENT — generic hard block respected
+# ---------------------------------------------------------------------------
+
+def test_forbidden_assignment_block():
+    """
+    Worker w1 is explicitly forbidden from Monday morning. They must not appear
+    in that slot even though their legacy availability is otherwise open.
+    """
+    monday = WEEK_DATES[1]  # "2026-04-27"
+    blocked_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=blocked_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.forbidden_assignments = [
+        ForbiddenAssignmentEntry(worker_id="w1", shift_id=blocked_shift_id)
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status == "INFEASIBLE"
+    assert not any(
+        a.shift_id == blocked_shift_id and a.worker_id == "w1"
+        for a in result.assignments
+    ), "w1 should not be assigned to their forbidden slot"
+
+
+def test_forbidden_assignments_combine_with_legacy_availability():
+    """
+    Legacy availability and generic forbidden assignments should both apply to
+    the same slot: availability blocks w2, while forbidden_assignments blocks
+    w1, leaving no eligible worker for Monday morning.
+    """
+    monday = WEEK_DATES[1]  # "2026-04-27"
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [
+        make_worker("w1"),
+        make_worker("w2", blocked=[(monday, MORNING.id)]),
+    ]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.forbidden_assignments = [
+        ForbiddenAssignmentEntry(worker_id="w1", shift_id=morning_shift_id)
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status == "INFEASIBLE"
+    assert result.assignments == []
+
+
+def test_unknown_forbidden_assignment_is_ignored_safely():
+    """
+    Forbidden references that do not map to an existing worker/shift cell should
+    not crash solving or constrain unrelated cells.
+    """
+    workers = [make_worker(f"w{i}") for i in range(1, 7)]
+    req = make_request(workers, required_count=1)
+    req.forbidden_assignments = [
+        ForbiddenAssignmentEntry(worker_id="missing_worker", shift_id="missing_shift")
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert len(result.violations) == 0
+
+
+# ---------------------------------------------------------------------------
+# 4. MANAGER_RULE — manager only in morning, never weekends
 # ---------------------------------------------------------------------------
 
 def test_manager_rule():
@@ -123,7 +209,7 @@ def test_manager_rule():
 
 
 # ---------------------------------------------------------------------------
-# 4. FIXED_MORNING_RULE — fixed-morning employee on Sun–Thu mornings
+# 5. FIXED_MORNING_RULE — fixed-morning employee on Sun–Thu mornings
 # ---------------------------------------------------------------------------
 
 def test_fixed_morning_rule():
@@ -164,7 +250,7 @@ def test_fixed_morning_rule():
 
 
 # ---------------------------------------------------------------------------
-# 5. MINIMUM_REST — night shift blocks next-day morning
+# 6. MINIMUM_REST — night shift blocks next-day morning
 # ---------------------------------------------------------------------------
 
 def test_minimum_rest_night_blocks_next_morning():
@@ -201,7 +287,7 @@ def test_minimum_rest_night_blocks_next_morning():
 
 
 # ---------------------------------------------------------------------------
-# 6. INFEASIBILITY fallback — too few workers for the schedule
+# 7. INFEASIBILITY fallback — too few workers for the schedule
 # ---------------------------------------------------------------------------
 
 def test_infeasibility_triggers_relaxed_fallback():
@@ -225,7 +311,7 @@ def test_infeasibility_triggers_relaxed_fallback():
 
 
 # ---------------------------------------------------------------------------
-# 7. Soft constraint warnings — shift balance
+# 8. Soft constraint warnings — shift balance
 # ---------------------------------------------------------------------------
 
 def test_shift_balance_warning():
@@ -247,7 +333,7 @@ def test_shift_balance_warning():
 
 
 # ---------------------------------------------------------------------------
-# 8. MAXIMUM_LOAD — no worker exceeds 6 shifts (strict solve)
+# 9. MAXIMUM_LOAD — no worker exceeds 6 shifts (strict solve)
 # ---------------------------------------------------------------------------
 
 def test_maximum_load_respected():
@@ -269,7 +355,7 @@ def test_maximum_load_respected():
 
 
 # ---------------------------------------------------------------------------
-# 9. Performance — 10 workers, 21 slots under 5 seconds
+# 10. Performance — 10 workers, 21 slots under 5 seconds
 # ---------------------------------------------------------------------------
 
 def test_performance_10_workers():

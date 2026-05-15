@@ -98,8 +98,8 @@ def test_solve_rejects_wrong_field_types():
 
 
 # ---------------------------------------------------------------------------
-# PR #3 — dual-payload transport. The solver accepts the new optional fields
-# but does NOT use them yet; legacy availability remains the source of truth.
+# PR #3 — dual-payload transport. The solver accepts the new optional fields,
+# while legacy availability remains backward-compatible.
 # ---------------------------------------------------------------------------
 
 
