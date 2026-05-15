@@ -33,8 +33,7 @@ def test_valid_solve_request_parses() -> None:
 
 def test_valid_solve_request_parses_with_generic_payload_fields() -> None:
     """PR #3 — the SolveRequest model accepts the additive generic payload
-    fields produced by the Node compiler. The solver itself does not consume
-    them yet; this test only verifies parsing."""
+    fields produced by the Node compiler. This test verifies parsing only."""
     raw = _load("valid_solve_request.json")
     raw["forbidden_assignments"] = [{"worker_id": "worker_1", "shift_id": "shift_1"}]
     raw["penalties"] = [
