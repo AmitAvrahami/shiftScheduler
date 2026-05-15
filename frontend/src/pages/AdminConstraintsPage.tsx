@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { constraintApi, shiftDefinitionApi } from '../lib/api';
+import { constraintApi, shiftDefinitionApi, userApi } from '../lib/api';
 import type { Constraint, ShiftDefinition, ConstraintEntry } from '../types/constraint';
+import type { User } from '../types/auth';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import {
@@ -131,14 +132,95 @@ function ConstraintOverrideDialog({
   );
 }
 
+interface AddPickerProps {
+  employees: User[];
+  weekDates: Date[];
+  onClose: () => void;
+  onConfirm: (user: { _id: string; name: string }, date: Date) => void;
+}
+
+function AddConstraintPicker({ employees, weekDates, onClose, onConfirm }: AddPickerProps) {
+  const [userId, setUserId] = useState('');
+  const [dateIdx, setDateIdx] = useState(0);
+  const selected = employees.find((e) => e._id === userId);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      dir="rtl"
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 className="text-xl font-black text-[#000654]">הוסף אילוץ לעובד</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors">
+            <MaterialIcon name="close" />
+          </button>
+        </div>
+
+        <div className="p-6 flex flex-col gap-4">
+          <label className="flex flex-col gap-1 text-sm font-bold text-slate-700">
+            עובד
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="p-3 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-800 font-normal focus:border-slate-300 focus:outline-none"
+            >
+              <option value="">בחר עובד...</option>
+              {employees.map((emp) => (
+                <option key={emp._id} value={emp._id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm font-bold text-slate-700">
+            יום
+            <select
+              value={dateIdx}
+              onChange={(e) => setDateIdx(Number(e.target.value))}
+              className="p-3 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-800 font-normal focus:border-slate-300 focus:outline-none"
+            >
+              {weekDates.map((d, i) => (
+                <option key={i} value={i}>
+                  {DAY_LABELS[i]} — {d.getDate()}/{d.getMonth() + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+          <button
+            onClick={() =>
+              selected && onConfirm({ _id: selected._id, name: selected.name }, weekDates[dateIdx])
+            }
+            disabled={!selected}
+            className="flex-1 bg-[#101B79] hover:bg-[#000654] text-white font-bold py-3 rounded-xl transition-all shadow-lg disabled:opacity-50"
+          >
+            המשך
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 bg-white border border-slate-200 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-50 transition-all"
+          >
+            ביטול
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminConstraintsPage() {
   const [currentViewWeek, setCurrentViewWeek] = useState(getCurrentWeekId());
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
   const [allConstraints, setAllConstraints] = useState<Constraint[]>([]);
+  const [employees, setEmployees] = useState<User[]>([]);
   const [isLocked, setIsLocked] = useState(false);
-  const [isExplicitlyLocked, setIsExplicitlyLocked] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAddPicker, setShowAddPicker] = useState(false);
 
   // Dialog state
   const [editingEntry, setEditingEntry] = useState<{
@@ -156,15 +238,16 @@ export default function AdminConstraintsPage() {
   async function loadData() {
     setError('');
     try {
-      const [defsRes, constraintsRes] = await Promise.all([
+      const [defsRes, constraintsRes, usersRes] = await Promise.all([
         shiftDefinitionApi.getActive(),
         constraintApi.getAllConstraints(currentViewWeek),
+        userApi.getUsers(),
       ]);
 
       setDefinitions(defsRes.definitions);
       setAllConstraints(constraintsRes.constraints);
       setIsLocked(constraintsRes.isLocked);
-      setIsExplicitlyLocked(constraintsRes.isExplicitlyLocked);
+      setEmployees(usersRes.users.filter((u) => u.role === 'employee' && u.isActive));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
     }
@@ -172,13 +255,25 @@ export default function AdminConstraintsPage() {
 
   async function toggleLock() {
     try {
-      const newLockState = !isExplicitlyLocked;
-      await constraintApi.toggleWeekLock(currentViewWeek, newLockState);
-      setIsExplicitlyLocked(newLockState);
+      // Drive off the effective lock state so unlocking works even after the
+      // deadline has passed (force_unlocked overrides the deadline).
+      await constraintApi.setLockState(
+        currentViewWeek,
+        isLocked ? 'force_unlocked' : 'force_locked'
+      );
       loadData();
     } catch (err) {
       alert('שגיאה בשינוי מצב הנעילה');
     }
+  }
+
+  function handleAddPick(user: { _id: string; name: string }, date: Date) {
+    const existing = allConstraints.find((c) => {
+      const uid = typeof c.userId === 'object' ? c.userId._id : c.userId;
+      return uid === user._id;
+    });
+    setShowAddPicker(false);
+    setEditingEntry({ user, date, initialEntries: existing?.entries ?? [] });
   }
 
   function handlePrevWeek() {
@@ -251,9 +346,17 @@ export default function AdminConstraintsPage() {
                 onClick={toggleLock}
                 className="mr-2 px-3 py-1 bg-white border border-slate-300 rounded text-slate-800 text-xs hover:bg-slate-50 transition-colors"
               >
-                {isExplicitlyLocked ? 'בטל נעילה' : 'נעל הגשה'}
+                {isLocked ? 'בטל נעילה' : 'נעל הגשה'}
               </button>
             </div>
+
+            <button
+              onClick={() => setShowAddPicker(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#101B79] hover:bg-[#000654] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+            >
+              <MaterialIcon name="add" className="text-base" />
+              הוסף אילוץ לעובד
+            </button>
 
             <div className="flex items-center bg-slate-50 p-1 rounded-lg border border-slate-200">
               <button
@@ -394,6 +497,15 @@ export default function AdminConstraintsPage() {
             setEditingEntry(null);
             loadData();
           }}
+        />
+      )}
+
+      {showAddPicker && (
+        <AddConstraintPicker
+          employees={employees}
+          weekDates={weekDates}
+          onClose={() => setShowAddPicker(false)}
+          onConfirm={handleAddPick}
         />
       )}
     </MainLayout>

@@ -12,6 +12,8 @@ export interface ShiftDefinition {
   requiredStaffCount: number;
 }
 
+export type LockMode = 'default' | 'force_locked' | 'force_unlocked';
+
 export interface ConstraintEntry {
   date: string; // YYYY-MM-DD local time
   definitionId: string;

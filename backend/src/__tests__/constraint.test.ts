@@ -438,3 +438,153 @@ describe('PUT /api/v1/constraints/:weekId — allowed-week enforcement', () => {
     expect(res.body.constraint.submittedVia).toBe('self');
   });
 });
+
+// ── Lock mode (default / force_locked / force_unlocked) ───────────────────────
+
+describe('Constraint lock mode', () => {
+  it('default mode — unlocked before deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(BEFORE_DEADLINE);
+    const { token } = await seedEmployee();
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isLocked).toBe(false);
+    expect(res.body.lockMode).toBe('default');
+  });
+
+  it('default mode — locked after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { token } = await seedEmployee();
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isLocked).toBe(true);
+    expect(res.body.lockMode).toBe('default');
+  });
+
+  it('force_locked — locked even before deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(BEFORE_DEADLINE);
+    const { token: managerToken } = await seedManager();
+    const { token: employeeToken } = await seedEmployee();
+
+    const setRes = await request(app)
+      .post(`/api/v1/constraints/${TEST_WEEK}/lock-state`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ lockMode: 'force_locked' });
+    expect(setRes.status).toBe(200);
+    expect(setRes.body.isLocked).toBe(true);
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isLocked).toBe(true);
+    expect(res.body.lockMode).toBe('force_locked');
+  });
+
+  it('force_unlocked — unlocked after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { token: managerToken } = await seedManager();
+    const { token: employeeToken } = await seedEmployee();
+
+    const setRes = await request(app)
+      .post(`/api/v1/constraints/${TEST_WEEK}/lock-state`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ lockMode: 'force_unlocked' });
+    expect(setRes.status).toBe(200);
+    expect(setRes.body.isLocked).toBe(false);
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isLocked).toBe(false);
+    expect(res.body.lockMode).toBe('force_unlocked');
+  });
+
+  it('400 — invalid lockMode rejected', async () => {
+    const { token: managerToken } = await seedManager();
+
+    const res = await request(app)
+      .post(`/api/v1/constraints/${TEST_WEEK}/lock-state`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ lockMode: 'nope' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('legacy toggle-lock {isLocked:false} unlocks even after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { token: managerToken } = await seedManager();
+    const { token: employeeToken } = await seedEmployee();
+
+    const toggleRes = await request(app)
+      .post(`/api/v1/constraints/${TEST_WEEK}/toggle-lock`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ isLocked: false });
+    expect(toggleRes.status).toBe(200);
+    expect(toggleRes.body.isLocked).toBe(false);
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isLocked).toBe(false);
+  });
+
+  it('employee can self-submit for a force_unlocked week after deadline', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager, token: managerToken } = await seedManager();
+    const { token: employeeToken } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await request(app)
+      .post(`/api/v1/constraints/${TEST_WEEK}/lock-state`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ lockMode: 'force_unlocked' });
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.constraint.submittedVia).toBe('self');
+  });
+});
+
+// ── Manager override for an employee with no prior constraint document ────────
+
+describe('Manager override creates a new constraint document', () => {
+  it('200 — creates a constraint when none existed for the employee', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    const before = await Constraint.findOne({ userId: employee._id, weekId: TEST_WEEK });
+    expect(before).toBeNull();
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}/users/${employee._id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.constraint.submittedVia).toBe('manager_override');
+
+    const after = await Constraint.findOne({ userId: employee._id, weekId: TEST_WEEK });
+    expect(after).not.toBeNull();
+    expect(after!.entries).toHaveLength(1);
+    expect(after!.entries[0].canWork).toBe(false);
+  });
+});
