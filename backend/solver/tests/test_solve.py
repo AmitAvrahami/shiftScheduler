@@ -95,3 +95,44 @@ def test_solve_rejects_wrong_field_types():
     payload["workers"] = "not-a-list"
     response = client.post("/solve", json=payload)
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# PR #3 — dual-payload transport. The solver accepts the new optional fields
+# but does NOT use them yet; legacy availability remains the source of truth.
+# ---------------------------------------------------------------------------
+
+
+def test_solve_accepts_payload_without_generic_fields():
+    """The pre-PR-3 wire shape (no forbidden_assignments/penalties/relaxation_weights)
+    must continue to parse — defaults provided by the model fill the gap."""
+    payload = _base_payload()
+    response = client.post("/solve", json=payload)
+    # Schema-valid: not a 422 from Pydantic. The solver itself may still return
+    # any non-validation status; we only assert that parsing succeeded.
+    assert response.status_code != 422
+
+
+def test_solve_accepts_generic_payload_fields():
+    """A payload carrying the PR #3 generic fields must parse successfully."""
+    payload = _base_payload()
+    payload["forbidden_assignments"] = [
+        {"worker_id": "w1", "shift_id": "slot_1"},
+    ]
+    payload["penalties"] = [
+        {"category": "shift_balance", "weight": 10, "worker_id": "w1"},
+        {"category": "weekend_balance", "weight": 5},
+    ]
+    payload["relaxation_weights"] = {"load": 10000, "coverage": 10000}
+
+    response = client.post("/solve", json=payload)
+    assert response.status_code != 422
+
+
+def test_solve_rejects_malformed_forbidden_assignment():
+    """An entry missing required worker_id/shift_id must still 422."""
+    payload = _base_payload()
+    payload["forbidden_assignments"] = [{"worker_id": "w1"}]  # missing shift_id
+
+    response = client.post("/solve", json=payload)
+    assert response.status_code == 422

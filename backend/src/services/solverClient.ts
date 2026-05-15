@@ -1,4 +1,9 @@
 import AppError from '../utils/AppError';
+import type {
+  ForbiddenAssignmentDTO,
+  PenaltyTermDTO,
+  RelaxationWeightsDTO,
+} from '../types/constraint';
 
 export interface SolverAvailabilityEntry {
   date: string;
@@ -35,6 +40,11 @@ export interface SolveRequest {
   workers: SolverWorker[];
   shift_definitions: SolverShiftDefinition[];
   shifts: SolverShift[];
+  // PR #3 — dual-payload transport. Sent on the wire alongside the legacy
+  // `availability` field; Python parses but does not yet consume these.
+  forbidden_assignments?: ForbiddenAssignmentDTO[];
+  penalties?: PenaltyTermDTO[];
+  relaxation_weights?: RelaxationWeightsDTO;
 }
 
 export type SolveStatus = 'OPTIMAL' | 'FEASIBLE' | 'RELAXED' | 'INFEASIBLE';

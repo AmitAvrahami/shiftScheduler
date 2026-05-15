@@ -65,6 +65,38 @@ describe('solver cross-runtime contract', () => {
     });
   });
 
+  describe('PR #3 generic payload fields', () => {
+    it('SolveRequest accepts snake_case forbidden_assignments, penalties, and relaxation_weights', () => {
+      const augmented: SolveRequest = {
+        ...loadFixture<SolveRequest>('valid_solve_request.json'),
+        forbidden_assignments: [{ worker_id: 'w1', shift_id: 's1' }],
+        penalties: [{ category: 'shift_balance', weight: 10, worker_id: 'w1' }],
+        relaxation_weights: { load: 10000, coverage: 10000 },
+      };
+
+      const serialized = JSON.parse(JSON.stringify(augmented)) as Record<string, unknown>;
+
+      expect(serialized).toHaveProperty('forbidden_assignments');
+      expect(serialized).toHaveProperty('penalties');
+      expect(serialized).toHaveProperty('relaxation_weights');
+
+      const forbidden = (serialized.forbidden_assignments as Array<Record<string, unknown>>)[0];
+      expect(forbidden).toHaveProperty('worker_id');
+      expect(forbidden).toHaveProperty('shift_id');
+      expect(forbidden).not.toHaveProperty('workerId');
+      expect(forbidden).not.toHaveProperty('shiftId');
+
+      const penalty = (serialized.penalties as Array<Record<string, unknown>>)[0];
+      expect(penalty).toHaveProperty('category');
+      expect(penalty).toHaveProperty('weight');
+      expect(penalty).toHaveProperty('worker_id');
+
+      const weights = serialized.relaxation_weights as Record<string, unknown>;
+      expect(weights).toHaveProperty('load');
+      expect(weights).toHaveProperty('coverage');
+    });
+  });
+
   describe('valid_solve_result.json', () => {
     const result = loadFixture<SolveResult>('valid_solve_result.json');
 

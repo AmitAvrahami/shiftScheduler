@@ -7,10 +7,11 @@ import Constraint from '../models/Constraint';
 import Assignment from '../models/Assignment';
 import AuditLog from '../models/AuditLog';
 import AppError from '../utils/AppError';
-import { SolveStatus, SolverViolation, SolverWarning } from './solverClient';
+import { SolveRequest, SolveStatus, SolverViolation, SolverWarning } from './solverClient';
 import { toSolveRequest, toAssignmentDocs, calculateShiftStatus } from './solverMapper';
 import { getSolver } from './solver/SolverFactory';
 import { compileConstraints } from './compiler/compileConstraints';
+import { logger } from '../utils/logger';
 
 export interface SchedulerResult {
   status: SolveStatus;
@@ -50,9 +51,9 @@ export async function runScheduler(
     Constraint.find({ weekId, userId: { $in: userIds } }).lean(),
   ]);
 
-  // Phase 2a: compile constraints via the Node-side compiler. PR #2 only
-  // consumes the legacy availability map it produces; the generic DTO is
-  // built but not yet sent on the wire (PR #3 will append it).
+  // Phase 2a: compile constraints via the Node-side compiler. PR #3 sends
+  // the generic DTO on the wire alongside the legacy availability fields;
+  // the Python solver parses it but does not yet consume it.
   const compiled = compileConstraints({
     weekId: schedule.weekId,
     workers,
@@ -60,13 +61,25 @@ export async function runScheduler(
     shiftDefinitions,
     constraints,
   });
-  void compiled.generic; // TODO(PR #3): send forbidden_assignments + penalties on the wire
 
-  // Phase 2b: map MongoDB documents to solver wire format
-  const solveRequest = toSolveRequest(
+  logger.info('compileConstraints produced generic payload', {
+    weekId: schedule.weekId,
+    forbiddenAssignments: compiled.generic.forbidden_assignments.length,
+    penalties: compiled.generic.penalties.length,
+  });
+
+  // Phase 2b: map MongoDB documents to solver wire format and append the
+  // generic payload. Legacy availability remains the source of truth.
+  const baseRequest = toSolveRequest(
     { schedule, workers, shifts, shiftDefinitions, constraints },
     compiled.availabilityByWorker
   );
+  const solveRequest: SolveRequest = {
+    ...baseRequest,
+    forbidden_assignments: compiled.generic.forbidden_assignments,
+    penalties: compiled.generic.penalties,
+    relaxation_weights: compiled.generic.relaxation_weights,
+  };
 
   // Phase 3: call solver through factory (errors propagate as AppError instances)
   const result = await getSolver().solve(solveRequest);
