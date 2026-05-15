@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from models import ForbiddenAssignmentEntry, ShiftSlotInput, SolveRequest
+from models import ForbiddenAssignmentEntry, PenaltyTerm, ShiftSlotInput, SolveRequest
 from shift_solver import ShiftSolver
 from tests.conftest import (
     AFTERNOON,
@@ -165,6 +165,195 @@ def test_unknown_forbidden_assignment_is_ignored_safely():
 
     assert result.status in ("OPTIMAL", "FEASIBLE")
     assert len(result.violations) == 0
+
+
+# ---------------------------------------------------------------------------
+# 3b. PENALTIES — generic soft assignment costs
+# ---------------------------------------------------------------------------
+
+def test_penalty_prefers_another_eligible_worker_when_possible():
+    """
+    A penalty on one otherwise-feasible assignment should steer the objective
+    toward another eligible worker without adding a hard constraint.
+    """
+    monday = WEEK_DATES[1]
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1"), make_worker("w2")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=10,
+            worker_id="w2",
+            shift_id=morning_shift_id,
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert [
+        (a.worker_id, a.shift_id)
+        for a in result.assignments
+    ] == [("w1", morning_shift_id)]
+
+
+def test_penalty_does_not_make_only_feasible_assignment_infeasible():
+    """
+    If the penalized worker is still the only feasible option, the slot should
+    remain assignable because penalties are soft objective terms only.
+    """
+    monday = WEEK_DATES[1]
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=10,
+            worker_id="w1",
+            shift_id=morning_shift_id,
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert [
+        (a.worker_id, a.shift_id)
+        for a in result.assignments
+    ] == [("w1", morning_shift_id)]
+
+
+def test_forbidden_assignment_still_wins_over_penalty():
+    """
+    If the same cell is both forbidden and penalized, the hard forbidden block
+    should force it to zero before the objective is considered.
+    """
+    monday = WEEK_DATES[1]
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1"), make_worker("w2")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.forbidden_assignments = [
+        ForbiddenAssignmentEntry(worker_id="w1", shift_id=morning_shift_id)
+    ]
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=10,
+            worker_id="w1",
+            shift_id=morning_shift_id,
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert [
+        (a.worker_id, a.shift_id)
+        for a in result.assignments
+    ] == [("w2", morning_shift_id)]
+
+
+def test_unknown_penalty_references_are_ignored_safely():
+    """
+    Penalties that cannot be resolved to an existing assignment cell should be
+    ignored without crashing or constraining unrelated assignments.
+    """
+    monday = WEEK_DATES[1]
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=10,
+            worker_id="missing_worker",
+            shift_id=morning_shift_id,
+        ),
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=10,
+            worker_id="w1",
+            shift_id="missing_shift",
+        ),
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert [
+        (a.worker_id, a.shift_id)
+        for a in result.assignments
+    ] == [("w1", morning_shift_id)]
+
+
+def test_legacy_payload_without_penalties_still_solves():
+    """
+    Legacy requests that omit penalties should retain their previous behavior.
+    """
+    monday = WEEK_DATES[1]
+    morning_shift_id = f"slot_{monday}_{MORNING.id}"
+    workers = [make_worker("w1")]
+    req = make_request(
+        workers,
+        slots=[
+            ShiftSlotInput(
+                id=morning_shift_id,
+                date=monday,
+                definition_id=MORNING.id,
+                required_count=1,
+            )
+        ],
+    )
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert [
+        (a.worker_id, a.shift_id)
+        for a in result.assignments
+    ] == [("w1", morning_shift_id)]
 
 
 # ---------------------------------------------------------------------------

@@ -53,7 +53,9 @@ class PenaltyTerm(BaseModel):
 
     ``category`` is intentionally typed as ``str`` (not a ``Literal``) so the
     solver does not need to be redeployed whenever Node introduces a new
-    soft-constraint category. The solver ignores the value in PR #3.
+    soft-constraint category. Assignment-targeted penalties are consumed by
+    the CP-SAT objective when both ``worker_id`` and ``shift_id`` resolve to an
+    existing solver cell.
     """
 
     category: str

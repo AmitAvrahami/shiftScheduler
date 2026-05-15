@@ -210,6 +210,7 @@ class ShiftSolver:
         penalty_terms += self._penalize_weekend_concentration()
         penalty_terms += self._penalize_night_overload()
         penalty_terms += self._penalize_friday_saturday_cluster()
+        penalty_terms += self._penalize_assignment_preferences()
 
         if penalty_terms:
             self.model.Minimize(sum(penalty_terms))
@@ -429,6 +430,30 @@ class ShiftSolver:
     # ------------------------------------------------------------------
     # Soft constraints
     # ------------------------------------------------------------------
+
+    def _penalize_assignment_preferences(self) -> list[cp_model.LinearExprT]:
+        """
+        Generic additive soft costs for assignment-specific penalties emitted
+        by the Node compiler.
+        """
+        penalties: list[cp_model.LinearExprT] = []
+        for penalty in self.request.penalties:
+            if penalty.worker_id is None or penalty.shift_id is None:
+                continue
+
+            slot = self.slot_by_id.get(penalty.shift_id)
+            if slot is None:
+                continue
+
+            day_idx = self.date_to_idx.get(slot.date)
+            if day_idx is None:
+                continue
+
+            key = (penalty.worker_id, day_idx, slot.definition_id)
+            var = self.shifts.get(key)
+            if var is not None:
+                penalties.append(penalty.weight * var)
+        return penalties
 
     def _penalize_shift_imbalance(self) -> list[cp_model.LinearExprT]:
         """
