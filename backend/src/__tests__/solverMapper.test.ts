@@ -140,10 +140,40 @@ describe('toSolveRequest', () => {
     const d = req.shift_definitions[0];
     expect(d.id).toBe(defId.toString());
     expect(d.name).toBe('Morning');
+    expect(d.shift_type).toBe('morning');
     expect(d.start_time).toBe('06:45');
     expect(d.end_time).toBe('14:45');
     expect(d.duration_minutes).toBe(480);
     expect(d.crosses_midnight).toBe(false);
+  });
+
+  it('derives shift_type from schedule shape, not the (Hebrew) name', () => {
+    const hebMorning: LeanShiftDefinition = {
+      ...baseDefinition,
+      name: 'בוקר',
+      startTime: '06:45',
+      crossesMidnight: false,
+    };
+    const hebAfternoon: LeanShiftDefinition = {
+      ...baseDefinition,
+      name: 'צהריים',
+      startTime: '14:45',
+      crossesMidnight: false,
+    };
+    const hebNight: LeanShiftDefinition = {
+      ...baseDefinition,
+      name: 'לילה',
+      startTime: '22:45',
+      crossesMidnight: true,
+    };
+    const req = toSolveRequest(
+      makeInput({ shiftDefinitions: [hebMorning, hebAfternoon, hebNight] })
+    );
+    expect(req.shift_definitions.map((d) => d.shift_type)).toEqual([
+      'morning',
+      'afternoon',
+      'night',
+    ]);
   });
 
   it('maps shifts with local-time date key', () => {

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { SolveRequest, SolveResult, SolverAvailabilityEntry, SolverWorker } from './solverClient';
 import { toDateKey } from '../utils/weekUtils';
+import { classifyShiftType } from '../utils/shiftType';
 
 // Lean-compatible plain-object shapes — only the fields the mapper actually reads.
 // Using these instead of Document-extending model interfaces avoids the Lean vs Document
@@ -94,6 +95,7 @@ export function toSolveRequest(
     shift_definitions: shiftDefinitions.map((def) => ({
       id: def._id.toString(),
       name: def.name,
+      shift_type: classifyShiftType(def),
       start_time: def.startTime,
       end_time: def.endTime,
       duration_minutes: def.durationMinutes,
