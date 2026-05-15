@@ -13,6 +13,8 @@ export interface CompilerInput {
   shifts: LeanShift[];
   shiftDefinitions: LeanShiftDefinition[];
   constraints: LeanConstraint[];
+  /** Already-normalized domain constraints that do not originate from the legacy Mongo shape. */
+  domainConstraints?: Constraint[];
 }
 
 export interface CompilerOutput {
@@ -39,7 +41,10 @@ export interface CompilerOutput {
  * begin retiring the legacy path.
  */
 export function compileConstraints(input: CompilerInput): CompilerOutput {
-  const normalized = normalizeLegacyConstraints(input.constraints, input.weekId);
+  const normalized = [
+    ...normalizeLegacyConstraints(input.constraints, input.weekId),
+    ...(input.domainConstraints ?? []),
+  ];
 
   const forbidden = buildForbiddenAssignments(normalized, {
     workers: input.workers,
@@ -47,7 +52,11 @@ export function compileConstraints(input: CompilerInput): CompilerOutput {
     shiftDefinitions: input.shiftDefinitions,
   });
 
-  const penalties = buildPenalties(normalized);
+  const penalties = buildPenalties(normalized, {
+    workers: input.workers,
+    shifts: input.shifts,
+    shiftDefinitions: input.shiftDefinitions,
+  });
 
   const availabilityByWorker = toLegacyAvailability(forbidden, input.constraints);
 

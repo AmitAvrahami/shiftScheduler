@@ -49,6 +49,7 @@ export type HardConstraintCategory =
  *
  * Mapping (current weights in `backend/solver/shift_solver.py` lines 34–39,
  * mirrored in {@link DEFAULT_SOFT_WEIGHTS}):
+ *  - `assignment_preference` → worker+shift preference penalty emitted by Node
  *  - `shift_balance`     → load deviation from team average
  *  - `type_diversity`    → >60% same shift type
  *  - `rest_optimisation` → afternoon→morning gap <16h (still ≥8h)
@@ -57,6 +58,7 @@ export type HardConstraintCategory =
  *  - `fri_sat_cluster`   → both Friday AND Saturday in the same week
  */
 export type SoftConstraintCategory =
+  | 'assignment_preference'
   | 'shift_balance'
   | 'type_diversity'
   | 'rest_optimisation'
@@ -128,6 +130,11 @@ export const CONSTRAINT_CATEGORY_METADATA: Record<ConstraintCategory, Constraint
       solverRule: 'HC7 — _enforce_coverage',
     },
     // Soft
+    assignment_preference: {
+      kind: 'soft',
+      description: 'Prefer avoiding one worker-to-shift assignment cell.',
+      solverRule: 'GENERIC — assignment-targeted Node penalty',
+    },
     shift_balance: {
       kind: 'soft',
       description: 'Distribute total shifts evenly across workers.',

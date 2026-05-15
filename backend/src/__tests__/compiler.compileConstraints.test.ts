@@ -8,7 +8,14 @@ import type {
   LeanUser,
   LeanSchedule,
 } from '../services/solverMapper';
-import { RELAXATION_WEIGHTS } from '../types/constraint';
+import {
+  RELAXATION_WEIGHTS,
+  constraintId,
+  weight,
+  workerId,
+  type CalendarDateString,
+  type SoftConstraint,
+} from '../types/constraint';
 
 const id = (hex: string) => new mongoose.Types.ObjectId(hex.padStart(24, '0'));
 
@@ -63,6 +70,25 @@ const constraints: LeanConstraint[] = [
     ],
   },
 ];
+
+const assignmentPreference: SoftConstraint = {
+  id: constraintId('assignment-pref-1'),
+  kind: 'soft',
+  category: 'assignment_preference',
+  weight: weight(25),
+  targets: {
+    scope: 'all',
+    targets: [
+      { kind: 'employee', employeeId: workerId(userA.toString()) },
+      {
+        kind: 'slot',
+        date: '2026-05-10' as CalendarDateString,
+        definitionId: defMorning.toString(),
+      },
+    ],
+  },
+  source: { type: 'employee', actorId: workerId(userA.toString()) },
+};
 
 describe('compileConstraints', () => {
   it('emits a generic payload with forbidden cells for hard availability', () => {
@@ -133,5 +159,26 @@ describe('compileConstraints', () => {
     });
     expect(out.availabilityByWorker.size).toBe(0);
     expect(out.generic.forbidden_assignments).toEqual([]);
+    expect(out.generic.penalties).toEqual([]);
+  });
+
+  it('emits generic penalties for supplied domain-level assignment preferences', () => {
+    const out = compileConstraints({
+      weekId: schedule.weekId,
+      workers,
+      shifts,
+      shiftDefinitions,
+      constraints: [],
+      domainConstraints: [assignmentPreference],
+    });
+
+    expect(out.generic.penalties).toEqual([
+      {
+        worker_id: userA.toString(),
+        shift_id: shiftMorning.toString(),
+        category: 'assignment_preference',
+        weight: 25,
+      },
+    ]);
   });
 });

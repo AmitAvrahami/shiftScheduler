@@ -70,7 +70,14 @@ describe('solver cross-runtime contract', () => {
       const augmented: SolveRequest = {
         ...loadFixture<SolveRequest>('valid_solve_request.json'),
         forbidden_assignments: [{ worker_id: 'w1', shift_id: 's1' }],
-        penalties: [{ category: 'shift_balance', weight: 10, worker_id: 'w1' }],
+        penalties: [
+          {
+            category: 'assignment_preference',
+            weight: 10,
+            worker_id: 'w1',
+            shift_id: 's1',
+          },
+        ],
         relaxation_weights: { load: 10000, coverage: 10000 },
       };
 
@@ -90,6 +97,7 @@ describe('solver cross-runtime contract', () => {
       expect(penalty).toHaveProperty('category');
       expect(penalty).toHaveProperty('weight');
       expect(penalty).toHaveProperty('worker_id');
+      expect(penalty).toHaveProperty('shift_id');
 
       const weights = serialized.relaxation_weights as Record<string, unknown>;
       expect(weights).toHaveProperty('load');

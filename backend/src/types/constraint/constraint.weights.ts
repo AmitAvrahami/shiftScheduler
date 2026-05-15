@@ -48,6 +48,7 @@ export const weight = (value: number): ConstraintWeight => {
  * Default penalty weight for each soft category.
  *
  * Mirrors `backend/solver/shift_solver.py`:
+ *  - `assignment_preference = 100` (Node domain/compiler-only default)
  *  - `W_SHIFT_BALANCE       = 100`
  *  - `W_TYPE_DIVERSITY      = 200`
  *  - `W_REST_OPTIMISATION   = 150`
@@ -59,6 +60,7 @@ export const weight = (value: number): ConstraintWeight => {
  * without a default here is a TypeScript error.
  */
 export const DEFAULT_SOFT_WEIGHTS: Record<SoftConstraintCategory, ConstraintWeight> = {
+  assignment_preference: weight(100),
   shift_balance: weight(100),
   type_diversity: weight(200),
   rest_optimisation: weight(150),
