@@ -12,7 +12,7 @@ const managerUpdateSchema = z.object({
     .email('כתובת אימייל לא תקינה')
     .transform((email) => email.toLowerCase())
     .optional(),
-  role: z.enum(['employee', 'manager']).optional(),
+  role: z.enum(['employee', 'manager', 'admin']).optional(),
   phone: z.string().optional(),
   avatarUrl: z.string().url('avatarUrl must be a valid URL').optional(),
 });
@@ -59,6 +59,11 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
       ? managerUpdateSchema.safeParse(req.body)
       : selfUpdateSchema.safeParse(req.body);
     if (!parsed.success) return next(new AppError(parsed.error.errors[0].message, 400));
+
+    const requestedRole = 'role' in parsed.data ? parsed.data.role : undefined;
+    if (isManagerOrAdmin && requestedRole === 'admin' && !isAdmin) {
+      return next(new AppError('Forbidden', 403));
+    }
 
     if (isManagerOrAdmin && !isSelf) {
       const target = await User.findById(id);

@@ -3,6 +3,7 @@ import { userApi } from '../lib/api';
 import type { User } from '../types/auth';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { useAuth } from '../hooks/useAuth';
 
 interface CreateForm {
   name: string;
@@ -15,7 +16,7 @@ interface CreateForm {
 interface EditForm {
   name: string;
   email: string;
-  role: 'employee' | 'manager';
+  role: User['role'];
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loadError, setLoadError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -94,7 +96,7 @@ export default function UsersPage() {
     setEditForm({
       name: user.name,
       email: user.email,
-      role: user.role === 'manager' ? 'manager' : 'employee',
+      role: user.role,
     });
   }
 
@@ -359,6 +361,9 @@ export default function UsersPage() {
                             >
                               <option value="employee">עובד</option>
                               <option value="manager">מנהל</option>
+                              {currentUser?.role === 'admin' && (
+                                <option value="admin">מנהל מערכת</option>
+                              )}
                             </select>
                           </div>
                           <div className="flex gap-2">
