@@ -1,23 +1,70 @@
-import type { Constraint, PenaltyTermDTO, RelaxationWeightsDTO } from '../../types/constraint';
+import { toDateKey } from '../../utils/weekUtils';
+import type {
+  Constraint,
+  EmployeeTarget,
+  PenaltyTermDTO,
+  RelaxationWeightsDTO,
+  SlotTarget,
+} from '../../types/constraint';
 import { isSoftConstraint, RELAXATION_WEIGHTS } from '../../types/constraint';
+import type { CompilerContext } from './forbiddenAssignmentsBuilder';
 
 /**
  * Translate soft constraints into objective-function penalty terms.
  *
- * PR #2 produces no soft constraints upstream (the normalizer only emits
- * hard availability), so this function returns `[]` for the current input
- * shape. It still iterates the input — exhaustively — so that once PR #3
- * starts emitting soft constraints, the wiring is already in place and the
- * switch will fail loudly on any category we forgot to handle.
+ * `assignment_preference` is intentionally narrow: it only applies to one
+ * worker × shift surface at a time. Existing aggregate soft categories remain
+ * Python-owned and are rejected here until Node can faithfully express their
+ * semantics.
  */
-export function buildPenalties(constraints: Constraint[]): PenaltyTermDTO[] {
+export function buildPenalties(
+  constraints: Constraint[],
+  ctx: CompilerContext
+): PenaltyTermDTO[] {
   const out: PenaltyTermDTO[] = [];
+
+  const shiftsBySlot = new Map<string, typeof ctx.shifts>();
+  for (const shift of ctx.shifts) {
+    const key = `${toDateKey(shift.date)}|${shift.definitionId.toString()}`;
+    const bucket = shiftsBySlot.get(key);
+    if (bucket) {
+      bucket.push(shift);
+    } else {
+      shiftsBySlot.set(key, [shift]);
+    }
+  }
+
+  const knownWorkerIds = new Set(ctx.workers.map((w) => w._id.toString()));
 
   for (const constraint of constraints) {
     if (!isSoftConstraint(constraint)) continue;
 
     const category = constraint.category;
     switch (category) {
+      case 'assignment_preference': {
+        const employee = constraint.targets.targets.find(
+          (t): t is EmployeeTarget => t.kind === 'employee'
+        );
+        const slot = constraint.targets.targets.find((t): t is SlotTarget => t.kind === 'slot');
+
+        if (!employee || !slot) continue;
+        if (!knownWorkerIds.has(employee.employeeId)) continue;
+
+        const slotKey = `${slot.date}|${slot.definitionId}`;
+        const matchingShifts = shiftsBySlot.get(slotKey);
+        if (!matchingShifts) continue;
+
+        for (const shift of matchingShifts) {
+          out.push({
+            worker_id: employee.employeeId,
+            shift_id: shift._id.toString(),
+            category,
+            weight: constraint.weight,
+          });
+        }
+        break;
+      }
+
       case 'shift_balance':
       case 'type_diversity':
       case 'rest_optimisation':
