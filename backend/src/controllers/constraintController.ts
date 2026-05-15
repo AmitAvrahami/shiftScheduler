@@ -12,6 +12,8 @@ import {
   isConstraintDeadlinePassed,
   getAllowedWeekId,
   parseWeekId,
+  resolveLockMode,
+  type LockMode,
 } from '../utils/weekUtils';
 
 import { broadcastToEmployees } from '../services/notificationService';
@@ -29,6 +31,99 @@ const entrySchema = z.object({
 const upsertSchema = z.object({
   entries: z.array(entrySchema),
 });
+
+const lockStateSchema = z.object({
+  lockMode: z.enum(['default', 'force_locked', 'force_unlocked']),
+});
+
+interface WeekLockState {
+  deadline: Date;
+  deadlinePassed: boolean;
+  lockMode: LockMode;
+  isScheduleLocked: boolean;
+  weekStatus: string | null;
+  isLocked: boolean;
+  isExplicitlyLocked: boolean;
+}
+
+/**
+ * Single source of truth for whether constraint submission is locked for a week.
+ * - force_locked  → always locked
+ * - force_unlocked → unlocked, but a non-open schedule still locks (overrides deadline only)
+ * - default        → locked once the deadline passes or the schedule leaves 'open'
+ */
+async function computeWeekLock(weekId: string): Promise<WeekLockState> {
+  const deadline = getConstraintDeadline(weekId);
+  const deadlinePassed = isConstraintDeadlinePassed(weekId);
+
+  const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
+  const lockMode = resolveLockMode(lockSetting?.value);
+
+  const scheduleDoc = await WeeklySchedule.findOne({ weekId }).lean();
+  const isScheduleLocked = !!scheduleDoc && scheduleDoc.status !== 'open';
+  const weekStatus = scheduleDoc?.status ?? null;
+
+  let isLocked: boolean;
+  if (lockMode === 'force_locked') {
+    isLocked = true;
+  } else if (lockMode === 'force_unlocked') {
+    isLocked = isScheduleLocked;
+  } else {
+    isLocked = deadlinePassed || isScheduleLocked;
+  }
+
+  return {
+    deadline,
+    deadlinePassed,
+    lockMode,
+    isScheduleLocked,
+    weekStatus,
+    isLocked,
+    isExplicitlyLocked: lockMode === 'force_locked',
+  };
+}
+
+/**
+ * Persists the lock mode for a week and emits the audit log + employee broadcast.
+ */
+async function writeLockMode(
+  weekId: string,
+  lockMode: LockMode,
+  performedBy: unknown,
+  ip: string | undefined
+): Promise<void> {
+  const key = `lock_constraints_${weekId}`;
+  const setting = await SystemSettings.findOneAndUpdate(
+    { key },
+    {
+      $set: {
+        value: lockMode,
+        description: `Constraint lock mode for week ${weekId}`,
+        updatedBy: performedBy,
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true, new: true }
+  );
+
+  const locked = lockMode === 'force_locked';
+  await AuditLog.create({
+    performedBy,
+    action: locked ? 'week_locked' : 'week_unlocked',
+    refModel: 'SystemSettings',
+    refId: setting._id,
+    after: { weekId, lockMode },
+    ip,
+  });
+
+  const title = locked
+    ? `הגשת אילוצים לשבוע ${weekId} ננעלה`
+    : `הגשת אילוצים לשבוע ${weekId} נפתחה`;
+  const body = locked
+    ? `המנהל נעל את האפשרות להגיש אילוצים לשבוע ${weekId}.`
+    : `המנהל פתח את האפשרות להגיש אילוצים לשבוע ${weekId}. ניתן להגיש כעת.`;
+  await broadcastToEmployees(title, body, 'announcement', setting._id, 'SystemSettings');
+}
 
 function validateWeekId(weekId: string, next: NextFunction): boolean {
   if (!WEEK_ID_RE.test(weekId)) {
@@ -56,25 +151,15 @@ export async function getMyConstraints(
     if (!validateWeekId(weekId, next)) return;
 
     const constraint = await Constraint.findOne({ userId: req.user!._id, weekId });
-    const deadline = getConstraintDeadline(weekId);
-    const deadlinePassed = isConstraintDeadlinePassed(weekId);
-
-    // Check for explicit lock in settings
-    const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
-    const isExplicitlyLocked = !!lockSetting?.value;
-
-    // Check schedule lifecycle state — any state beyond 'open' locks constraint submission
-    const scheduleDoc = await WeeklySchedule.findOne({ weekId }).lean();
-    const isScheduleLocked = !!scheduleDoc && scheduleDoc.status !== 'open';
-    const isLocked = deadlinePassed || isExplicitlyLocked || isScheduleLocked;
-    const weekStatus = scheduleDoc?.status ?? null;
+    const lock = await computeWeekLock(weekId);
 
     res.json({
       success: true,
       constraint: constraint ?? null,
-      deadline: deadline.toISOString(),
-      isLocked,
-      weekStatus,
+      deadline: lock.deadline.toISOString(),
+      isLocked: lock.isLocked,
+      lockMode: lock.lockMode,
+      weekStatus: lock.weekStatus,
     });
     logger.info('getMyConstraints - end', { weekId, found: !!constraint });
   } catch (err) {
@@ -95,13 +180,10 @@ export async function upsertMyConstraints(
     if (!validateWeekId(weekId, next)) return;
 
     if (req.user!.role === 'employee') {
-      const deadlinePassed = isConstraintDeadlinePassed(weekId);
-      const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
-      const isExplicitlyLocked = !!lockSetting?.value;
-      const scheduleDoc = await WeeklySchedule.findOne({ weekId }).lean();
-      const isScheduleLocked = !!scheduleDoc && scheduleDoc.status !== 'open';
+      const { isLocked, lockMode, isExplicitlyLocked, isScheduleLocked } =
+        await computeWeekLock(weekId);
 
-      if (deadlinePassed || isExplicitlyLocked || isScheduleLocked) {
+      if (isLocked) {
         const exception = await ConstraintException.findOne({
           employeeId: req.user!._id,
           weekId,
@@ -127,7 +209,9 @@ export async function upsertMyConstraints(
           after: { weekId },
           ip: req.ip,
         });
-      } else {
+      } else if (lockMode !== 'force_unlocked') {
+        // force_unlocked reopens this specific week for self-submission,
+        // so the normal "only the current allowed week" restriction is skipped.
         const allowed = getAllowedWeekId();
         if (weekId !== allowed) {
           return next(new AppError(`ניתן להגיש אילוצים רק לשבוע ${allowed}`, 403));
@@ -176,23 +260,16 @@ export async function getAllConstraintsForWeek(
       'userId',
       'name email role avatarUrl'
     );
-    const deadline = getConstraintDeadline(weekId);
-    const deadlinePassed = isConstraintDeadlinePassed(weekId);
-
-    const lockSetting = await SystemSettings.findOne({ key: `lock_constraints_${weekId}` });
-    const isExplicitlyLocked = !!lockSetting?.value;
-
-    const scheduleDoc = await WeeklySchedule.findOne({ weekId }).lean();
-    const isScheduleLocked = !!scheduleDoc && scheduleDoc.status !== 'open';
-    const weekStatus = scheduleDoc?.status ?? null;
+    const lock = await computeWeekLock(weekId);
 
     res.json({
       success: true,
       constraints,
-      deadline: deadline.toISOString(),
-      isLocked: deadlinePassed || isExplicitlyLocked || isScheduleLocked,
-      isExplicitlyLocked,
-      weekStatus,
+      deadline: lock.deadline.toISOString(),
+      isLocked: lock.isLocked,
+      isExplicitlyLocked: lock.isExplicitlyLocked,
+      lockMode: lock.lockMode,
+      weekStatus: lock.weekStatus,
     });
     logger.info('getAllConstraintsForWeek - end', { weekId, count: constraints.length });
   } catch (err) {
@@ -201,7 +278,7 @@ export async function getAllConstraintsForWeek(
   }
 }
 
-// POST /constraints/:weekId/toggle-lock — manager toggle week lock
+// POST /constraints/:weekId/toggle-lock — manager toggle week lock (legacy boolean API)
 export async function toggleWeekLock(
   req: Request,
   res: Response,
@@ -214,43 +291,43 @@ export async function toggleWeekLock(
 
     if (!validateWeekId(weekId, next)) return;
 
-    const key = `lock_constraints_${weekId}`;
-    const setting = await SystemSettings.findOneAndUpdate(
-      { key },
-      {
-        $set: {
-          value: isLocked,
-          description: `Manual lock for week ${weekId}`,
-          updatedBy: req.user!._id,
-          updatedAt: new Date(),
-        },
-      },
-      { upsert: true, new: true }
-    );
+    // true → force_locked, false → force_unlocked so the manager can reopen a
+    // week even after the deadline has passed.
+    const lockMode: LockMode = isLocked ? 'force_locked' : 'force_unlocked';
+    await writeLockMode(weekId, lockMode, req.user!._id, req.ip);
 
-    await AuditLog.create({
-      performedBy: req.user!._id,
-      action: isLocked ? 'week_locked' : 'week_unlocked',
-      refModel: 'SystemSettings',
-      refId: setting._id,
-      after: { weekId, isLocked },
-      ip: req.ip,
-    });
-
-    // Send broadcast notification
-    const title = isLocked
-      ? `הגשת אילוצים לשבוע ${weekId} ננעלה`
-      : `הגשת אילוצים לשבוע ${weekId} נפתחה`;
-    const body = isLocked
-      ? `המנהל נעל את האפשרות להגיש אילוצים לשבוע ${weekId}.`
-      : `המנהל פתח את האפשרות להגיש אילוצים לשבוע ${weekId}. ניתן להגיש כעת.`;
-
-    await broadcastToEmployees(title, body, 'announcement', setting._id, 'SystemSettings');
-
-    res.json({ success: true, isLocked });
-    logger.info('toggleWeekLock - end', { weekId, isLocked });
+    const lock = await computeWeekLock(weekId);
+    res.json({ success: true, isLocked: lock.isLocked, lockMode: lock.lockMode });
+    logger.info('toggleWeekLock - end', { weekId, lockMode });
   } catch (err) {
     logger.error('toggleWeekLock - error', err);
+    next(err);
+  }
+}
+
+// POST /constraints/:weekId/lock-state — manager sets explicit lock mode
+export async function setWeekLockState(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  logger.info('setWeekLockState - start', { weekId: req.params.weekId, body: req.body });
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+
+    const parsed = lockStateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new AppError(parsed.error.errors[0].message, 400));
+    }
+
+    await writeLockMode(weekId, parsed.data.lockMode, req.user!._id, req.ip);
+
+    const lock = await computeWeekLock(weekId);
+    res.json({ success: true, lockMode: lock.lockMode, isLocked: lock.isLocked });
+    logger.info('setWeekLockState - end', { weekId, lockMode: parsed.data.lockMode });
+  } catch (err) {
+    logger.error('setWeekLockState - error', err);
     next(err);
   }
 }
@@ -270,14 +347,14 @@ export async function getConstraintsForUser(
     if (!validateWeekId(weekId, next)) return;
 
     const constraint = await Constraint.findOne({ userId, weekId });
-    const deadline = getConstraintDeadline(weekId);
-    const isLocked = isConstraintDeadlinePassed(weekId);
+    const lock = await computeWeekLock(weekId);
 
     res.json({
       success: true,
       constraint: constraint ?? null,
-      deadline: deadline.toISOString(),
-      isLocked,
+      deadline: lock.deadline.toISOString(),
+      isLocked: lock.isLocked,
+      lockMode: lock.lockMode,
     });
     logger.info('getConstraintsForUser - end', { weekId, userId, found: !!constraint });
   } catch (err) {

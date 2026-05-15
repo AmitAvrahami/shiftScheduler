@@ -42,6 +42,19 @@ export function isConstraintDeadlinePassed(weekId: string): boolean {
   return Date.now() > getConstraintDeadline(weekId).getTime();
 }
 
+export type LockMode = 'default' | 'force_locked' | 'force_unlocked';
+
+/**
+ * Normalizes the stored constraint-lock setting into a LockMode.
+ * Legacy boolean values are mapped so existing weeks keep their behavior:
+ * `true` → force_locked, anything else (`false`, missing, unknown) → default.
+ */
+export function resolveLockMode(raw: unknown): LockMode {
+  if (raw === true || raw === 'force_locked') return 'force_locked';
+  if (raw === 'force_unlocked') return 'force_unlocked';
+  return 'default';
+}
+
 /**
  * Returns 7 LOCAL-midnight Date objects (Sun–Sat) for the given ISO weekId.
  * Sunday = ISO week Monday − 1 day.

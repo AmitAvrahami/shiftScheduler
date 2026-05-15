@@ -1,5 +1,5 @@
 import type { AuthResponse, User } from '../types/auth';
-import type { Constraint, ConstraintEntry, ShiftDefinition } from '../types/constraint';
+import type { Constraint, ConstraintEntry, LockMode, ShiftDefinition } from '../types/constraint';
 import type { AdminDashboardDTO } from '../pages/admin/types';
 
 // ─── Shared response types ────────────────────────────────────────────────────
@@ -220,6 +220,7 @@ export const constraintApi = {
     deadline: string;
     isLocked: boolean;
     isExplicitlyLocked?: boolean;
+    lockMode?: LockMode;
     weekStatus: Schedule['status'] | null;
   }> {
     return request(`/constraints/${weekId}`);
@@ -231,6 +232,7 @@ export const constraintApi = {
     deadline: string;
     isLocked: boolean;
     isExplicitlyLocked: boolean;
+    lockMode?: LockMode;
     weekStatus: Schedule['status'] | null;
   }> {
     return request(`/constraints/${weekId}/all`);
@@ -239,10 +241,20 @@ export const constraintApi = {
   toggleWeekLock(
     weekId: string,
     isLocked: boolean
-  ): Promise<{ success: boolean; isLocked: boolean }> {
+  ): Promise<{ success: boolean; isLocked: boolean; lockMode?: LockMode }> {
     return request(`/constraints/${weekId}/toggle-lock`, {
       method: 'POST',
       body: JSON.stringify({ isLocked }),
+    });
+  },
+
+  setLockState(
+    weekId: string,
+    lockMode: LockMode
+  ): Promise<{ success: boolean; lockMode: LockMode; isLocked: boolean }> {
+    return request(`/constraints/${weekId}/lock-state`, {
+      method: 'POST',
+      body: JSON.stringify({ lockMode }),
     });
   },
 
