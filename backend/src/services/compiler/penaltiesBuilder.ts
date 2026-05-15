@@ -42,9 +42,7 @@ export function buildPenalties(constraints: Constraint[], ctx: CompilerContext):
         const employees = constraint.targets.targets.filter(
           (t): t is EmployeeTarget => t.kind === 'employee'
         );
-        const slots = constraint.targets.targets.filter(
-          (t): t is SlotTarget => t.kind === 'slot'
-        );
+        const slots = constraint.targets.targets.filter((t): t is SlotTarget => t.kind === 'slot');
 
         for (const employee of employees) {
           if (!knownWorkerIds.has(employee.employeeId)) continue;
