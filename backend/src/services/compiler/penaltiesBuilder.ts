@@ -17,10 +17,7 @@ import type { CompilerContext } from './forbiddenAssignmentsBuilder';
  * Python-owned and are rejected here until Node can faithfully express their
  * semantics.
  */
-export function buildPenalties(
-  constraints: Constraint[],
-  ctx: CompilerContext
-): PenaltyTermDTO[] {
+export function buildPenalties(constraints: Constraint[], ctx: CompilerContext): PenaltyTermDTO[] {
   const out: PenaltyTermDTO[] = [];
 
   const shiftsBySlot = new Map<string, typeof ctx.shifts>();

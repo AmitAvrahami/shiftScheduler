@@ -1,16 +1,8 @@
 import mongoose from 'mongoose';
 import { buildPenalties } from '../services/compiler/penaltiesBuilder';
-import type {
-  CalendarDateString,
-  Constraint,
-  SoftConstraint,
-} from '../types/constraint';
+import type { CalendarDateString, Constraint, SoftConstraint } from '../types/constraint';
 import { constraintId, weight, workerId } from '../types/constraint';
-import type {
-  LeanShift,
-  LeanShiftDefinition,
-  LeanUser,
-} from '../services/solverMapper';
+import type { LeanShift, LeanShiftDefinition, LeanUser } from '../services/solverMapper';
 
 const id = (hex: string) => new mongoose.Types.ObjectId(hex.padStart(24, '0'));
 
@@ -19,9 +11,7 @@ const defMorning = id('b1');
 const shiftMorning = id('c1');
 const sunday = new Date(2026, 4, 10, 0, 0, 0, 0);
 
-const workers: LeanUser[] = [
-  { _id: userA, role: 'employee', isFixedMorningEmployee: false },
-];
+const workers: LeanUser[] = [{ _id: userA, role: 'employee', isFixedMorningEmployee: false }];
 
 const shiftDefinitions: LeanShiftDefinition[] = [
   {
@@ -38,11 +28,13 @@ const shifts: LeanShift[] = [
   { _id: shiftMorning, date: sunday, definitionId: defMorning, requiredCount: 1 },
 ];
 
-function makeAssignmentPreferenceConstraint(opts: {
-  workerIdStr?: string;
-  date?: CalendarDateString;
-  definitionIdStr?: string;
-} = {}): SoftConstraint {
+function makeAssignmentPreferenceConstraint(
+  opts: {
+    workerIdStr?: string;
+    date?: CalendarDateString;
+    definitionIdStr?: string;
+  } = {}
+): SoftConstraint {
   return {
     id: constraintId('assignment-pref-1'),
     kind: 'soft',
@@ -104,8 +96,8 @@ describe('buildPenalties', () => {
       source: { type: 'system' },
     };
 
-    expect(() =>
-      buildPenalties([unsupported], { workers, shifts, shiftDefinitions })
-    ).toThrow(/shift_balance.*not yet emitted/);
+    expect(() => buildPenalties([unsupported], { workers, shifts, shiftDefinitions })).toThrow(
+      /shift_balance.*not yet emitted/
+    );
   });
 });
