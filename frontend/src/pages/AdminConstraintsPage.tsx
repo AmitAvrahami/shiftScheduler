@@ -14,6 +14,13 @@ import {
 
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
+// Constraint entry dates round-trip through a Mongoose Date, so the API can
+// return ISO strings ("2026-05-17T00:00:00.000Z"). The table/dialog key on the
+// local YYYY-MM-DD form, so normalize before comparing or persisting.
+function normalizeConstraintDate(date: string): string {
+  return date.includes('T') ? date.split('T')[0] : date;
+}
+
 interface OverrideDialogProps {
   user: { _id: string; name: string };
   date: Date;
@@ -40,9 +47,13 @@ function ConstraintOverrideDialog({
 
   function toggleShift(defId: string) {
     setEntries((prev) => {
-      const exists = prev.find((e) => e.definitionId === defId && e.date === dateKey);
+      const exists = prev.find(
+        (e) => e.definitionId === defId && normalizeConstraintDate(e.date) === dateKey
+      );
       if (exists) {
-        return prev.filter((e) => !(e.definitionId === defId && e.date === dateKey));
+        return prev.filter(
+          (e) => !(e.definitionId === defId && normalizeConstraintDate(e.date) === dateKey)
+        );
       } else {
         return [...prev, { definitionId: defId, date: dateKey, canWork: false }];
       }
@@ -52,7 +63,11 @@ function ConstraintOverrideDialog({
   async function handleSave() {
     setSaving(true);
     try {
-      await constraintApi.upsertForUser(weekId, user._id, entries);
+      const payload = entries.map((e) => ({
+        ...e,
+        date: normalizeConstraintDate(e.date),
+      }));
+      await constraintApi.upsertForUser(weekId, user._id, payload);
       onSave();
     } catch (err) {
       alert('שגיאה בשמירת השינויים');
@@ -84,7 +99,7 @@ function ConstraintOverrideDialog({
           <div className="grid grid-cols-1 gap-3">
             {definitions.map((def) => {
               const isBlocked = entries.some(
-                (e) => e.definitionId === def._id && e.date === dateKey
+                (e) => e.definitionId === def._id && normalizeConstraintDate(e.date) === dateKey
               );
               return (
                 <button
@@ -303,10 +318,11 @@ export default function AdminConstraintsPage() {
 
       c.entries.forEach((entry) => {
         if (!entry.canWork) {
+          const dateKey = normalizeConstraintDate(entry.date);
           if (!map[entry.definitionId]) map[entry.definitionId] = {};
-          if (!map[entry.definitionId][entry.date]) map[entry.definitionId][entry.date] = [];
+          if (!map[entry.definitionId][dateKey]) map[entry.definitionId][dateKey] = [];
 
-          map[entry.definitionId][entry.date].push({
+          map[entry.definitionId][dateKey].push({
             name: userName,
             userId: userId,
             id: c._id,
