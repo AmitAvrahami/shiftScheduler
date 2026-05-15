@@ -30,6 +30,7 @@ describe('solver cross-runtime contract', () => {
       expect(worker.availability[0].can_work).toBe(true);
 
       const def = request.shift_definitions[0];
+      expect(def.shift_type).toBe('morning');
       expect(def.start_time).toBe('06:00');
       expect(def.end_time).toBe('14:00');
       expect(def.duration_minutes).toBe(480);

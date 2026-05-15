@@ -13,8 +13,16 @@ import os
 # Allow importing from parent directory when running directly
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from collections import defaultdict
+
 import pytest
-from models import ForbiddenAssignmentEntry, PenaltyTerm, ShiftSlotInput, SolveRequest
+from models import (
+    ForbiddenAssignmentEntry,
+    PenaltyTerm,
+    ShiftDefInput,
+    ShiftSlotInput,
+    SolveRequest,
+)
 from shift_solver import ShiftSolver
 from tests.conftest import (
     AFTERNOON,
@@ -26,6 +34,84 @@ from tests.conftest import (
     make_slots,
     make_worker,
 )
+
+# ---------------------------------------------------------------------------
+# Hebrew-named shift definitions — production names are localized, so the
+# solver must classify by shift_type, never by name substring.
+# ---------------------------------------------------------------------------
+
+HEB_MORNING = ShiftDefInput(
+    id="heb_morning",
+    name="בוקר",
+    shift_type="morning",
+    start_time="06:45",
+    end_time="14:45",
+    duration_minutes=480,
+    crosses_midnight=False,
+)
+HEB_AFTERNOON = ShiftDefInput(
+    id="heb_afternoon",
+    name="צהריים",
+    shift_type="afternoon",
+    start_time="14:45",
+    end_time="22:45",
+    duration_minutes=480,
+    crosses_midnight=False,
+)
+HEB_NIGHT = ShiftDefInput(
+    id="heb_night",
+    name="לילה",
+    shift_type="night",
+    start_time="22:45",
+    end_time="06:45",
+    duration_minutes=480,
+    crosses_midnight=True,
+)
+HEB_DEFS = [HEB_MORNING, HEB_AFTERNOON, HEB_NIGHT]
+SUN_THU_DATES = WEEK_DATES[:5]
+
+
+def _make_hebrew_request(workers, morning_required: int = 2) -> SolveRequest:
+    slots: list[ShiftSlotInput] = []
+    for date in WEEK_DATES:
+        slots.append(
+            ShiftSlotInput(
+                id=f"slot_{date}_{HEB_MORNING.id}",
+                date=date,
+                definition_id=HEB_MORNING.id,
+                required_count=morning_required,
+            )
+        )
+        slots.append(
+            ShiftSlotInput(
+                id=f"slot_{date}_{HEB_AFTERNOON.id}",
+                date=date,
+                definition_id=HEB_AFTERNOON.id,
+                required_count=1,
+            )
+        )
+        slots.append(
+            ShiftSlotInput(
+                id=f"slot_{date}_{HEB_NIGHT.id}",
+                date=date,
+                definition_id=HEB_NIGHT.id,
+                required_count=1,
+            )
+        )
+    return SolveRequest(
+        schedule_id="sched_heb",
+        week_id="2026-W18",
+        workers=workers,
+        shift_definitions=HEB_DEFS,
+        shifts=slots,
+    )
+
+
+def _assigned_by_slot(result) -> dict[str, set[str]]:
+    by_slot: dict[str, set[str]] = defaultdict(set)
+    for a in result.assignments:
+        by_slot[a.shift_id].add(a.worker_id)
+    return by_slot
 
 
 # ---------------------------------------------------------------------------
@@ -559,3 +645,169 @@ def test_performance_10_workers():
     assert result.solve_time_ms < 5_000, (
         f"Solver took {result.solve_time_ms} ms — exceeds 5 000 ms target"
     )
+
+
+# ---------------------------------------------------------------------------
+# 11. FIXED_MORNING_RULE — production repro: Hebrew names + counts toward
+#     required_count + canWork:false override + self-contained for employee.
+# ---------------------------------------------------------------------------
+
+def test_fixed_morning_manager_hebrew_names_counts_toward_required():
+    """
+    Production scenario: shift definitions are Hebrew-named (no English
+    substring to match). A fixed-morning manager must be assigned to every
+    Sun–Thu morning, count *within* required_count (not be added on top), and
+    never appear in afternoon/night or Friday/Saturday.
+    """
+    workers = [make_worker("mgr", role="manager", is_fixed_morning=True)] + [
+        make_worker(f"w{i}") for i in range(1, 9)
+    ]
+    req = _make_hebrew_request(workers, morning_required=2)
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    slots_by_id = {s.id: s for s in req.shifts}
+    by_slot = _assigned_by_slot(result)
+
+    for date in SUN_THU_DATES:
+        sid = f"slot_{date}_{HEB_MORNING.id}"
+        assert "mgr" in by_slot[sid], f"manager missing from {date} morning"
+        assert len(by_slot[sid]) == slots_by_id[sid].required_count, (
+            f"{date} morning has {len(by_slot[sid])} assigned, "
+            f"expected required_count={slots_by_id[sid].required_count} "
+            f"(manager must count toward it, not be added on top)"
+        )
+
+    for a in result.assignments:
+        if a.worker_id != "mgr":
+            continue
+        slot = slots_by_id[a.shift_id]
+        assert slot.definition_id == HEB_MORNING.id, "manager only works morning"
+        assert slot.date in SUN_THU_DATES, "manager never works Fri/Sat"
+
+
+def test_fixed_morning_canwork_false_frees_slot_for_substitute():
+    """
+    canWork:false on a Sun–Thu morning overrides the force-in: the manager is
+    dropped only that day and a substitute keeps the slot at required_count.
+    """
+    wednesday = WEEK_DATES[3]
+    workers = [
+        make_worker(
+            "mgr",
+            role="manager",
+            is_fixed_morning=True,
+            blocked=[(wednesday, HEB_MORNING.id)],
+        )
+    ] + [make_worker(f"w{i}") for i in range(1, 9)]
+    req = _make_hebrew_request(workers, morning_required=2)
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    slots_by_id = {s.id: s for s in req.shifts}
+    by_slot = _assigned_by_slot(result)
+
+    wed_sid = f"slot_{wednesday}_{HEB_MORNING.id}"
+    assert "mgr" not in by_slot[wed_sid], "manager blocked Wed morning"
+    assert len(by_slot[wed_sid]) == slots_by_id[wed_sid].required_count, (
+        "substitute must keep the blocked slot at required_count"
+    )
+
+    for date in (WEEK_DATES[0], WEEK_DATES[1], WEEK_DATES[2], WEEK_DATES[4]):
+        assert "mgr" in by_slot[f"slot_{date}_{HEB_MORNING.id}"], (
+            f"manager must still cover unblocked {date} morning"
+        )
+
+
+def test_fixed_morning_rule_self_contained_for_employee_role():
+    """
+    HC4 is self-contained: a fixed-morning worker who is a plain employee
+    (role='employee', not manager) is still forced into every Sun–Thu morning
+    and forced out of afternoon/night/Fri/Sat — without relying on HC3.
+    """
+    workers = [make_worker("fm", role="employee", is_fixed_morning=True)] + [
+        make_worker(f"w{i}") for i in range(1, 9)
+    ]
+    req = _make_hebrew_request(workers, morning_required=2)
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE", "RELAXED")
+    slots_by_id = {s.id: s for s in req.shifts}
+    fm_slots = [
+        slots_by_id[a.shift_id] for a in result.assignments if a.worker_id == "fm"
+    ]
+
+    fm_morning_dates = {
+        s.date for s in fm_slots if s.definition_id == HEB_MORNING.id
+    }
+    for date in SUN_THU_DATES:
+        assert date in fm_morning_dates, (
+            f"fixed-morning employee must cover {date} morning"
+        )
+
+    for s in fm_slots:
+        assert s.definition_id == HEB_MORNING.id, (
+            "fixed-morning employee must never work afternoon/night"
+        )
+        assert s.date in SUN_THU_DATES, (
+            "fixed-morning employee must never work Fri/Sat"
+        )
+
+
+def test_legacy_request_without_shift_type_falls_back_to_name():
+    """
+    Backward compatibility: a legacy request that omits shift_type but uses
+    English names must still classify via the name-substring fallback, so the
+    fixed-morning rule keeps working for old callers.
+    """
+    legacy_morning = ShiftDefInput(
+        id="legacy_morning", name="Morning", start_time="06:45",
+        end_time="14:45", duration_minutes=480, crosses_midnight=False,
+    )
+    legacy_afternoon = ShiftDefInput(
+        id="legacy_afternoon", name="Afternoon", start_time="14:45",
+        end_time="22:45", duration_minutes=480, crosses_midnight=False,
+    )
+    legacy_night = ShiftDefInput(
+        id="legacy_night", name="Night", start_time="22:45",
+        end_time="06:45", duration_minutes=480, crosses_midnight=True,
+    )
+    assert legacy_morning.shift_type is None  # not supplied → fallback path
+
+    slots: list[ShiftSlotInput] = []
+    for date in WEEK_DATES:
+        for defn, req_count in (
+            (legacy_morning, 2),
+            (legacy_afternoon, 1),
+            (legacy_night, 1),
+        ):
+            slots.append(
+                ShiftSlotInput(
+                    id=f"slot_{date}_{defn.id}",
+                    date=date,
+                    definition_id=defn.id,
+                    required_count=req_count,
+                )
+            )
+    workers = [make_worker("mgr", role="manager", is_fixed_morning=True)] + [
+        make_worker(f"w{i}") for i in range(1, 9)
+    ]
+    req = SolveRequest(
+        schedule_id="sched_legacy",
+        week_id="2026-W18",
+        workers=workers,
+        shift_definitions=[legacy_morning, legacy_afternoon, legacy_night],
+        shifts=slots,
+    )
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    slots_by_id = {s.id: s for s in req.shifts}
+    by_slot = _assigned_by_slot(result)
+    for date in SUN_THU_DATES:
+        sid = f"slot_{date}_{legacy_morning.id}"
+        assert "mgr" in by_slot[sid], f"fallback failed for {date} morning"
+    for a in result.assignments:
+        if a.worker_id == "mgr":
+            assert slots_by_id[a.shift_id].definition_id == legacy_morning.id
+            assert slots_by_id[a.shift_id].date in SUN_THU_DATES

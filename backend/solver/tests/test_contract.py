@@ -27,8 +27,21 @@ def test_valid_solve_request_parses() -> None:
     assert req.schedule_id == "schedule_contract_test"
     assert req.week_id == "2026-W18"
     assert req.workers[0].role == "employee"
+    assert req.shift_definitions[0].shift_type == "morning"
     assert req.shift_definitions[0].start_time == "06:00"
     assert req.shifts[0].required_count == 1
+
+
+def test_legacy_request_without_shift_type_parses() -> None:
+    """A pre-shift_type payload must still parse; shift_type defaults to None
+    so the solver can fall back to name-substring classification."""
+    raw = _load("valid_solve_request.json")
+    for d in raw["shift_definitions"]:
+        d.pop("shift_type", None)
+
+    req = SolveRequest.model_validate(raw)
+
+    assert req.shift_definitions[0].shift_type is None
 
 
 def test_valid_solve_request_parses_with_generic_payload_fields() -> None:

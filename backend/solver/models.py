@@ -23,7 +23,11 @@ class WorkerInput(BaseModel):
 
 class ShiftDefInput(BaseModel):
     id: str
-    name: str            # "Morning" | "Afternoon" | "Night"
+    name: str            # localized display name (Hebrew in prod)
+    # Language-independent classification supplied by the Node mapper. Optional
+    # for backward compatibility: legacy requests without it fall back to
+    # English name-substring detection in ShiftSolver.
+    shift_type: Optional[Literal["morning", "afternoon", "night"]] = None
     start_time: str      # "HH:MM"
     end_time: str        # "HH:MM"
     duration_minutes: int

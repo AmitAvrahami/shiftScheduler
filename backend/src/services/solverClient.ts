@@ -18,9 +18,12 @@ export interface SolverWorker {
   availability: SolverAvailabilityEntry[];
 }
 
+export type SolverShiftType = 'morning' | 'afternoon' | 'night';
+
 export interface SolverShiftDefinition {
   id: string;
   name: string;
+  shift_type: SolverShiftType;
   start_time: string;
   end_time: string;
   duration_minutes: number;

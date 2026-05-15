@@ -80,6 +80,26 @@ def _rest_gap_minutes(prev: ShiftDefInput, next_def: ShiftDefInput) -> int:
     return next_start - prev_end
 
 
+def _resolve_shift_type(defn: ShiftDefInput) -> str:
+    """
+    Language-independent shift type.
+
+    Prefer the explicit ``shift_type`` supplied by the Node mapper. Production
+    shift names are localized (Hebrew: בוקר/צהריים/לילה), so name-substring
+    matching only works for legacy/English requests — kept as a safe fallback.
+    """
+    if defn.shift_type is not None:
+        return defn.shift_type
+    name = defn.name.lower()
+    if "night" in name:
+        return "night"
+    if "afternoon" in name:
+        return "afternoon"
+    if "morning" in name:
+        return "morning"
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # ShiftSolver
 # ---------------------------------------------------------------------------
@@ -134,17 +154,16 @@ class ShiftSolver:
             if dt.weekday() in (4, 5):  # Python: Mon=0, Fri=4, Sat=5
                 self.weekend_day_idxs.add(idx)
 
-        # Morning definition id(s)
+        # Shift-type def id sets — derived from the language-independent
+        # shift_type (name-substring fallback handled in _resolve_shift_type).
         self.morning_def_ids: set[str] = {
-            d.id for d in self.defs if "morning" in d.name.lower()
+            d.id for d in self.defs if _resolve_shift_type(d) == "morning"
         }
-        # Night definition id(s)
         self.night_def_ids: set[str] = {
-            d.id for d in self.defs if "night" in d.name.lower()
+            d.id for d in self.defs if _resolve_shift_type(d) == "night"
         }
-        # Afternoon definition id(s)
         self.afternoon_def_ids: set[str] = {
-            d.id for d in self.defs if "afternoon" in d.name.lower()
+            d.id for d in self.defs if _resolve_shift_type(d) == "afternoon"
         }
 
         # Sun–Thu indices (no Friday=5, Saturday=6)
@@ -328,19 +347,34 @@ class ShiftSolver:
 
     def _enforce_fixed_morning_rule(self) -> None:
         """
-        HC4: Fixed morning employee is assigned to every Sun–Thu morning slot
-        unless they have canWork=false for that specific day.
+        HC4 (self-contained): A fixed-morning worker is restricted to
+        Sun–Thu morning slots only — independent of role.
+
+          • Forced INTO each Sun–Thu morning slot, unless canWork=false for
+            that specific day (then HC2 forces it to 0 and HC4 leaves it free
+            so HC7 can substitute another worker; required_count is unchanged).
+          • Forced OUT of every other cell — afternoon, night, and any
+            Friday/Saturday (including Fri/Sat morning).
+
+        Self-contained so the rule holds even when the fixed-morning worker is
+        a regular employee, not a manager (HC3 still applies redundantly for
+        managers, which is harmless).
         """
         for fm_id in self.fixed_morning_ids:
-            for day_idx in self.sun_thu_idxs:
+            for day_idx in range(len(self.dates)):
                 date = self.dates[day_idx]
-                for morning_def_id in self.morning_def_ids:
-                    key = (fm_id, day_idx, morning_def_id)
+                is_sun_thu = day_idx in self.sun_thu_idxs
+                for d in self.defs:
+                    key = (fm_id, day_idx, d.id)
                     if key not in self.shifts:
                         continue
-                    can = self.avail.get((fm_id, date, morning_def_id), True)
-                    if can:
-                        self.model.Add(self.shifts[key] == 1)
+                    is_morning = d.id in self.morning_def_ids
+                    if is_sun_thu and is_morning:
+                        can = self.avail.get((fm_id, date, d.id), True)
+                        if can:
+                            self.model.Add(self.shifts[key] == 1)
+                    else:
+                        self.model.Add(self.shifts[key] == 0)
 
     def _enforce_minimum_rest(self) -> None:
         """
@@ -516,7 +550,13 @@ class ShiftSolver:
                 # floor(0.6 * x) ≈ (3 * x) // 5; we approximate with integer arithmetic:
                 # penalty fires when type_count * 5 > worker_total * 3 + 3 (buffer for ≥3 guard)
                 # Introduced as a linearized indicator using AddLinearConstraint bounds
-                excess = self.model.NewIntVar(0, len(type_vars), f"div_ex_{w.id}_{type_name}")
+                # Domain must cover proxy's full positive range
+                # (type_count * 5 - worker_total * 3 ≤ len(all_vars) * 5); a
+                # narrower bound makes the model infeasible for a worker who is
+                # 100% one type — e.g. a fixed-morning worker.
+                excess = self.model.NewIntVar(
+                    0, len(all_vars) * 5, f"div_ex_{w.id}_{type_name}"
+                )
                 # excess = max(0, type_count - (3 * worker_total) // 5)
                 # Approximate: use (type_count * 5 - worker_total * 3) as the excess proxy
                 proxy = self.model.NewIntVar(-len(all_vars) * 5, len(all_vars) * 5, f"prx_{w.id}_{type_name}")

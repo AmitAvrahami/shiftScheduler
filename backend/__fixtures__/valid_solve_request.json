@@ -31,6 +31,7 @@
     {
       "id": "shift_def_morning",
       "name": "Morning",
+      "shift_type": "morning",
       "start_time": "06:00",
       "end_time": "14:00",
       "duration_minutes": 480,
