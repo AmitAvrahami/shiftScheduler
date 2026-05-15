@@ -186,6 +186,17 @@ describe('PATCH /api/v1/users/:id', () => {
     expect(res.body.user.role).toBe('employee');
   });
 
+  it('admin can promote an employee to admin', async () => {
+    const { employee } = await seedEmployee();
+    const { token } = await seedAdmin();
+    const res = await request(app)
+      .patch(`/api/v1/users/${employee._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ role: 'admin' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe('admin');
+  });
+
   it('manager can promote an employee to manager', async () => {
     const { employee } = await seedEmployee();
     const { token } = await seedManager();
@@ -257,14 +268,14 @@ describe('PATCH /api/v1/users/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 400 when manager tries to update role to admin', async () => {
+  it('returns 403 when manager tries to update role to admin', async () => {
     const { employee } = await seedEmployee();
     const { token } = await seedManager();
     const res = await request(app)
       .patch(`/api/v1/users/${employee._id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ role: 'admin' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(403);
   });
 
   it('returns 400 for invalid email', async () => {
