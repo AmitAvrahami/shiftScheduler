@@ -262,7 +262,9 @@ export default function AdminConstraintsPage() {
       setDefinitions(defsRes.definitions);
       setAllConstraints(constraintsRes.constraints);
       setIsLocked(constraintsRes.isLocked);
-      setEmployees(usersRes.users.filter((u) => u.role === 'employee' && u.isActive));
+      setEmployees(
+        usersRes.users.filter((u) => (u.role === 'employee' || u.role === 'manager') && u.isActive)
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
     }
