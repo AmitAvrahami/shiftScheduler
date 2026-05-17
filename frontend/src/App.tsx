@@ -10,6 +10,7 @@ import AdminConstraintsPage from './pages/AdminConstraintsPage';
 import AdminShiftDefinitionsPage from './pages/AdminShiftDefinitionsPage';
 import SchedulesPage from './pages/SchedulesPage';
 import ScheduleBoardPage from './pages/ScheduleBoardPage';
+import AdminWeeklyStaffingPage from './pages/admin/AdminWeeklyStaffingPage';
 
 function App() {
   return (
@@ -48,6 +49,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="manager">
                 <AdminConstraintsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/weekly-staffing"
+            element={
+              <ProtectedRoute requiredRole="manager">
+                <AdminWeeklyStaffingPage />
               </ProtectedRoute>
             }
           />
