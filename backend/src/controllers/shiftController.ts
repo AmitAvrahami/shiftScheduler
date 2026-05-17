@@ -164,7 +164,7 @@ async function attachTemplateStatusToShift(shift: unknown): Promise<ShiftRespons
   };
 }
 
-async function attachTemplateStatusToShifts(shifts: unknown[]): Promise<ShiftResponse[]> {
+export async function attachTemplateStatusToShifts(shifts: unknown[]): Promise<ShiftResponse[]> {
   const shiftObjects = shifts.map((shift) =>
     typeof (shift as { toObject?: () => unknown }).toObject === 'function'
       ? (shift as { toObject: () => Record<string, unknown> }).toObject()
@@ -403,10 +403,11 @@ export async function updateShiftRequirement(
 
     const prevCount = shift.requiredCount;
     shift.requiredCount = parsed.data.requiredCount;
+    shift.templateStatus = 'manually_modified';
     await shift.save();
 
     await AuditLog.create({
-      performedBy: req.user!._id,
+      performedBy: new mongoose.Types.ObjectId(req.user!._id as string),
       action: 'shift_requirement_updated',
       refModel: 'Shift',
       refId: shift._id,

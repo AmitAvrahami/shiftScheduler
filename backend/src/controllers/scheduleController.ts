@@ -14,6 +14,7 @@ import { parseWeekId, getWeekDates } from '../utils/weekUtils';
 import { runScheduler } from '../services/schedulerService';
 import { runDemoScheduler } from '../services/demoSchedulerService';
 import { fillMissingTemplateShifts } from '../services/shiftGenerationService';
+import { attachTemplateStatusToShifts } from './shiftController';
 import { logger } from '../utils/logger';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
@@ -516,7 +517,7 @@ export async function getWeekShifts(
     if (!schedule) return next(new AppError('לא נמצא לוח זמנים לשבוע זה', 404));
 
     const shifts = await Shift.find({ scheduleId: schedule._id }).sort({ date: 1, startTime: 1 });
-    res.json({ success: true, shifts });
+    res.json({ success: true, shifts: await attachTemplateStatusToShifts(shifts) });
     logger.info('getWeekShifts - end', { weekId, count: shifts.length });
   } catch (err) {
     logger.error('getWeekShifts - error', err);

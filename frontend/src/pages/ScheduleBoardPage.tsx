@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import { getCurrentWeekId, getNextWeekId, getPrevWeekId, getWeekDates } from '../utils/weekUtils';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
+import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -13,6 +14,7 @@ export default function ScheduleBoardPage() {
   const navigate = useNavigate();
 
   const weekId = paramWeekId || getCurrentWeekId();
+  const [showStaffingModal, setShowStaffingModal] = useState(false);
   const weekDates = useMemo(() => getWeekDates(weekId), [weekId]);
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -92,6 +94,14 @@ export default function ScheduleBoardPage() {
             </button>
           </div>
 
+          <button
+            onClick={() => setShowStaffingModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-[#2B358F] border border-[#e2e8f0] rounded-full font-bold text-sm hover:bg-[#F1F8FF] hover:border-[#056AE5] transition-all"
+          >
+            <MaterialIcon name="tune" className="text-[18px]" />
+            הגדרת תקן שבועי
+          </button>
+
           {isDraft && (
             <button
               onClick={handlePublish}
@@ -154,6 +164,39 @@ export default function ScheduleBoardPage() {
           />
         )}
       </div>
+
+      {showStaffingModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center pt-16 pb-6 px-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+          dir="rtl"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowStaffingModal(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[calc(100vh-5rem)]">
+            <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <h2 className="text-xl font-black text-[#000654]">הגדרת כמות עובדים למשמרות השבוע</h2>
+              <button
+                onClick={() => setShowStaffingModal(false)}
+                className="p-2 hover:bg-white rounded-full transition-colors"
+              >
+                <MaterialIcon name="close" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <WeeklyStaffingEditor weekId={weekId} />
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+              <button
+                onClick={() => setShowStaffingModal(false)}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-sm"
+              >
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

@@ -370,6 +370,32 @@ function normalizeShiftPayload(body: SaveShiftPayload): SaveShiftPayload {
   };
 }
 
+// ─── Weekly Staffing ─────────────────────────────────────────────────────────
+
+export const weeklyStaffingApi = {
+  initializeWeekShifts(
+    weekId: string
+  ): Promise<{ success: boolean; created: number; skipped: number }> {
+    return request(`/schedules/${encodeURIComponent(weekId)}/shifts/initialize`, {
+      method: 'POST',
+    });
+  },
+
+  getWeekShifts(weekId: string): Promise<{ success: boolean; shifts: Shift[] }> {
+    return request(`/schedules/${encodeURIComponent(weekId)}/shifts`);
+  },
+
+  updateShiftRequirement(
+    shiftId: string,
+    requiredCount: number
+  ): Promise<{ success: boolean; shift: Shift }> {
+    return request(`/shifts/${shiftId}/requirement`, {
+      method: 'PATCH',
+      body: JSON.stringify({ requiredCount }),
+    });
+  },
+};
+
 // ─── Assignments ──────────────────────────────────────────────────────────────
 
 export const assignmentApi = {
