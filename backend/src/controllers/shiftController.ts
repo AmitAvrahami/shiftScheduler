@@ -368,6 +368,64 @@ export async function updateShift(req: Request, res: Response, next: NextFunctio
   }
 }
 
+const requirementSchema = z.object({
+  requiredCount: z.number().int().min(0).max(50),
+});
+
+export async function updateShiftRequirement(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  logger.info('updateShiftRequirement - start', { shiftId: req.params.shiftId, body: req.body });
+  try {
+    const { shiftId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(shiftId)) {
+      return next(new AppError('Invalid shiftId', 400));
+    }
+
+    const parsed = requirementSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new AppError(parsed.error.errors[0].message, 422, 'ERR_SHIFT_VALIDATION'));
+    }
+
+    const shift = await Shift.findById(shiftId);
+    if (!shift) return next(new AppError('Shift not found', 404));
+
+    const schedule = await WeeklySchedule.findById(shift.scheduleId);
+    if (!schedule) return next(new AppError('Schedule not found', 404));
+
+    if (!['open', 'locked', 'draft'].includes(schedule.status)) {
+      return next(
+        new AppError('לא ניתן לערוך דרישות משמרת בסטטוס זה', 422, 'ERR_INVALID_SCHEDULE_STATUS')
+      );
+    }
+
+    const prevCount = shift.requiredCount;
+    shift.requiredCount = parsed.data.requiredCount;
+    await shift.save();
+
+    await AuditLog.create({
+      performedBy: req.user!._id,
+      action: 'shift_requirement_updated',
+      refModel: 'Shift',
+      refId: shift._id,
+      before: { requiredCount: prevCount },
+      after: { requiredCount: parsed.data.requiredCount },
+      ip: req.ip,
+    });
+
+    res.json({ success: true, shift });
+    logger.info('updateShiftRequirement - end', {
+      shiftId,
+      requiredCount: parsed.data.requiredCount,
+    });
+  } catch (err) {
+    logger.error('updateShiftRequirement - error', err);
+    next(err);
+  }
+}
+
 export async function deleteShift(req: Request, res: Response, next: NextFunction): Promise<void> {
   logger.info('deleteShift - start', { id: req.params.id });
   try {

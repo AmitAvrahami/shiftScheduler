@@ -466,6 +466,64 @@ export async function generateSchedule(
   }
 }
 
+const BLOCKED_STATUSES = ['generating', 'published', 'archived'] as const;
+
+export async function initializeWeekShifts(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  logger.info('initializeWeekShifts - start', { weekId: req.params.weekId });
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+
+    const schedule = await WeeklySchedule.findOne({ weekId });
+    if (!schedule) return next(new AppError('לא נמצא לוח זמנים לשבוע זה', 404));
+
+    if ((BLOCKED_STATUSES as readonly string[]).includes(schedule.status)) {
+      return next(
+        new AppError('לא ניתן לאתחל משמרות בסטטוס זה', 422, 'ERR_INVALID_SCHEDULE_STATUS')
+      );
+    }
+
+    const actorId = new mongoose.Types.ObjectId(req.user!._id as string);
+    const { created, skipped } = await fillMissingTemplateShifts(
+      weekId,
+      actorId,
+      req.ip ?? 'unknown'
+    );
+
+    res.json({ success: true, created, skipped });
+    logger.info('initializeWeekShifts - end', { weekId, created, skipped });
+  } catch (err) {
+    logger.error('initializeWeekShifts - error', err);
+    next(err);
+  }
+}
+
+export async function getWeekShifts(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  logger.info('getWeekShifts - start', { weekId: req.params.weekId });
+  try {
+    const { weekId } = req.params;
+    if (!validateWeekId(weekId, next)) return;
+
+    const schedule = await WeeklySchedule.findOne({ weekId });
+    if (!schedule) return next(new AppError('לא נמצא לוח זמנים לשבוע זה', 404));
+
+    const shifts = await Shift.find({ scheduleId: schedule._id }).sort({ date: 1, startTime: 1 });
+    res.json({ success: true, shifts });
+    logger.info('getWeekShifts - end', { weekId, count: shifts.length });
+  } catch (err) {
+    logger.error('getWeekShifts - error', err);
+    next(err);
+  }
+}
+
 export async function generateDemoSchedule(
   req: Request,
   res: Response,

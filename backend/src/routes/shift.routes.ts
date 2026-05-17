@@ -6,12 +6,14 @@ import {
   getShiftById,
   updateShift,
   deleteShift,
+  updateShiftRequirement,
 } from '../controllers/shiftController';
 
 const router = Router();
 
 router.get('/', verifyToken, getShifts);
 router.post('/', verifyToken, isManager, createShift);
+router.patch('/:shiftId/requirement', verifyToken, isManager, updateShiftRequirement);
 router.get('/:id', verifyToken, getShiftById);
 router.patch('/:id', verifyToken, isManager, updateShift);
 router.put('/:id', verifyToken, isManager, updateShift);
