@@ -233,6 +233,7 @@ export default function AdminConstraintsPage() {
   const [allConstraints, setAllConstraints] = useState<Constraint[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [isLocked, setIsLocked] = useState(false);
+  const [weekStatus, setWeekStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddPicker, setShowAddPicker] = useState(false);
@@ -245,6 +246,9 @@ export default function AdminConstraintsPage() {
   } | null>(null);
 
   const weekDates = useMemo(() => getWeekDates(currentViewWeek), [currentViewWeek]);
+
+  const isScheduleFinalized =
+    weekStatus === 'generating' || weekStatus === 'published' || weekStatus === 'archived';
 
   useEffect(() => {
     loadData();
@@ -262,6 +266,7 @@ export default function AdminConstraintsPage() {
       setDefinitions(defsRes.definitions);
       setAllConstraints(constraintsRes.constraints);
       setIsLocked(constraintsRes.isLocked);
+      setWeekStatus(constraintsRes.weekStatus ?? null);
       setEmployees(
         usersRes.users.filter((u) => (u.role === 'employee' || u.role === 'manager') && u.isActive)
       );
@@ -370,7 +375,12 @@ export default function AdminConstraintsPage() {
 
             <button
               onClick={() => setShowAddPicker(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#101B79] hover:bg-[#000654] text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+              disabled={isScheduleFinalized}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors shadow-sm ${
+                isScheduleFinalized
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  : 'bg-[#101B79] hover:bg-[#000654] text-white'
+              }`}
             >
               <MaterialIcon name="add" className="text-base" />
               הוסף אילוץ לעובד
@@ -420,6 +430,13 @@ export default function AdminConstraintsPage() {
 
         {error && (
           <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">{error}</div>
+        )}
+
+        {isScheduleFinalized && (
+          <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+            <MaterialIcon name="lock" className="text-amber-600" />
+            <span className="font-bold">הסידור פורסם — לא ניתן לשנות אילוצים לשבוע זה</span>
+          </div>
         )}
 
         <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
@@ -472,14 +489,19 @@ export default function AdminConstraintsPage() {
                             >
                               <div className="flex justify-between items-start">
                                 <button
-                                  onClick={() =>
+                                  onClick={() => {
+                                    if (isScheduleFinalized) return;
                                     setEditingEntry({
                                       user: { _id: b.userId, name: b.name },
                                       date: date,
                                       initialEntries: b.allEntries,
-                                    })
-                                  }
-                                  className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-600 underline transition-opacity"
+                                    });
+                                  }}
+                                  className={`text-[10px] underline transition-opacity ${
+                                    isScheduleFinalized
+                                      ? 'text-slate-300 cursor-not-allowed line-through'
+                                      : 'opacity-0 group-hover:opacity-100 text-blue-600'
+                                  }`}
                                 >
                                   שנה
                                 </button>

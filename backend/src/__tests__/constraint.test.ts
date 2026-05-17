@@ -8,6 +8,7 @@ import User from '../models/User';
 import Constraint from '../models/Constraint';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import WeeklySchedule from '../models/WeeklySchedule';
 import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryServer;
@@ -559,6 +560,81 @@ describe('Constraint lock mode', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.constraint.submittedVia).toBe('self');
+  });
+});
+
+// ── Manager override blocked when schedule is finalized ───────────────────────
+
+describe('Manager override blocked for finalized week', () => {
+  it('403 — rejects override when week is published', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await WeeklySchedule.create({
+      weekId: TEST_WEEK,
+      status: 'published',
+      startDate: new Date('2026-04-12'),
+      endDate: new Date('2026-04-18'),
+      generatedBy: 'auto',
+      shifts: [],
+    });
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}/users/${employee._id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch('לא ניתן לשנות אילוצים לאחר פרסום הסידור');
+  });
+
+  it('403 — rejects override when week is archived', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await WeeklySchedule.create({
+      weekId: TEST_WEEK,
+      status: 'archived',
+      startDate: new Date('2026-04-12'),
+      endDate: new Date('2026-04-18'),
+      generatedBy: 'auto',
+      shifts: [],
+    });
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}/users/${employee._id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch('לא ניתן לשנות אילוצים לאחר פרסום הסידור');
+  });
+
+  it('200 — allows override when week is draft (regression)', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(AFTER_DEADLINE);
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await WeeklySchedule.create({
+      weekId: TEST_WEEK,
+      status: 'draft',
+      startDate: new Date('2026-04-12'),
+      endDate: new Date('2026-04-18'),
+      generatedBy: 'auto',
+      shifts: [],
+    });
+
+    const res = await request(app)
+      .put(`/api/v1/constraints/${TEST_WEEK}/users/${employee._id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ entries: [{ date: '2026-04-12', definitionId: String(def._id), canWork: false }] });
+
+    expect(res.status).toBe(200);
   });
 });
 

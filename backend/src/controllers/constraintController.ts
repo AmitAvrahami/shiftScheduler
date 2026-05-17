@@ -377,6 +377,12 @@ export async function managerOverrideConstraints(
     const { weekId, userId } = req.params;
     if (!validateWeekId(weekId, next)) return;
 
+    const { weekStatus } = await computeWeekLock(weekId);
+    const OVERRIDE_ALLOWED_STATUSES: Array<string | null> = [null, 'open', 'locked', 'draft'];
+    if (!OVERRIDE_ALLOWED_STATUSES.includes(weekStatus)) {
+      return next(new AppError('לא ניתן לשנות אילוצים לאחר פרסום הסידור', 403));
+    }
+
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) {
       return next(new AppError(parsed.error.errors[0].message, 400));
