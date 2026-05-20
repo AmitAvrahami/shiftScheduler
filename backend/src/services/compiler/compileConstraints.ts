@@ -42,7 +42,7 @@ export interface CompilerOutput {
  */
 export function compileConstraints(input: CompilerInput): CompilerOutput {
   const normalized = [
-    ...normalizeLegacyConstraints(input.constraints, input.weekId),
+    ...normalizeLegacyConstraints(input.constraints, input.weekId, input.shiftDefinitions),
     ...(input.domainConstraints ?? []),
   ];
 

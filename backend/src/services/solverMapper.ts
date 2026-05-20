@@ -22,6 +22,9 @@ export interface LeanConstraintEntry {
   date: Date;
   definitionId: mongoose.Types.ObjectId;
   canWork: boolean;
+  availabilityType?: 'available' | 'unavailable' | 'partial';
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface LeanConstraint {

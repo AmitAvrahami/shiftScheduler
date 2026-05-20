@@ -1,52 +1,91 @@
-import type { LeanConstraint } from '../solverMapper';
+import type { LeanConstraint, LeanShiftDefinition } from '../solverMapper';
 import { toDateKey } from '../../utils/weekUtils';
-import type { Constraint, CalendarDateString, HardConstraint } from '../../types/constraint';
+import type {
+  Constraint,
+  CalendarDateString,
+  HardConstraint,
+  SoftConstraint,
+} from '../../types/constraint';
 import { constraintId, workerId } from '../../types/constraint';
+import { DEFAULT_SOFT_WEIGHTS } from '../../types/constraint/constraint.weights';
+import { classifyAvailabilityAgainstShift } from './availabilityClassifier';
 
 /**
  * Translate Mongo `IConstraint` documents into the domain `Constraint[]`
  * surface introduced in PR #1.
  *
- * Today only one rule travels through Mongo: per-`(date, definitionId)`
- * availability, expressed as `canWork: false` rows. Each such row becomes a
- * single hard `availability` constraint. `canWork: true` rows carry no rule
- * and are skipped here — the legacy adapter still re-emits them on the wire
- * for byte-for-byte compatibility with the current Python payload.
+ * Each entry is classified against its shift definition. Three outcomes:
+ *
+ *  - `'forbidden'`        → emit a hard `availability` constraint (the
+ *                           solver treats this cell as `var == 0`).
+ *  - `'available'`        → emit nothing.
+ *  - `'partial_warning'`  → emit a soft `assignment_preference` constraint
+ *                           (the solver pays a penalty if it picks this cell).
+ *
+ * `canWork: false` keeps its bit-identical behaviour from PR #2: it derives
+ * to `'unavailable'` and therefore emits the same hard constraint as before.
  */
 export function normalizeLegacyConstraints(
   constraints: LeanConstraint[],
-  weekId: string
+  weekId: string,
+  shiftDefinitions: LeanShiftDefinition[]
 ): Constraint[] {
   const out: Constraint[] = [];
+  const defsById = new Map(shiftDefinitions.map((def) => [def._id.toString(), def]));
 
   for (const c of constraints) {
     const userIdStr = c.userId.toString();
 
     for (const entry of c.entries) {
-      if (entry.canWork) continue;
-
       const dateKey = toDateKey(entry.date);
       const defIdStr = entry.definitionId.toString();
+      const def = defsById.get(defIdStr);
 
-      const hard: HardConstraint = {
-        id: constraintId(`${userIdStr}:${weekId}:${dateKey}:${defIdStr}`),
-        kind: 'hard',
-        category: 'availability',
-        targets: {
-          scope: 'all',
-          targets: [
-            { kind: 'employee', employeeId: workerId(userIdStr) },
-            {
-              kind: 'slot',
-              date: dateKey as CalendarDateString,
-              definitionId: defIdStr,
-            },
-          ],
-        },
-        source: { type: 'employee', actorId: workerId(userIdStr) },
+      // Without a shift definition we cannot compute partial overlap. Fall
+      // back to the canWork-only behaviour so an orphaned definitionId does
+      // not silently drop a hard block.
+      const classification = def
+        ? classifyAvailabilityAgainstShift(entry, def)
+        : entry.canWork
+          ? 'available'
+          : 'forbidden';
+
+      if (classification === 'available') continue;
+
+      const id = constraintId(`${userIdStr}:${weekId}:${dateKey}:${defIdStr}`);
+      const targets = {
+        scope: 'all' as const,
+        targets: [
+          { kind: 'employee' as const, employeeId: workerId(userIdStr) },
+          {
+            kind: 'slot' as const,
+            date: dateKey as CalendarDateString,
+            definitionId: defIdStr,
+          },
+        ],
       };
+      const source = { type: 'employee' as const, actorId: workerId(userIdStr) };
 
-      out.push(hard);
+      if (classification === 'forbidden') {
+        const hard: HardConstraint = {
+          id,
+          kind: 'hard',
+          category: 'availability',
+          targets,
+          source,
+        };
+        out.push(hard);
+      } else {
+        const soft: SoftConstraint = {
+          id,
+          kind: 'soft',
+          category: 'assignment_preference',
+          weight: DEFAULT_SOFT_WEIGHTS.assignment_preference,
+          targets,
+          source,
+        };
+        out.push(soft);
+      }
     }
   }
 
