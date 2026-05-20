@@ -19,18 +19,9 @@ import {
 import { broadcastToEmployees } from '../services/notificationService';
 import WeeklySchedule from '../models/WeeklySchedule';
 import { logger } from '../utils/logger';
+import { upsertSchema } from '../validation/constraintSchema';
 
 const WEEK_ID_RE = /^\d{4}-W\d{2}$/;
-
-const entrySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
-  definitionId: z.string().min(1),
-  canWork: z.boolean(),
-});
-
-const upsertSchema = z.object({
-  entries: z.array(entrySchema),
-});
 
 const lockStateSchema = z.object({
   lockMode: z.enum(['default', 'force_locked', 'force_unlocked']),

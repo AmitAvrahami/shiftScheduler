@@ -1,9 +1,14 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
+import { AvailabilityType } from '../utils/constraintAvailability';
 
 export interface IConstraintEntry {
   date: Date;
   definitionId: mongoose.Types.ObjectId;
   canWork: boolean;
+  availabilityType?: AvailabilityType;
+  startTime?: string;
+  endTime?: string;
+  note?: string;
 }
 
 export interface IConstraint extends Document {
@@ -23,6 +28,14 @@ const constraintEntrySchema = new Schema<IConstraintEntry>(
     date: { type: Date, required: true },
     definitionId: { type: Schema.Types.ObjectId, ref: 'ShiftDefinition', required: true },
     canWork: { type: Boolean, required: true },
+    availabilityType: {
+      type: String,
+      enum: ['available', 'unavailable', 'partial'],
+      required: false,
+    },
+    startTime: { type: String, required: false },
+    endTime: { type: String, required: false },
+    note: { type: String, required: false },
   },
   { _id: false }
 );
