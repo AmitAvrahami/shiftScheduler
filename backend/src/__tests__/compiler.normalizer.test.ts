@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { normalizeLegacyConstraints } from '../services/compiler/constraintNormalizer';
-import type { LeanConstraint } from '../services/solverMapper';
-import { isHardConstraint } from '../types/constraint';
+import type { LeanConstraint, LeanShiftDefinition } from '../services/solverMapper';
+import { isHardConstraint, isSoftConstraint } from '../types/constraint';
+import { DEFAULT_SOFT_WEIGHTS } from '../types/constraint/constraint.weights';
 
 const id = (hex: string) => new mongoose.Types.ObjectId(hex.padStart(24, '0'));
 
@@ -13,9 +14,27 @@ const defNight = id('b2');
 const sunday = new Date(2026, 4, 10, 0, 0, 0, 0); // 2026-05-10 local
 const monday = new Date(2026, 4, 11, 0, 0, 0, 0); // 2026-05-11 local
 
+const morningDefinition: LeanShiftDefinition = {
+  _id: defMorning,
+  name: 'Morning',
+  startTime: '08:00',
+  endTime: '16:00',
+  durationMinutes: 480,
+  crossesMidnight: false,
+};
+
+const nightDefinition: LeanShiftDefinition = {
+  _id: defNight,
+  name: 'Night',
+  startTime: '22:45',
+  endTime: '06:45',
+  durationMinutes: 480,
+  crossesMidnight: true,
+};
+
 describe('normalizeLegacyConstraints', () => {
   it('returns [] for an empty list', () => {
-    expect(normalizeLegacyConstraints([], '2026-W20')).toEqual([]);
+    expect(normalizeLegacyConstraints([], '2026-W20', [])).toEqual([]);
   });
 
   it('skips canWork=true entries (they carry no rule)', () => {
@@ -25,7 +44,7 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: sunday, definitionId: defMorning, canWork: true }],
       },
     ];
-    expect(normalizeLegacyConstraints(input, '2026-W20')).toEqual([]);
+    expect(normalizeLegacyConstraints(input, '2026-W20', [])).toEqual([]);
   });
 
   it('emits one hard availability constraint per canWork=false entry', () => {
@@ -40,7 +59,7 @@ describe('normalizeLegacyConstraints', () => {
       },
     ];
 
-    const result = normalizeLegacyConstraints(input, '2026-W20');
+    const result = normalizeLegacyConstraints(input, '2026-W20', []);
     expect(result).toHaveLength(2);
     expect(result.every(isHardConstraint)).toBe(true);
     expect(result.every((c) => c.kind === 'hard' && c.category === 'availability')).toBe(true);
@@ -53,7 +72,7 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: sunday, definitionId: defMorning, canWork: false }],
       },
     ];
-    const [c] = normalizeLegacyConstraints(input, '2026-W20');
+    const [c] = normalizeLegacyConstraints(input, '2026-W20', []);
     expect(c.id).toBe(`${userA.toString()}:2026-W20:2026-05-10:${defMorning.toString()}`);
   });
 
@@ -64,7 +83,7 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: sunday, definitionId: defMorning, canWork: false }],
       },
     ];
-    const [c] = normalizeLegacyConstraints(input, '2026-W20');
+    const [c] = normalizeLegacyConstraints(input, '2026-W20', []);
     expect(c.targets.scope).toBe('all');
     expect(c.targets.targets).toHaveLength(2);
     expect(c.targets.targets).toContainEqual({
@@ -85,7 +104,7 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: sunday, definitionId: defMorning, canWork: false }],
       },
     ];
-    const [c] = normalizeLegacyConstraints(input, '2026-W20');
+    const [c] = normalizeLegacyConstraints(input, '2026-W20', []);
     expect(c.source).toEqual({
       type: 'employee',
       actorId: userA.toString(),
@@ -103,7 +122,7 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: monday, definitionId: defNight, canWork: false }],
       },
     ];
-    const result = normalizeLegacyConstraints(input, '2026-W20');
+    const result = normalizeLegacyConstraints(input, '2026-W20', []);
     expect(result).toHaveLength(2);
     expect(result.map((c) => c.source.actorId)).toEqual([userA.toString(), userB.toString()]);
   });
@@ -116,8 +135,170 @@ describe('normalizeLegacyConstraints', () => {
         entries: [{ date: sunday, definitionId: defMorning, canWork: false }],
       },
     ];
-    const [c] = normalizeLegacyConstraints(input, '2026-W20');
+    const [c] = normalizeLegacyConstraints(input, '2026-W20', []);
     const slot = c.targets.targets.find((t) => t.kind === 'slot')!;
     expect(slot).toMatchObject({ kind: 'slot', date: '2026-05-10' });
+  });
+
+  describe('partial availability classification', () => {
+    it("treats availabilityType='unavailable' as a hard availability constraint", () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'unavailable',
+            },
+          ],
+        },
+      ];
+      const result = normalizeLegacyConstraints(input, '2026-W20', [morningDefinition]);
+      expect(result).toHaveLength(1);
+      expect(isHardConstraint(result[0])).toBe(true);
+      expect(result[0]).toMatchObject({ kind: 'hard', category: 'availability' });
+    });
+
+    it("treats availabilityType='available' as a no-op", () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'available',
+            },
+          ],
+        },
+      ];
+      expect(normalizeLegacyConstraints(input, '2026-W20', [morningDefinition])).toEqual([]);
+    });
+
+    it('emits nothing when the partial window covers the entire shift', () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'partial',
+              startTime: '06:00',
+              endTime: '18:00',
+            },
+          ],
+        },
+      ];
+      expect(normalizeLegacyConstraints(input, '2026-W20', [morningDefinition])).toEqual([]);
+    });
+
+    it('emits a soft assignment_preference for a partial window ≥360 min but less than full shift', () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'partial',
+              startTime: '10:00',
+              endTime: '16:00',
+            },
+          ],
+        },
+      ];
+      const result = normalizeLegacyConstraints(input, '2026-W20', [morningDefinition]);
+      expect(result).toHaveLength(1);
+      const [soft] = result;
+      expect(isSoftConstraint(soft)).toBe(true);
+      expect(soft).toMatchObject({
+        kind: 'soft',
+        category: 'assignment_preference',
+        weight: DEFAULT_SOFT_WEIGHTS.assignment_preference,
+      });
+      expect(soft.targets.targets).toContainEqual({
+        kind: 'employee',
+        employeeId: userA.toString(),
+      });
+      expect(soft.targets.targets).toContainEqual({
+        kind: 'slot',
+        date: '2026-05-10',
+        definitionId: defMorning.toString(),
+      });
+    });
+
+    it('emits a hard availability constraint when partial overlap is below 360 min', () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'partial',
+              startTime: '11:00',
+              endTime: '16:00',
+            },
+          ],
+        },
+      ];
+      const result = normalizeLegacyConstraints(input, '2026-W20', [morningDefinition]);
+      expect(result).toHaveLength(1);
+      expect(isHardConstraint(result[0])).toBe(true);
+      expect(result[0]).toMatchObject({ kind: 'hard', category: 'availability' });
+    });
+
+    it('emits a hard availability constraint when partial overlap is zero', () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: sunday,
+              definitionId: defMorning,
+              canWork: true,
+              availabilityType: 'partial',
+              startTime: '18:00',
+              endTime: '22:00',
+            },
+          ],
+        },
+      ];
+      const result = normalizeLegacyConstraints(input, '2026-W20', [morningDefinition]);
+      expect(result).toHaveLength(1);
+      expect(isHardConstraint(result[0])).toBe(true);
+    });
+
+    it('handles overnight shifts: 22:45-06:45 with availability 00:00-06:45 → soft', () => {
+      const input: LeanConstraint[] = [
+        {
+          userId: userA,
+          entries: [
+            {
+              date: monday,
+              definitionId: defNight,
+              canWork: true,
+              availabilityType: 'partial',
+              startTime: '00:00',
+              endTime: '06:45',
+            },
+          ],
+        },
+      ];
+      const result = normalizeLegacyConstraints(input, '2026-W20', [nightDefinition]);
+      expect(result).toHaveLength(1);
+      const [soft] = result;
+      expect(soft).toMatchObject({
+        kind: 'soft',
+        category: 'assignment_preference',
+      });
+    });
   });
 });
