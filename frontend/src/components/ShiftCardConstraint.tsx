@@ -100,7 +100,9 @@ export default function ShiftCardConstraint({
             {def.name}
           </div>
           <div className="text-right text-sm leading-normal break-words text-on-surface-variant">
-            {def.startTime} - {def.endTime}
+            <bdi dir="ltr">
+              {def.startTime} - {def.endTime}
+            </bdi>
           </div>
         </div>
       </div>
@@ -165,7 +167,7 @@ export default function ShiftCardConstraint({
           {preview && (
             <div className={`rounded-lg border p-2 text-xs ${PREVIEW_STYLES[preview.meaning]}`}>
               <div className="flex justify-between font-bold">
-                <span>{preview.rangeLabel}</span>
+                <bdi dir="ltr">{preview.rangeLabel}</bdi>
                 <span>{preview.durationLabel}</span>
               </div>
               <div className="mt-1">משמעות בשיבוץ: {preview.meaningLabel}</div>

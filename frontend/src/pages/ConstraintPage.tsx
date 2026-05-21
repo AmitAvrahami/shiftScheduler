@@ -6,7 +6,12 @@ import MaterialIcon from '../components/MaterialIcon';
 import ShiftCardConstraint, { type PartialValue } from '../components/ShiftCardConstraint';
 import SuccessOverlay from '../components/SuccessOverlay';
 import { validatePartialRange } from '../utils/availabilityPreview';
-import { getAllowedWeekId, getWeekDates, toDateKey } from '../utils/weekUtils';
+import {
+  getAllowedWeekId,
+  getWeekDates,
+  normalizeConstraintDate,
+  toDateKey,
+} from '../utils/weekUtils';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -101,7 +106,8 @@ export default function ConstraintPage() {
         if (constraintRes.constraint) {
           const initial: Record<string, CellValue> = {};
           for (const entry of constraintRes.constraint.entries) {
-            const key = `${entry.definitionId}:${entry.date}`;
+            // GET returns ISO dates; normalize so keys match render keys (toDateKey).
+            const key = `${entry.definitionId}:${normalizeConstraintDate(entry.date)}`;
             if (entry.availabilityType === 'partial') {
               initial[key] = {
                 status: 'partial',
@@ -162,7 +168,9 @@ export default function ConstraintPage() {
 
     const entries: ConstraintEntry[] = [];
     for (const [key, value] of Object.entries(cells)) {
-      const [definitionId, date] = key.split(':');
+      const [definitionId, rawDate] = key.split(':');
+      // PUT validation requires strict YYYY-MM-DD; guard against any ISO leakage.
+      const date = normalizeConstraintDate(rawDate);
       if (value.status === 'unavailable') {
         entries.push({ definitionId, date, canWork: false, availabilityType: 'unavailable' });
       } else if (value.status === 'partial') {

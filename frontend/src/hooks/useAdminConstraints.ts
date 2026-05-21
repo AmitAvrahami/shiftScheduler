@@ -7,6 +7,7 @@ import {
   getNextWeekId,
   getPrevWeekId,
   getWeekDates,
+  normalizeConstraintDate,
   toDateKey,
 } from '../utils/weekUtils';
 import { validatePartialRange } from '../utils/availabilityPreview';
@@ -15,12 +16,8 @@ import type { PartialValue } from '../components/constraints/PartialAvailability
 type EntryMap = Record<string, ConstraintEntry[]>;
 type SourceMap = Record<string, 'self' | 'manager_override' | undefined>;
 
-function normalizeDate(date: string): string {
-  return date.includes('T') ? date.split('T')[0] : date;
-}
-
 function cloneEntries(entries: ConstraintEntry[]): ConstraintEntry[] {
-  return entries.map((e) => ({ ...e, date: normalizeDate(e.date) }));
+  return entries.map((e) => ({ ...e, date: normalizeConstraintDate(e.date) }));
 }
 
 function entriesEqual(a?: ConstraintEntry, b?: ConstraintEntry): boolean {
@@ -40,7 +37,9 @@ function findEntry(
   dateKey: string,
   definitionId: string
 ): ConstraintEntry | undefined {
-  return entries?.find((e) => normalizeDate(e.date) === dateKey && e.definitionId === definitionId);
+  return entries?.find(
+    (e) => normalizeConstraintDate(e.date) === dateKey && e.definitionId === definitionId
+  );
 }
 
 export function useAdminConstraints() {
@@ -138,7 +137,8 @@ export function useAdminConstraints() {
       setStaged((prev) => {
         const existing = prev[userId] ?? [];
         const withoutCell = existing.filter(
-          (e) => !(normalizeDate(e.date) === selectedDateKey && e.definitionId === def._id)
+          (e) =>
+            !(normalizeConstraintDate(e.date) === selectedDateKey && e.definitionId === def._id)
         );
 
         let next = withoutCell;
@@ -181,8 +181,8 @@ export function useAdminConstraints() {
       const o = original[uid] ?? [];
       const s = staged[uid] ?? [];
       const keys = new Set([
-        ...o.map((e) => `${normalizeDate(e.date)}|${e.definitionId}`),
-        ...s.map((e) => `${normalizeDate(e.date)}|${e.definitionId}`),
+        ...o.map((e) => `${normalizeConstraintDate(e.date)}|${e.definitionId}`),
+        ...s.map((e) => `${normalizeConstraintDate(e.date)}|${e.definitionId}`),
       ]);
       for (const key of keys) {
         const [dateKey, defId] = key.split('|');
