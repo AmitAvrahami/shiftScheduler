@@ -14,10 +14,16 @@ export interface ShiftDefinition {
 
 export type LockMode = 'default' | 'force_locked' | 'force_unlocked';
 
+export type AvailabilityType = 'available' | 'unavailable' | 'partial';
+
 export interface ConstraintEntry {
   date: string; // YYYY-MM-DD local time
   definitionId: string;
   canWork: boolean;
+  availabilityType?: AvailabilityType;
+  startTime?: string; // HH:MM, required when availabilityType === 'partial'
+  endTime?: string; // HH:MM, required when availabilityType === 'partial'
+  note?: string;
 }
 
 export interface Constraint {
