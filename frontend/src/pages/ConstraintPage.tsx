@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
 import { constraintApi, shiftDefinitionApi } from '../lib/api';
-import type { ConstraintEntry, ShiftDefinition } from '../types/constraint';
+import type { AvailabilityType, ConstraintEntry, ShiftDefinition } from '../types/constraint';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import ShiftCardConstraint from '../components/ShiftCardConstraint';
+import ShiftCardConstraint, { type PartialValue } from '../components/ShiftCardConstraint';
 import SuccessOverlay from '../components/SuccessOverlay';
-import { getAllowedWeekId, getWeekDates, toDateKey } from '../utils/weekUtils';
+import { validatePartialRange } from '../utils/availabilityPreview';
+import {
+  getAllowedWeekId,
+  getWeekDates,
+  normalizeConstraintDate,
+  toDateKey,
+} from '../utils/weekUtils';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+type CellValue = {
+  status: AvailabilityType;
+  startTime?: string;
+  endTime?: string;
+  note?: string;
+};
 
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
@@ -16,13 +29,14 @@ export default function ConstraintPage() {
   const weekDates = getWeekDates(weekId);
 
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
-  // key = "definitionId:YYYY-MM-DD", value = true means canWork:false (blocked)
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  // key = "definitionId:YYYY-MM-DD". Absence of a key means available (default).
+  const [cells, setCells] = useState<Record<string, CellValue>>({});
   const [isLocked, setIsLocked] = useState(false);
   const [lockReason, setLockReason] = useState<'deadline' | 'schedule' | null>(null);
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [loadError, setLoadError] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [validationError, setValidationError] = useState('');
   const [notes, setNotes] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -90,48 +104,99 @@ export default function ConstraintPage() {
         setDeadline(new Date(constraintRes.deadline));
 
         if (constraintRes.constraint) {
-          const initial: Record<string, boolean> = {};
+          const initial: Record<string, CellValue> = {};
           for (const entry of constraintRes.constraint.entries) {
-            if (!entry.canWork) {
-              initial[`${entry.definitionId}:${entry.date}`] = true;
+            // GET returns ISO dates; normalize so keys match render keys (toDateKey).
+            const key = `${entry.definitionId}:${normalizeConstraintDate(entry.date)}`;
+            if (entry.availabilityType === 'partial') {
+              initial[key] = {
+                status: 'partial',
+                startTime: entry.startTime,
+                endTime: entry.endTime,
+                note: entry.note,
+              };
+            } else if (!entry.canWork) {
+              // Legacy entries (no availabilityType) and explicit unavailable both load as unavailable.
+              initial[key] = { status: 'unavailable' };
             }
+            // Available entries (canWork true, not partial) are omitted — absence = available.
           }
-          setChecked(initial);
-          // Note: Backend doesn't support notes yet, but we'll prepare the UI
-          // setNotes(constraintRes.constraint.notes || '');
+          setCells(initial);
         }
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים'));
   }, [weekId]);
 
-  function handleToggle(definitionId: string, dateKey: string) {
+  function handleCellChange(
+    definitionId: string,
+    dateKey: string,
+    status: AvailabilityType,
+    partial?: PartialValue
+  ) {
     if (isLocked) return;
     const key = `${definitionId}:${dateKey}`;
-    setChecked((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      if (!next[key]) delete next[key];
-      setSaveStatus('idle'); // Mark as unsaved
+    setCells((prev) => {
+      const next = { ...prev };
+      if (status === 'available') {
+        delete next[key];
+      } else if (status === 'partial') {
+        next[key] = {
+          status: 'partial',
+          startTime: partial?.startTime,
+          endTime: partial?.endTime,
+          note: partial?.note,
+        };
+      } else {
+        next[key] = { status: 'unavailable' };
+      }
       return next;
     });
+    setSaveStatus('idle');
+    setValidationError('');
   }
 
   function handleClear() {
     if (isLocked) return;
-    setChecked({});
+    setCells({});
     setNotes('');
     setSaveStatus('idle');
+    setValidationError('');
   }
 
   function handleSubmit() {
     if (isLocked) return;
-    setSaveStatus('saving');
 
-    const entries: ConstraintEntry[] = Object.entries(checked)
-      .filter(([, val]) => val)
-      .map(([key]) => {
-        const [definitionId, date] = key.split(':');
-        return { definitionId, date, canWork: false };
-      });
+    const entries: ConstraintEntry[] = [];
+    for (const [key, value] of Object.entries(cells)) {
+      const [definitionId, rawDate] = key.split(':');
+      // PUT validation requires strict YYYY-MM-DD; guard against any ISO leakage.
+      const date = normalizeConstraintDate(rawDate);
+      if (value.status === 'unavailable') {
+        entries.push({ definitionId, date, canWork: false, availabilityType: 'unavailable' });
+      } else if (value.status === 'partial') {
+        const def = definitions.find((d) => d._id === definitionId);
+        const validation = def
+          ? validatePartialRange(value.startTime, value.endTime, def)
+          : { error: 'יש לבחור שעת התחלה ושעת סיום' };
+        if (validation.error) {
+          setValidationError(validation.error);
+          setSaveStatus('error');
+          return;
+        }
+        entries.push({
+          definitionId,
+          date,
+          canWork: true,
+          availabilityType: 'partial',
+          startTime: value.startTime,
+          endTime: value.endTime,
+          note: value.note?.trim() || undefined,
+        });
+      }
+    }
+
+    setValidationError('');
+    setSaveStatus('saving');
 
     constraintApi
       .upsertConstraints(weekId, entries)
@@ -188,11 +253,9 @@ export default function ConstraintPage() {
         {/* Header Section */}
         <div className="mb-xl flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <h2 className="text-2xl font-black text-on-surface mb-xs">
-              בחר משמרות בהן לא תוכל לעבוד
-            </h2>
+            <h2 className="text-2xl font-black text-on-surface mb-xs">סמן את זמינותך למשמרות</h2>
             <p className="text-on-surface-variant opacity-70">
-              סמן את המשמרות שאינך יכול לעבוד בהן לשבוע הקרוב.
+              לכל משמרת בחר/י: זמין, לא זמין או זמין חלקית לשבוע הקרוב.
             </p>
           </div>
           <div className="flex gap-sm w-full md:w-auto">
@@ -227,7 +290,14 @@ export default function ConstraintPage() {
           </div>
         )}
 
-        {saveStatus === 'error' && (
+        {validationError && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm flex items-center gap-2">
+            <MaterialIcon name="error" className="text-red-600" />
+            {validationError}
+          </div>
+        )}
+
+        {saveStatus === 'error' && !validationError && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
             שגיאה בשמירת האילוצים. נסה שוב.
           </div>
@@ -253,16 +323,25 @@ export default function ConstraintPage() {
                 <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">
                   {definitions.map((def) => {
                     const cellKey = `${def._id}:${dateKey}`;
-                    const isChecked = !!checked[cellKey];
+                    const cell = cells[cellKey];
                     return (
                       <ShiftCardConstraint
                         key={def._id}
-                        shiftName={def.name}
-                        startTime={def.startTime}
-                        endTime={def.endTime}
-                        isChecked={isChecked}
+                        def={def}
+                        status={cell?.status ?? 'available'}
+                        partial={
+                          cell?.status === 'partial'
+                            ? {
+                                startTime: cell.startTime ?? def.startTime,
+                                endTime: cell.endTime ?? def.endTime,
+                                note: cell.note,
+                              }
+                            : undefined
+                        }
                         isLocked={isLocked}
-                        onToggle={() => handleToggle(def._id, dateKey)}
+                        onChange={(status, partial) =>
+                          handleCellChange(def._id, dateKey, status, partial)
+                        }
                       />
                     );
                   })}

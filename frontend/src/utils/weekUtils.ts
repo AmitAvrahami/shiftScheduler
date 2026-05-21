@@ -87,6 +87,15 @@ export function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Backend GET serializes constraint dates as ISO (e.g. "2026-05-24T00:00:00.000Z"),
+ * but PUT validation expects strict YYYY-MM-DD. Normalize loaded dates before using
+ * them as cell keys or in the save payload. Idempotent for already-normalized strings.
+ */
+export function normalizeConstraintDate(date: string): string {
+  return date.includes('T') ? date.split('T')[0] : date;
+}
+
 export function getConstraintDeadline(weekId: string): Date {
   const { year, week } = parseWeekId(weekId);
   const monday = getISOWeekMondayUTC(year, week);
