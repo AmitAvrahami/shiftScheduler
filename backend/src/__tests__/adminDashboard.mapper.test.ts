@@ -124,6 +124,7 @@ describe('toAdminDashboardDTO', () => {
     expect(dto.shifts).toEqual([
       {
         id: shiftId.toString(),
+        definitionId: definitionId.toString(),
         day: '2026-05-10',
         type: 'morning',
         requiredEmployees: 2,

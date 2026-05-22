@@ -6,6 +6,9 @@ import { getCurrentWeekId, getNextWeekId, getPrevWeekId, getWeekDates } from '..
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
+import { shiftDefinitionApi, constraintApi } from '../lib/api';
+import { detectPublishWarnings, type PublishWarning } from '../utils/partialAvailabilityWarnings';
+import { PublishWarningsDialog } from './admin/components/PublishWarningsDialog';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -15,6 +18,10 @@ export default function ScheduleBoardPage() {
 
   const weekId = paramWeekId || getCurrentWeekId();
   const [showStaffingModal, setShowStaffingModal] = useState(false);
+  const [isVerifyingPublish, setIsVerifyingPublish] = useState(false);
+  const [publishWarnings, setPublishWarnings] = useState<PublishWarning[]>([]);
+  const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
+
   const weekDates = useMemo(() => getWeekDates(weekId), [weekId]);
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -31,7 +38,41 @@ export default function ScheduleBoardPage() {
   }
 
   async function handlePublish() {
+    if (!dashboard) return;
+    try {
+      setIsVerifyingPublish(true);
+      const [defsRes, constraintsRes] = await Promise.all([
+        shiftDefinitionApi.getActive(),
+        constraintApi.getAllConstraints(weekId),
+      ]);
+
+      if (defsRes.success && constraintsRes.success) {
+        const warnings = detectPublishWarnings(
+          dashboard.assignments,
+          dashboard.shifts,
+          constraintsRes.constraints,
+          dashboard.employees,
+          defsRes.definitions
+        );
+
+        if (warnings.length > 0) {
+          setPublishWarnings(warnings);
+          setShowPublishWarningsModal(true);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to detect publish warnings:', e);
+    } finally {
+      setIsVerifyingPublish(false);
+    }
+
     await actions.publishSchedule();
+  }
+
+  async function handleConfirmPublish() {
+    setShowPublishWarningsModal(false);
+    await actions.publishSchedule(publishWarnings);
   }
 
   async function handleInitialize() {
@@ -105,11 +146,15 @@ export default function ScheduleBoardPage() {
           {isDraft && (
             <button
               onClick={handlePublish}
-              disabled={refreshing}
+              disabled={refreshing || isVerifyingPublish}
               className="flex items-center gap-2 px-4 py-2 bg-[#056AE5] text-white rounded-full font-bold text-sm hover:bg-[#0457B8] transition-all shadow-md disabled:opacity-50"
             >
-              <MaterialIcon name="send" className="text-[18px]" />
-              פרסם סידור
+              {isVerifyingPublish ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <MaterialIcon name="send" className="text-[18px]" />
+              )}
+              {isVerifyingPublish ? 'בודק אילוצים...' : 'פרסם סידור'}
             </button>
           )}
 
@@ -197,6 +242,13 @@ export default function ScheduleBoardPage() {
           </div>
         </div>
       )}
+
+      <PublishWarningsDialog
+        open={showPublishWarningsModal}
+        warnings={publishWarnings}
+        onCancel={() => setShowPublishWarningsModal(false)}
+        onConfirm={handleConfirmPublish}
+      />
     </MainLayout>
   );
 }

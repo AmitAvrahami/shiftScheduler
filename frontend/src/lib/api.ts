@@ -316,11 +316,12 @@ export const scheduleApi = {
 
   update(
     id: string,
-    status: 'open' | 'locked' | 'draft' | 'published' | 'archived'
+    status: 'open' | 'locked' | 'draft' | 'published' | 'archived',
+    approvedWarnings?: unknown[]
   ): Promise<{ success: boolean; schedule: Schedule }> {
     return request(`/schedules/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, approvedWarnings }),
     });
   },
 

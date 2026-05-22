@@ -21,6 +21,7 @@ export interface AdminDashboardShift {
   day: string;
   type: ShiftType;
   requiredEmployees: number;
+  definitionId: string;
 }
 
 export interface AdminDashboardAssignment {
