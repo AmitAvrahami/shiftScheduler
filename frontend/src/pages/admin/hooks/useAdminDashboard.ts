@@ -133,25 +133,28 @@ export function useAdminDashboard(weekId: string) {
 
   const scheduleId = dashboard?.scheduleId;
 
-  const publishSchedule = useCallback(async () => {
-    if (!scheduleId) {
-      setError('הסידור לא נמצא לשבוע זה');
-      return;
-    }
+  const publishSchedule = useCallback(
+    async (approvedWarnings?: unknown[]) => {
+      if (!scheduleId) {
+        setError('הסידור לא נמצא לשבוע זה');
+        return;
+      }
 
-    try {
-      setActionLoading((current) => ({ ...current, publishing: true }));
-      setRefreshing(true);
-      setError(null);
-      await scheduleApi.update(scheduleId, 'published');
-      await refresh();
-    } catch {
-      setError(unexpectedErrorMessage);
-    } finally {
-      setActionLoading((current) => ({ ...current, publishing: false }));
-      setRefreshing(false);
-    }
-  }, [scheduleId, refresh]);
+      try {
+        setActionLoading((current) => ({ ...current, publishing: true }));
+        setRefreshing(true);
+        setError(null);
+        await scheduleApi.update(scheduleId, 'published', approvedWarnings);
+        await refresh();
+      } catch {
+        setError(unexpectedErrorMessage);
+      } finally {
+        setActionLoading((current) => ({ ...current, publishing: false }));
+        setRefreshing(false);
+      }
+    },
+    [scheduleId, refresh]
+  );
 
   return {
     dashboard,

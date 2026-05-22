@@ -102,6 +102,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
     day: toDateKey(new Date(s.date)), // local-time YYYY-MM-DD, no ISO-string split
     type: deriveShiftType(s, defById),
     requiredEmployees: s.requiredCount,
+    definitionId: String(s.definitionId),
   }));
 
   // ── Assignments ───────────────────────────────────────────────────────────

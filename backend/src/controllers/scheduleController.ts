@@ -27,6 +27,21 @@ const createSchema = z.object({
 const updateSchema = z.object({
   status: z.enum(['open', 'locked', 'generating', 'draft', 'published', 'archived']).optional(),
   generatedBy: z.enum(['auto', 'manual']).optional(),
+  approvedWarnings: z
+    .array(
+      z.object({
+        employeeId: z.string(),
+        employeeName: z.string(),
+        day: z.string(),
+        shiftId: z.string(),
+        shiftName: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        overlapMinutes: z.number(),
+        explanation: z.string(),
+      })
+    )
+    .optional(),
 });
 
 async function cascadeDeleteSchedule(scheduleId: mongoose.Types.ObjectId): Promise<void> {

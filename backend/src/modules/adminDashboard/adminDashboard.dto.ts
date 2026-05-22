@@ -36,6 +36,7 @@ export interface ShiftDTO {
   day: string; // YYYY-MM-DD local time
   type: ShiftTypeDTO;
   requiredEmployees: number;
+  definitionId: string;
   // TODO: add templateStatus once WeeklySchedule tracks per-template generation state
 }
 

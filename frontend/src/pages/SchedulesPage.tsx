@@ -2,7 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { scheduleApi, shiftApi, constraintApi, adminApi, ApiError } from '../lib/api';
+import {
+  scheduleApi,
+  shiftApi,
+  constraintApi,
+  adminApi,
+  shiftDefinitionApi,
+  ApiError,
+} from '../lib/api';
+import { detectPublishWarnings, type PublishWarning } from '../utils/partialAvailabilityWarnings';
+import { PublishWarningsDialog } from './admin/components/PublishWarningsDialog';
 import type { Schedule } from '../lib/api';
 
 // ─── Week utilities ───────────────────────────────────────────────────────────
@@ -486,6 +495,9 @@ export default function SchedulesPage() {
   const [confirmDelete, setConfirmDelete] = useState<Schedule | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [clonePreselect, setClonePreselect] = useState<string | undefined>();
+  const [publishWarnings, setPublishWarnings] = useState<PublishWarning[]>([]);
+  const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
+  const [pendingPublishSchedule, setPendingPublishSchedule] = useState<Schedule | null>(null);
 
   // ── Load schedules (runs once on mount; actions use optimistic updates) ──
 
@@ -547,14 +559,52 @@ export default function SchedulesPage() {
 
   // ── Actions ──
 
-  async function handlePublish(s: Schedule) {
+  async function proceedPublish(s: Schedule, approvedWarnings?: unknown[]) {
     try {
-      const { schedule } = await scheduleApi.update(s._id, 'published');
+      const { schedule } = await scheduleApi.update(s._id, 'published', approvedWarnings);
       setSchedules((prev) => prev.map((x) => (x._id === s._id ? schedule : x)));
       showToast('הסידור פורסם בהצלחה', 'success');
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'שגיאה בפרסום', 'error');
     }
+  }
+
+  async function handlePublish(s: Schedule) {
+    try {
+      const [dashboard, defsRes, constraintsRes] = await Promise.all([
+        adminApi.getDashboard(s.weekId),
+        shiftDefinitionApi.getActive(),
+        constraintApi.getAllConstraints(s.weekId),
+      ]);
+
+      if (defsRes.success && constraintsRes.success) {
+        const warnings = detectPublishWarnings(
+          dashboard.assignments,
+          dashboard.shifts,
+          constraintsRes.constraints,
+          dashboard.employees,
+          defsRes.definitions
+        );
+
+        if (warnings.length > 0) {
+          setPublishWarnings(warnings);
+          setPendingPublishSchedule(s);
+          setShowPublishWarningsModal(true);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to detect publish warnings:', e);
+    }
+
+    await proceedPublish(s);
+  }
+
+  async function handleConfirmPublish() {
+    if (!pendingPublishSchedule) return;
+    setShowPublishWarningsModal(false);
+    await proceedPublish(pendingPublishSchedule, publishWarnings);
+    setPendingPublishSchedule(null);
   }
 
   async function handleDelete(s: Schedule) {
@@ -724,6 +774,15 @@ export default function SchedulesPage() {
           onNavigate={() => navigate('/admin')}
           showToast={showToast}
           preselectedWeekId={clonePreselect}
+        />
+      )}
+
+      {showPublishWarningsModal && (
+        <PublishWarningsDialog
+          open={showPublishWarningsModal}
+          warnings={publishWarnings}
+          onCancel={() => setShowPublishWarningsModal(false)}
+          onConfirm={handleConfirmPublish}
         />
       )}
 
