@@ -91,7 +91,11 @@ export function useAdminConstraints() {
       const orig: EntryMap = {};
       const source: SourceMap = {};
       constraintsRes.constraints.forEach((c) => {
+        // Skip orphaned constraints whose referenced user was deleted — populate
+        // returns null for the dangling ref, and typeof null === 'object'.
+        if (!c.userId) return;
         const uid = typeof c.userId === 'object' ? c.userId._id : c.userId;
+        if (!uid) return;
         orig[uid] = cloneEntries(c.entries);
         source[uid] = c.submittedVia;
       });

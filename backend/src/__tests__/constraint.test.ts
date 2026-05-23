@@ -664,3 +664,62 @@ describe('Manager override creates a new constraint document', () => {
     expect(after!.entries[0].canWork).toBe(false);
   });
 });
+
+// ── GET /api/v1/constraints/:weekId/all — manager fetches all constraints ─────
+
+describe('GET /api/v1/constraints/:weekId/all', () => {
+  it('200 — returns populated constraints for existing users', async () => {
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await Constraint.create({
+      userId: employee._id,
+      weekId: TEST_WEEK,
+      entries: [{ date: '2026-04-12', definitionId: def._id, canWork: false }],
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}/all`)
+      .set('Authorization', `Bearer ${managerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.constraints).toHaveLength(1);
+    expect(res.body.constraints[0].userId._id).toBe(String(employee._id));
+  });
+
+  it('200 — excludes constraints whose referenced user was deleted', async () => {
+    const { manager, token: managerToken } = await seedManager();
+    const { employee } = await seedEmployee();
+    const def = await seedShiftDefinition(manager._id as mongoose.Types.ObjectId);
+
+    await Constraint.create({
+      userId: employee._id,
+      weekId: TEST_WEEK,
+      entries: [{ date: '2026-04-12', definitionId: def._id, canWork: false }],
+    });
+
+    // Simulate a dangling reference: delete the user but leave the constraint.
+    await User.deleteOne({ _id: employee._id });
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}/all`)
+      .set('Authorization', `Bearer ${managerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.constraints).toHaveLength(0);
+    expect(res.body.constraints.some((c: { userId: unknown }) => c.userId === null)).toBe(false);
+  });
+
+  it('403 — employee cannot access the manager endpoint', async () => {
+    const { token: employeeToken } = await seedEmployee();
+
+    const res = await request(app)
+      .get(`/api/v1/constraints/${TEST_WEEK}/all`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});

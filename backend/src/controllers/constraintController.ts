@@ -247,10 +247,13 @@ export async function getAllConstraintsForWeek(
     const { weekId } = req.params;
     if (!validateWeekId(weekId, next)) return;
 
-    const constraints = await Constraint.find({ weekId }).populate(
+    const populated = await Constraint.find({ weekId }).populate(
       'userId',
       'name email role avatarUrl'
     );
+    // Drop constraints whose referenced user was deleted — populate returns null
+    // for the dangling ref, which would crash the admin constraints page.
+    const constraints = populated.filter((c) => c.userId != null);
     const lock = await computeWeekLock(weekId);
 
     res.json({
