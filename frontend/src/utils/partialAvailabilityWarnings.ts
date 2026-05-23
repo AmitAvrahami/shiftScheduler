@@ -78,7 +78,7 @@ export function detectPublishWarnings(
 
   const getEmployeeId = (c: Constraint): string => {
     if (typeof c.userId === 'string') return c.userId;
-    return c.userId._id;
+    return c.userId?._id ?? '';
   };
 
   const constraintsByEmployee = new Map<string, Constraint>();

@@ -28,7 +28,7 @@ export interface ConstraintEntry {
 
 export interface Constraint {
   _id: string;
-  userId: string | { _id: string; name: string; email: string; avatarUrl?: string };
+  userId: string | { _id: string; name: string; email: string; avatarUrl?: string } | null;
   weekId: string;
   entries: ConstraintEntry[];
   isLocked: boolean;
