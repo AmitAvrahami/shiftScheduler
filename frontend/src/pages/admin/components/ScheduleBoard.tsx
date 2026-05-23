@@ -1,3 +1,4 @@
+import type { GenerateWarning } from '../../../lib/api';
 import type { AdminDashboardDTO } from '../types';
 import { ShiftCell } from './ShiftCell';
 import {
@@ -11,6 +12,7 @@ import {
   type OrderedShiftType,
   type WeekDayKey,
 } from '../utils/scheduleBoardUtils';
+import { buildWarningsByCell } from '../utils/warningUtils';
 
 type AdminDashboardShift = AdminDashboardDTO['shifts'][number];
 type AdminDashboardAssignment = AdminDashboardDTO['assignments'][number];
@@ -20,6 +22,8 @@ export interface ScheduleBoardProps {
   shifts: AdminDashboardShift[];
   assignments: AdminDashboardAssignment[];
   employees: AdminDashboardEmployee[];
+  // Non-blocking soft-constraint warnings from the last generation (PR09).
+  warnings?: GenerateWarning[];
   onShiftClick?: (shiftId: string) => void;
   onAssignEmployee?: (shiftId: string) => void;
   onRemoveEmployee?: (assignmentId: string) => void;
@@ -29,11 +33,13 @@ export function ScheduleBoard({
   shifts,
   assignments,
   employees,
+  warnings,
   onShiftClick,
   onAssignEmployee,
   onRemoveEmployee,
 }: ScheduleBoardProps) {
   const shiftsByDay = groupShiftsByDay(shifts);
+  const warningsByCell = buildWarningsByCell(warnings);
 
   return (
     <section
@@ -82,6 +88,7 @@ export function ScheduleBoard({
                       assignments={shiftAssignments}
                       employees={assignedEmployees}
                       shiftType={shiftType}
+                      warningsByCell={warningsByCell}
                       onShiftClick={onShiftClick}
                       onAssignEmployee={onAssignEmployee}
                       onRemoveEmployee={onRemoveEmployee}

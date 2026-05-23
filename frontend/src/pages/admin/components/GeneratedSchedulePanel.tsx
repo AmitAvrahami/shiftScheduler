@@ -1,5 +1,6 @@
 import MaterialIcon from '../../../components/MaterialIcon';
 import type { GenerateResult } from '../../../lib/api';
+import { getWarningLabel, getWarningSeverity } from '../utils/warningUtils';
 
 interface GeneratedSchedulePanelProps {
   result: GenerateResult | null;
@@ -96,12 +97,32 @@ export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePan
             אזהרות
           </div>
           <div className="space-y-1.5">
-            {result.warnings.map((w, i) => (
-              <div key={i} className="text-xs text-amber-800 flex items-start gap-2">
-                <span className="mt-0.5">•</span>
-                <span>{w.message}</span>
-              </div>
-            ))}
+            {result.warnings.map((w, i) => {
+              const severity = getWarningSeverity(w);
+              const isInfo = severity === 'info';
+              return (
+                <div
+                  key={i}
+                  className={`text-xs flex items-start gap-2 ${
+                    isInfo ? 'text-slate-600' : 'text-amber-800'
+                  }`}
+                >
+                  <MaterialIcon
+                    name={isInfo ? 'info' : 'warning'}
+                    className={`mt-0.5 text-[12px] ${isInfo ? 'text-slate-400' : 'text-amber-500'}`}
+                  />
+                  <span>
+                    <span className="font-bold">{getWarningLabel(w)}</span>
+                    {getWarningLabel(w) !== w.message && (
+                      <span className="opacity-75"> — {w.message}</span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 text-[10px] text-amber-700/80">
+            האזהרות מבוססות על תוצאת ההפקה האחרונה ועשויות להתיישן לאחר עריכות ידניות.
           </div>
         </div>
       )}

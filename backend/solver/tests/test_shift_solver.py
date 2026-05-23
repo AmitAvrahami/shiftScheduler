@@ -811,3 +811,80 @@ def test_legacy_request_without_shift_type_falls_back_to_name():
         if a.worker_id == "mgr":
             assert slots_by_id[a.shift_id].definition_id == legacy_morning.id
             assert slots_by_id[a.shift_id].date in SUN_THU_DATES
+
+
+# ---------------------------------------------------------------------------
+# PR09. Structured soft-constraint warnings
+# ---------------------------------------------------------------------------
+
+def test_warnings_carry_structured_fields():
+    """A forced night overcap surfaces a warning carrying the structured PR09
+    fields: type, severity, and the contributing shift_ids."""
+    night_slots = [
+        ShiftSlotInput(
+            id=f"night_{WEEK_DATES[i]}",
+            date=WEEK_DATES[i],
+            definition_id=NIGHT.id,
+            required_count=1,
+        )
+        for i in range(4)
+    ]
+    worker = make_worker("w1")
+    req = make_request([worker], slots=night_slots)
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    night = [w for w in result.warnings if w.type == "NIGHT_OVERCAP"]
+    assert len(night) == 1
+    assert night[0].severity == "warning"
+    assert night[0].worker_id == "w1"
+    # The single worker must take all 4 nights → >2 contributing shift ids.
+    assert len(night[0].shift_ids) >= 3
+    assert all(sid.startswith("night_") for sid in night[0].shift_ids)
+
+
+def test_assignment_preference_warning_emitted():
+    """A penalised (worker, shift) cell that the solver still assigns surfaces
+    as a structured ASSIGNMENT_PREFERENCE warning (PR09)."""
+    slot = ShiftSlotInput(
+        id="slot_pref",
+        date=WEEK_DATES[0],
+        definition_id=MORNING.id,
+        required_count=1,
+    )
+    worker = make_worker("w1")
+    req = make_request([worker], slots=[slot])
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=50,
+            worker_id="w1",
+            shift_id="slot_pref",
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    pref = [w for w in result.warnings if w.type == "ASSIGNMENT_PREFERENCE"]
+    assert len(pref) == 1
+    assert pref[0].severity == "warning"
+    assert pref[0].worker_id == "w1"
+    assert pref[0].shift_ids == ["slot_pref"]
+
+
+def test_assignment_preference_warning_absent_when_not_penalised():
+    """No penalty terms → no ASSIGNMENT_PREFERENCE warning is emitted."""
+    slot = ShiftSlotInput(
+        id="slot_plain",
+        date=WEEK_DATES[0],
+        definition_id=MORNING.id,
+        required_count=1,
+    )
+    req = make_request([make_worker("w1")], slots=[slot])
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert not [w for w in result.warnings if w.type == "ASSIGNMENT_PREFERENCE"]

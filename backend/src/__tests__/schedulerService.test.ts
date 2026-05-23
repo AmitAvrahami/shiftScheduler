@@ -172,6 +172,41 @@ describe('runScheduler — RELAXED path', () => {
     expect(after.violations).toEqual([]);
     expect(after.assignmentCount).toBe(1);
   });
+
+  it('passes structured warning fields (type/severity/shift_ids) through unchanged', async () => {
+    const { shift, user } = await seedFullScenario();
+    mockCallSolver.mockResolvedValueOnce({
+      status: 'FEASIBLE',
+      assignments: [
+        {
+          shift_id: shift._id.toString(),
+          worker_id: user._id.toString(),
+          assigned_by: 'algorithm',
+        },
+      ],
+      violations: [],
+      warnings: [
+        {
+          constraint_id: 'ASSIGNMENT_PREFERENCE',
+          type: 'ASSIGNMENT_PREFERENCE',
+          severity: 'warning',
+          worker_id: user._id.toString(),
+          shift_ids: [shift._id.toString()],
+          message: 'Worker assigned to a penalised shift.',
+        },
+      ],
+      solve_time_ms: 50,
+    });
+
+    const result = await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    expect(result.warnings).toHaveLength(1);
+    const warning = result.warnings[0];
+    expect(warning.type).toBe('ASSIGNMENT_PREFERENCE');
+    expect(warning.severity).toBe('warning');
+    expect(warning.shift_ids).toEqual([shift._id.toString()]);
+    expect(warning.worker_id).toBe(user._id.toString());
+  });
 });
 
 describe('runScheduler — INFEASIBLE path', () => {

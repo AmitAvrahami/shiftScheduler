@@ -79,6 +79,7 @@ export default function AdminDashboardPage() {
                     shifts={dashboard.shifts}
                     assignments={dashboard.assignments}
                     employees={employees}
+                    warnings={generateResult?.warnings}
                   />
                 )}
                 <ShiftOverviewPanel

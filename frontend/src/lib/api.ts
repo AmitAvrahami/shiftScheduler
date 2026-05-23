@@ -64,12 +64,23 @@ export interface BroadcastRecipient {
   isRead: boolean;
 }
 
+// Structured soft-constraint warning (PR09). All fields beyond `message` are
+// optional so an older solver response shape does not break the UI.
+export interface GenerateWarning {
+  message: string;
+  type?: string;
+  severity?: 'info' | 'warning';
+  constraint_id?: string;
+  worker_id?: string | null;
+  shift_ids?: string[];
+}
+
 export interface GenerateResult {
   success: boolean;
   status: string;
   assignmentCount: number;
   solveTimeMs: number;
-  warnings: Array<{ message: string }>;
+  warnings: GenerateWarning[];
   violations: Array<{ message: string }>;
 }
 
