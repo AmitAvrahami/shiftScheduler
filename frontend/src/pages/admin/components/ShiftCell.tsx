@@ -1,9 +1,12 @@
+import MaterialIcon from '../../../components/MaterialIcon';
+import type { GenerateWarning } from '../../../lib/api';
 import type { AdminDashboardDTO, ShiftType } from '../types';
 import {
   getShiftFillStatus,
   getShiftTypeLabel,
   type ShiftFillStatus,
 } from '../utils/scheduleBoardUtils';
+import { formatWarningMessage, getWarningLabel, warningCellKey } from '../utils/warningUtils';
 
 type AdminDashboardShift = AdminDashboardDTO['shifts'][number];
 type AdminDashboardAssignment = AdminDashboardDTO['assignments'][number];
@@ -14,6 +17,9 @@ export interface ShiftCellProps {
   assignments: AdminDashboardAssignment[];
   employees: AdminDashboardEmployee[];
   shiftType: ShiftType;
+  // Non-blocking soft-constraint warnings indexed by `${shiftId}|${employeeId}`
+  // (PR09). Display-only — never affects assignment or publish behavior.
+  warningsByCell?: Map<string, GenerateWarning[]>;
   onShiftClick?: (shiftId: string) => void;
   onAssignEmployee?: (shiftId: string) => void;
   onRemoveEmployee?: (assignmentId: string) => void;
@@ -38,6 +44,7 @@ export function ShiftCell({
   assignments,
   employees,
   shiftType,
+  warningsByCell,
   onShiftClick,
   onAssignEmployee,
   onRemoveEmployee,
@@ -106,13 +113,35 @@ export function ShiftCell({
         {employees.length > 0 ? (
           employees.map((employee) => {
             const assignment = assignments.find((item) => item.employeeId === employee.id);
+            const cellWarnings = warningsByCell?.get(warningCellKey(shift.id, employee.id));
+            // The indicator is on this employee's row, so the warning's worker is
+            // this employee — resolve the id to their name for the fallback message.
+            const nameById = new Map([[employee.id, employee.name]]);
+            const warningTooltip = cellWarnings
+              ?.map((warning) => {
+                const label = getWarningLabel(warning);
+                return label === warning.message ? formatWarningMessage(warning, nameById) : label;
+              })
+              .join(' · ');
 
             return (
               <div
                 key={`${shift.id}-${employee.id}`}
                 className="flex items-center justify-between gap-2 rounded-md border border-white/70 bg-white/75 px-2 py-1.5 text-sm text-slate-700"
               >
-                <span className="truncate font-medium">{employee.name}</span>
+                <span className="flex min-w-0 items-center gap-1">
+                  {warningTooltip && (
+                    <span
+                      className="shrink-0 leading-none"
+                      role="img"
+                      title={warningTooltip}
+                      aria-label={warningTooltip}
+                    >
+                      <MaterialIcon name="warning" className="text-amber-500 text-[16px]" />
+                    </span>
+                  )}
+                  <span className="truncate font-medium">{employee.name}</span>
+                </span>
                 {assignment && onRemoveEmployee && (
                   <button
                     type="button"

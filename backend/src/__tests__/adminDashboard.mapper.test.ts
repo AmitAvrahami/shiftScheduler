@@ -159,4 +159,59 @@ describe('toAdminDashboardDTO', () => {
       },
     ]);
   });
+
+  it('copies persisted generation warnings/violations and lastGeneratedAt', () => {
+    const generatedAt = new Date(2026, 4, 10, 9, 30);
+    const warning = {
+      constraint_id: 'ASSIGNMENT_PREFERENCE',
+      type: 'ASSIGNMENT_PREFERENCE',
+      severity: 'warning' as const,
+      worker_id: employeeId.toString(),
+      shift_ids: [shiftId.toString()],
+      message: 'Worker assigned to a penalised shift.',
+    };
+    const violation = {
+      constraint_id: 'MAXIMUM_LOAD',
+      shift_id: null,
+      worker_id: null,
+      message: 'Load constraint relaxed',
+    };
+
+    const dto = toAdminDashboardDTO(
+      makeRaw({
+        schedule: {
+          _id: scheduleId,
+          weekId: '2026-W20',
+          status: 'draft',
+          startDate: new Date(2026, 4, 10),
+          endDate: new Date(2026, 4, 16),
+          generationWarnings: [warning],
+          generationViolations: [violation],
+          lastGeneratedAt: generatedAt,
+        },
+      })
+    );
+
+    expect(dto.generationWarnings).toEqual([warning]);
+    expect(dto.generationViolations).toEqual([violation]);
+    expect(dto.lastGeneratedAt).toEqual(generatedAt);
+  });
+
+  it('defaults generation fields to empty/null when the schedule has none', () => {
+    const dto = toAdminDashboardDTO(makeRaw());
+
+    expect(dto.generationWarnings).toEqual([]);
+    expect(dto.generationViolations).toEqual([]);
+    expect(dto.lastGeneratedAt).toBeNull();
+  });
+
+  it('defaults generation fields when no schedule exists', () => {
+    const dto = toAdminDashboardDTO(
+      makeRaw({ schedule: null, shifts: [], assignments: [], auditLogs: [] })
+    );
+
+    expect(dto.generationWarnings).toEqual([]);
+    expect(dto.generationViolations).toEqual([]);
+    expect(dto.lastGeneratedAt).toBeNull();
+  });
 });

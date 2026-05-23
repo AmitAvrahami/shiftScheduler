@@ -762,8 +762,19 @@ class ShiftSolver:
         worker_sat: dict[str, bool] = defaultdict(bool)
         worker_type_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
+        # PR09: track the assigned shift ids that contribute to each warning so
+        # the frontend can map a warning back to specific board cells.
+        worker_all_shift_ids: dict[str, list[str]] = defaultdict(list)
+        worker_night_shift_ids: dict[str, list[str]] = defaultdict(list)
+        worker_weekend_shift_ids: dict[str, list[str]] = defaultdict(list)
+        worker_frisat_shift_ids: dict[str, list[str]] = defaultdict(list)
+        worker_type_shift_ids: dict[str, dict[str, list[str]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+
         for a in assignments:
             worker_counts[a.worker_id] += 1
+            worker_all_shift_ids[a.worker_id].append(a.shift_id)
             # Derive type and day from slot
             slot = next((s for s in self.slots if s.id == a.shift_id), None)
             if slot is None:
@@ -774,18 +785,25 @@ class ShiftSolver:
             if def_id in self.night_def_ids:
                 worker_night_counts[a.worker_id] += 1
                 worker_type_counts[a.worker_id]["night"] += 1
+                worker_night_shift_ids[a.worker_id].append(a.shift_id)
+                worker_type_shift_ids[a.worker_id]["night"].append(a.shift_id)
             elif def_id in self.afternoon_def_ids:
                 worker_type_counts[a.worker_id]["afternoon"] += 1
+                worker_type_shift_ids[a.worker_id]["afternoon"].append(a.shift_id)
             else:
                 worker_type_counts[a.worker_id]["morning"] += 1
+                worker_type_shift_ids[a.worker_id]["morning"].append(a.shift_id)
 
             if day_idx in self.weekend_day_idxs:
                 worker_weekend_counts[a.worker_id] += 1
+                worker_weekend_shift_ids[a.worker_id].append(a.shift_id)
                 dt = datetime.date.fromisoformat(slot.date)
                 if dt.weekday() == 4:
                     worker_fri[a.worker_id] = True
+                    worker_frisat_shift_ids[a.worker_id].append(a.shift_id)
                 elif dt.weekday() == 5:
                     worker_sat[a.worker_id] = True
+                    worker_frisat_shift_ids[a.worker_id].append(a.shift_id)
 
         total_workers = len(self.workers)
         total_shifts = sum(worker_counts.values())
@@ -801,7 +819,10 @@ class ShiftSolver:
                 warnings.append(
                     Warning(
                         constraint_id="SHIFT_BALANCE",
+                        type="SHIFT_BALANCE",
+                        severity="info",
                         worker_id=w_id,
+                        shift_ids=list(worker_all_shift_ids.get(w_id, [])),
                         message=f"Worker {w_id} has {cnt} shifts vs team avg {avg_shifts:.1f}.",
                     )
                 )
@@ -811,7 +832,10 @@ class ShiftSolver:
                 warnings.append(
                     Warning(
                         constraint_id="NIGHT_OVERCAP",
+                        type="NIGHT_OVERCAP",
+                        severity="warning",
                         worker_id=w_id,
+                        shift_ids=list(worker_night_shift_ids.get(w_id, [])),
                         message=f"Worker {w_id} has {worker_night_counts[w_id]} night shifts (>2).",
                     )
                 )
@@ -821,7 +845,10 @@ class ShiftSolver:
                 warnings.append(
                     Warning(
                         constraint_id="FRI_SAT_CLUSTER",
+                        type="FRI_SAT_CLUSTER",
+                        severity="warning",
                         worker_id=w_id,
+                        shift_ids=list(worker_frisat_shift_ids.get(w_id, [])),
                         message=f"Worker {w_id} is assigned both Friday and Saturday.",
                     )
                 )
@@ -832,7 +859,10 @@ class ShiftSolver:
                 warnings.append(
                     Warning(
                         constraint_id="WEEKEND_BALANCE",
+                        type="WEEKEND_BALANCE",
+                        severity="info",
                         worker_id=w_id,
+                        shift_ids=list(worker_weekend_shift_ids.get(w_id, [])),
                         message=(
                             f"Worker {w_id} has {wknd} weekend shifts "
                             f"vs team avg {avg_weekend:.1f}."
@@ -849,12 +879,42 @@ class ShiftSolver:
                         warnings.append(
                             Warning(
                                 constraint_id="TYPE_DIVERSITY",
+                                type="TYPE_DIVERSITY",
+                                severity="info",
                                 worker_id=w_id,
+                                shift_ids=list(
+                                    worker_type_shift_ids.get(w_id, {}).get(type_name, [])
+                                ),
                                 message=(
                                     f"Worker {w_id}: {type_cnt}/{total_w} shifts "
                                     f"are {type_name} ({type_cnt/total_w:.0%})."
                                 ),
                             )
                         )
+
+        # ASSIGNMENT_PREFERENCE (PR09): a penalised (worker, shift) cell that the
+        # solver still chose to assign — e.g. an assignment-preference / partial
+        # availability soft cost the manager should be able to see and review.
+        assigned_pairs = {(a.worker_id, a.shift_id) for a in assignments}
+        for penalty in self.request.penalties:
+            if penalty.category != "assignment_preference":
+                continue
+            if penalty.worker_id is None or penalty.shift_id is None:
+                continue
+            if (penalty.worker_id, penalty.shift_id) not in assigned_pairs:
+                continue
+            warnings.append(
+                Warning(
+                    constraint_id="ASSIGNMENT_PREFERENCE",
+                    type="ASSIGNMENT_PREFERENCE",
+                    severity="warning",
+                    worker_id=penalty.worker_id,
+                    shift_ids=[penalty.shift_id],
+                    message=(
+                        f"Worker {penalty.worker_id} assigned to a penalised "
+                        f"(assignment-preference / partial availability) shift."
+                    ),
+                )
+            )
 
         return warnings

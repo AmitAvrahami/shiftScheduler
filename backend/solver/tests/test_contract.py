@@ -91,3 +91,39 @@ def test_valid_solve_result_parses() -> None:
     assert result.assignments[0].assigned_by == "algorithm"
     assert result.warnings[0].constraint_id == "CONTRACT_TEST_WARNING"
     assert result.solve_time_ms == 12
+
+
+def test_legacy_warning_without_structured_fields_parses() -> None:
+    """PR09 — a warning lacking the new type/severity/shift_ids fields must
+    still parse; defaults fill the gap so the model stays backward-compatible."""
+    raw = _load("valid_solve_result.json")
+    for w in raw["warnings"]:
+        w.pop("type", None)
+        w.pop("severity", None)
+        w.pop("shift_ids", None)
+
+    result = SolveResult.model_validate(raw)
+
+    warning = result.warnings[0]
+    assert warning.type == ""
+    assert warning.severity == "warning"
+    assert warning.shift_ids == []
+
+
+def test_structured_warning_fields_round_trip() -> None:
+    """PR09 — the additive structured warning fields parse when present."""
+    raw = _load("valid_solve_result.json")
+    raw["warnings"][0].update(
+        {
+            "type": "ASSIGNMENT_PREFERENCE",
+            "severity": "warning",
+            "shift_ids": ["shift_1", "shift_2"],
+        }
+    )
+
+    result = SolveResult.model_validate(raw)
+
+    warning = result.warnings[0]
+    assert warning.type == "ASSIGNMENT_PREFERENCE"
+    assert warning.severity == "warning"
+    assert warning.shift_ids == ["shift_1", "shift_2"]

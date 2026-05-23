@@ -107,8 +107,13 @@ class Violation(BaseModel):
 
 
 class Warning(BaseModel):
-    constraint_id: str   # e.g. "SHIFT_BALANCE", "WEEKEND_BALANCE"
+    constraint_id: str   # e.g. "SHIFT_BALANCE", "WEEKEND_BALANCE" — rule code, kept for back-compat
+    # Structured fields (PR09). Additive and optional so an older Node consumer
+    # still parses, and a future caller can map a warning to specific board cells.
+    type: str = ""              # machine code; mirrors constraint_id for existing rules
+    severity: Literal["info", "warning"] = "warning"
     worker_id: Optional[str] = None
+    shift_ids: list[str] = Field(default_factory=list)  # assigned shifts this warning relates to
     message: str
 
 

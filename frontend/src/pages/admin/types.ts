@@ -1,3 +1,5 @@
+import type { GenerateWarning } from '../../lib/api';
+
 export type WeekWorkflowState =
   | 'not_created'
   | 'constraints_open'
@@ -74,4 +76,10 @@ export interface AdminDashboardDTO {
   kpis: AdminDashboardKpis;
   readiness: AdminDashboardReadiness;
   auditLogs: AdminDashboardAuditLog[];
+
+  // Persisted soft-constraint output from the last generation (PR09). Optional so
+  // an older backend response (without these fields) still parses.
+  generationWarnings?: GenerateWarning[];
+  generationViolations?: Array<{ message: string }>;
+  lastGeneratedAt?: string | null;
 }

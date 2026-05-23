@@ -205,6 +205,7 @@ export default function ScheduleBoardPage() {
             shifts={dashboard.shifts}
             assignments={dashboard.assignments}
             employees={dashboard.employees}
+            warnings={dashboard.generationWarnings}
             onAssignEmployee={(shiftId) => alert(`הוספת עובד למשמרת ${shiftId} (בקרוב)`)}
           />
         )}

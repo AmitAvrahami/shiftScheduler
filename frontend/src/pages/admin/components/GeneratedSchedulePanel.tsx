@@ -1,13 +1,27 @@
 import MaterialIcon from '../../../components/MaterialIcon';
 import type { GenerateResult } from '../../../lib/api';
+import type { AdminDashboardEmployee } from '../types';
+import {
+  formatWarningMessage,
+  getWarningLabel,
+  getWarningSeverity,
+  getWarningWorkerName,
+} from '../utils/warningUtils';
 
 interface GeneratedSchedulePanelProps {
   result: GenerateResult | null;
+  employees: AdminDashboardEmployee[];
   onClose: () => void;
 }
 
-export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePanelProps) {
+export function GeneratedSchedulePanel({
+  result,
+  employees,
+  onClose,
+}: GeneratedSchedulePanelProps) {
   if (!result) return null;
+
+  const nameById = new Map(employees.map((e) => [e.id, e.name]));
 
   const statusColor =
     result.status === 'OPTIMAL'
@@ -96,12 +110,35 @@ export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePan
             אזהרות
           </div>
           <div className="space-y-1.5">
-            {result.warnings.map((w, i) => (
-              <div key={i} className="text-xs text-amber-800 flex items-start gap-2">
-                <span className="mt-0.5">•</span>
-                <span>{w.message}</span>
-              </div>
-            ))}
+            {result.warnings.map((w, i) => {
+              const severity = getWarningSeverity(w);
+              const isInfo = severity === 'info';
+              const hebrewLabel = getWarningLabel(w);
+              const hasHebrew = hebrewLabel !== w.message;
+              const workerName = getWarningWorkerName(w, nameById);
+              const detail = formatWarningMessage(w, nameById);
+              return (
+                <div
+                  key={i}
+                  className={`text-xs flex items-start gap-2 ${
+                    isInfo ? 'text-slate-600' : 'text-amber-800'
+                  }`}
+                >
+                  <MaterialIcon
+                    name={isInfo ? 'info' : 'warning'}
+                    className={`mt-0.5 text-[12px] ${isInfo ? 'text-slate-400' : 'text-amber-500'}`}
+                  />
+                  <span>
+                    <span className="font-bold">{hasHebrew ? hebrewLabel : detail}</span>
+                    {workerName && <span className="font-medium"> — {workerName}</span>}
+                    {hasHebrew && <span className="opacity-75"> — {detail}</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 text-[10px] text-amber-700/80">
+            האזהרות מבוססות על תוצאת ההפקה האחרונה ועשויות להתיישן לאחר עריכות ידניות.
           </div>
         </div>
       )}

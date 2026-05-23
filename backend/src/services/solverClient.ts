@@ -67,7 +67,12 @@ export interface SolverViolation {
 
 export interface SolverWarning {
   constraint_id: string;
+  // Structured fields (PR09). Optional so an older solver response shape (no
+  // type/severity/shift_ids) still parses without breaking callers.
+  type?: string;
+  severity?: 'info' | 'warning';
   worker_id: string | null;
+  shift_ids?: string[];
   message: string;
 }
 

@@ -1,4 +1,5 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
+import type { SolverViolation, SolverWarning } from '../services/solverClient';
 
 export interface IWeeklySchedule extends Document {
   weekId: string;
@@ -8,6 +9,12 @@ export interface IWeeklySchedule extends Document {
   generatedBy: 'auto' | 'manual';
   publishedAt?: Date;
   publishedBy?: mongoose.Types.ObjectId;
+  // Latest solver output from generation — persisted so soft-constraint warnings
+  // survive page reloads and remain visible on the schedule board (PR09).
+  // Stored verbatim (snake_case) so the wire shape matches the frontend.
+  generationWarnings?: SolverWarning[];
+  generationViolations?: SolverViolation[];
+  lastGeneratedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +33,9 @@ const weeklyScheduleSchema = new Schema<IWeeklySchedule>(
     generatedBy: { type: String, enum: ['auto', 'manual'], required: true },
     publishedAt: { type: Date },
     publishedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    generationWarnings: { type: [Schema.Types.Mixed], default: [] },
+    generationViolations: { type: [Schema.Types.Mixed], default: [] },
+    lastGeneratedAt: { type: Date },
   },
   { timestamps: true }
 );
