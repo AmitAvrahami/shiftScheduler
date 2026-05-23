@@ -209,6 +209,50 @@ describe('runScheduler — RELAXED path', () => {
   });
 });
 
+describe('runScheduler — persists generation warnings/violations', () => {
+  it('stores warnings, violations, and lastGeneratedAt on the schedule document', async () => {
+    const { schedule, shift, user } = await seedFullScenario();
+    const warning = {
+      constraint_id: 'ASSIGNMENT_PREFERENCE',
+      type: 'ASSIGNMENT_PREFERENCE',
+      severity: 'warning' as const,
+      worker_id: user._id.toString(),
+      shift_ids: [shift._id.toString()],
+      message: 'Worker assigned to a penalised shift.',
+    };
+    const violation = {
+      constraint_id: 'MAXIMUM_LOAD',
+      shift_id: null,
+      worker_id: null,
+      message: 'Load constraint relaxed',
+    };
+    mockCallSolver.mockResolvedValueOnce({
+      status: 'RELAXED',
+      assignments: [
+        {
+          shift_id: shift._id.toString(),
+          worker_id: user._id.toString(),
+          assigned_by: 'algorithm',
+        },
+      ],
+      violations: [violation],
+      warnings: [warning],
+      solve_time_ms: 70,
+    });
+
+    const before = Date.now();
+    await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    const stored = await WeeklySchedule.findById(schedule._id).lean();
+    expect(stored!.generationWarnings).toHaveLength(1);
+    expect(stored!.generationWarnings![0]).toMatchObject(warning);
+    expect(stored!.generationViolations).toHaveLength(1);
+    expect(stored!.generationViolations![0]).toMatchObject(violation);
+    expect(stored!.lastGeneratedAt).toBeInstanceOf(Date);
+    expect(stored!.lastGeneratedAt!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+});
+
 describe('runScheduler — INFEASIBLE path', () => {
   it('throws AppError 422 and writes nothing to the database', async () => {
     await seedFullScenario();

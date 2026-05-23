@@ -56,7 +56,11 @@ export default function AdminDashboardPage() {
             />
 
             {generateResult && (
-              <GeneratedSchedulePanel result={generateResult} onClose={clearGenerateResult} />
+              <GeneratedSchedulePanel
+                result={generateResult}
+                employees={employees}
+                onClose={clearGenerateResult}
+              />
             )}
 
             {loading && !dashboard && (
@@ -79,7 +83,7 @@ export default function AdminDashboardPage() {
                     shifts={dashboard.shifts}
                     assignments={dashboard.assignments}
                     employees={employees}
-                    warnings={generateResult?.warnings}
+                    warnings={generateResult?.warnings ?? dashboard.generationWarnings}
                   />
                 )}
                 <ShiftOverviewPanel

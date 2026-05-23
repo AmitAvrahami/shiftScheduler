@@ -149,6 +149,19 @@ export async function runScheduler(
     ip,
   });
 
+  // 4e: persist latest solver warnings/violations on the schedule so they
+  // survive reloads and stay visible on the board (non-blocking, display-only)
+  await WeeklySchedule.updateOne(
+    { _id: scheduleId },
+    {
+      $set: {
+        generationWarnings: result.warnings,
+        generationViolations: result.violations,
+        lastGeneratedAt: new Date(),
+      },
+    }
+  );
+
   return {
     status: result.status,
     assignmentCount: assignmentDocs.length,

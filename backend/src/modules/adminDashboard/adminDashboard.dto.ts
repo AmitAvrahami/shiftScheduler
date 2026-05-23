@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose';
+import type { SolverViolation, SolverWarning } from '../../services/solverClient';
 
 // ─── Workflow state ───────────────────────────────────────────────────────────
 // Canonical UI-facing state derived from WeeklySchedule.status.
@@ -83,6 +84,11 @@ export interface AdminDashboardDTO {
   kpis: KpisDTO;
   readiness: ReadinessDTO;
   auditLogs: AuditLogDTO[];
+  // Persisted soft-constraint output from the last generation (PR09). Display-only,
+  // snake_case verbatim from the solver; null timestamp when never generated.
+  generationWarnings: SolverWarning[];
+  generationViolations: SolverViolation[];
+  lastGeneratedAt: Date | null;
 }
 
 // ─── Raw internal types (lean Mongo docs passed from service → mapper) ────────
@@ -93,6 +99,9 @@ export interface RawScheduleDoc {
   status: string;
   startDate: Date;
   endDate: Date;
+  generationWarnings?: SolverWarning[];
+  generationViolations?: SolverViolation[];
+  lastGeneratedAt?: Date;
 }
 
 export interface RawUserDoc {

@@ -6,7 +6,7 @@ import {
   getShiftTypeLabel,
   type ShiftFillStatus,
 } from '../utils/scheduleBoardUtils';
-import { getWarningLabel, warningCellKey } from '../utils/warningUtils';
+import { formatWarningMessage, getWarningLabel, warningCellKey } from '../utils/warningUtils';
 
 type AdminDashboardShift = AdminDashboardDTO['shifts'][number];
 type AdminDashboardAssignment = AdminDashboardDTO['assignments'][number];
@@ -114,8 +114,14 @@ export function ShiftCell({
           employees.map((employee) => {
             const assignment = assignments.find((item) => item.employeeId === employee.id);
             const cellWarnings = warningsByCell?.get(warningCellKey(shift.id, employee.id));
+            // The indicator is on this employee's row, so the warning's worker is
+            // this employee — resolve the id to their name for the fallback message.
+            const nameById = new Map([[employee.id, employee.name]]);
             const warningTooltip = cellWarnings
-              ?.map((warning) => getWarningLabel(warning))
+              ?.map((warning) => {
+                const label = getWarningLabel(warning);
+                return label === warning.message ? formatWarningMessage(warning, nameById) : label;
+              })
               .join(' · ');
 
             return (

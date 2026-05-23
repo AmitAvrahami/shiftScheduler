@@ -21,6 +21,31 @@ export function getWarningSeverity(warning: GenerateWarning): 'info' | 'warning'
   return warning.severity === 'info' ? 'info' : 'warning';
 }
 
+// Resolve a warning's worker to a display name. Returns the employee name when the
+// id is known, otherwise the raw worker_id as a fallback, or undefined if the
+// warning has no worker.
+export function getWarningWorkerName(
+  warning: GenerateWarning,
+  nameById?: Map<string, string>
+): string | undefined {
+  const workerId = warning.worker_id;
+  if (!workerId) return undefined;
+  return nameById?.get(workerId) ?? workerId;
+}
+
+// Return the warning's English message with the raw worker_id substring replaced
+// by the resolved employee name, so a fallback message never exposes a raw ID.
+export function formatWarningMessage(
+  warning: GenerateWarning,
+  nameById?: Map<string, string>
+): string {
+  const workerId = warning.worker_id;
+  if (!workerId) return warning.message;
+  const name = nameById?.get(workerId);
+  if (!name) return warning.message;
+  return warning.message.split(workerId).join(name);
+}
+
 export function warningCellKey(shiftId: string, employeeId: string): string {
   return `${shiftId}|${employeeId}`;
 }

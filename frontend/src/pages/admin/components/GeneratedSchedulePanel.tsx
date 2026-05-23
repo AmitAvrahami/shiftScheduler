@@ -1,14 +1,27 @@
 import MaterialIcon from '../../../components/MaterialIcon';
 import type { GenerateResult } from '../../../lib/api';
-import { getWarningLabel, getWarningSeverity } from '../utils/warningUtils';
+import type { AdminDashboardEmployee } from '../types';
+import {
+  formatWarningMessage,
+  getWarningLabel,
+  getWarningSeverity,
+  getWarningWorkerName,
+} from '../utils/warningUtils';
 
 interface GeneratedSchedulePanelProps {
   result: GenerateResult | null;
+  employees: AdminDashboardEmployee[];
   onClose: () => void;
 }
 
-export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePanelProps) {
+export function GeneratedSchedulePanel({
+  result,
+  employees,
+  onClose,
+}: GeneratedSchedulePanelProps) {
   if (!result) return null;
+
+  const nameById = new Map(employees.map((e) => [e.id, e.name]));
 
   const statusColor =
     result.status === 'OPTIMAL'
@@ -100,6 +113,10 @@ export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePan
             {result.warnings.map((w, i) => {
               const severity = getWarningSeverity(w);
               const isInfo = severity === 'info';
+              const hebrewLabel = getWarningLabel(w);
+              const hasHebrew = hebrewLabel !== w.message;
+              const workerName = getWarningWorkerName(w, nameById);
+              const detail = formatWarningMessage(w, nameById);
               return (
                 <div
                   key={i}
@@ -112,10 +129,9 @@ export function GeneratedSchedulePanel({ result, onClose }: GeneratedSchedulePan
                     className={`mt-0.5 text-[12px] ${isInfo ? 'text-slate-400' : 'text-amber-500'}`}
                   />
                   <span>
-                    <span className="font-bold">{getWarningLabel(w)}</span>
-                    {getWarningLabel(w) !== w.message && (
-                      <span className="opacity-75"> — {w.message}</span>
-                    )}
+                    <span className="font-bold">{hasHebrew ? hebrewLabel : detail}</span>
+                    {workerName && <span className="font-medium"> — {workerName}</span>}
+                    {hasHebrew && <span className="opacity-75"> — {detail}</span>}
                   </span>
                 </div>
               );

@@ -188,5 +188,8 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
       warnings,
     },
     auditLogs,
+    generationWarnings: raw.schedule?.generationWarnings ?? [],
+    generationViolations: raw.schedule?.generationViolations ?? [],
+    lastGeneratedAt: raw.schedule?.lastGeneratedAt ?? null,
   };
 }
