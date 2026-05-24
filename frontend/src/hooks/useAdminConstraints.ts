@@ -55,6 +55,7 @@ export function useAdminConstraints() {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [toggleLockLoading, setToggleLockLoading] = useState(false);
 
   const weekDates = useMemo(() => getWeekDates(currentViewWeek), [currentViewWeek]);
   const selectedDateKey = useMemo(
@@ -257,6 +258,7 @@ export function useAdminConstraints() {
   }, [confirmDiscardIfDirty]);
 
   const toggleLock = useCallback(async () => {
+    setToggleLockLoading(true);
     try {
       await constraintApi.setLockState(
         currentViewWeek,
@@ -265,6 +267,8 @@ export function useAdminConstraints() {
       await loadData();
     } catch {
       setError('שגיאה בשינוי מצב הנעילה');
+    } finally {
+      setToggleLockLoading(false);
     }
   }, [currentViewWeek, isLocked, loadData]);
 
@@ -292,5 +296,6 @@ export function useAdminConstraints() {
     goPrevWeek,
     goNextWeek,
     toggleLock,
+    toggleLockLoading,
   };
 }

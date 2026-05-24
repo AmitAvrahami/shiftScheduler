@@ -3,6 +3,7 @@ import { userApi } from '../lib/api';
 import type { User } from '../types/auth';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { PageLoader } from '../components/ui/PageLoader';
 import { useAuth } from '../hooks/useAuth';
 
 interface CreateForm {
@@ -28,7 +29,10 @@ const ROLE_LABELS: Record<string, string> = {
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [pageLoading, setPageLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null);
+  const [togglingMorningId, setTogglingMorningId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CreateForm>({
     name: '',
@@ -52,7 +56,8 @@ export default function UsersPage() {
     userApi
       .getUsers()
       .then((res) => setUsers(res.users))
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'שגיאה בטעינת משתמשים'));
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'שגיאה בטעינת משתמשים'))
+      .finally(() => setPageLoading(false));
   }, []);
 
   function setField<K extends keyof CreateForm>(key: K, value: CreateForm[K]) {
@@ -82,11 +87,14 @@ export default function UsersPage() {
   }
 
   async function toggleStatus(user: User) {
+    setTogglingStatusId(user._id);
     try {
       const res = await userApi.setStatus(user._id, !user.isActive);
       setUsers((prev) => prev.map((u) => (u._id === user._id ? res.user : u)));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'שגיאה בעדכון סטטוס');
+    } finally {
+      setTogglingStatusId(null);
     }
   }
 
@@ -130,12 +138,23 @@ export default function UsersPage() {
   }
 
   async function toggleFixedMorning(user: User) {
+    setTogglingMorningId(user._id);
     try {
       const res = await userApi.setFixedMorning(user._id, !user.isFixedMorningEmployee);
       setUsers((prev) => prev.map((u) => (u._id === user._id ? res.user : u)));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'שגיאה בעדכון הגדרת בוקר');
+    } finally {
+      setTogglingMorningId(null);
     }
+  }
+
+  if (pageLoading) {
+    return (
+      <MainLayout title="ניהול משתמשים" subtitle="הגדרות צוות">
+        <PageLoader text="טוען משתמשים..." />
+      </MainLayout>
+    );
   }
 
   return (
@@ -275,30 +294,42 @@ export default function UsersPage() {
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => toggleFixedMorning(user)}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${
+                        disabled={togglingMorningId === user._id}
+                        className={`w-10 h-5 rounded-full transition-colors relative disabled:opacity-50 disabled:cursor-wait ${
                           user.isFixedMorningEmployee ? 'bg-blue-500' : 'bg-gray-300'
                         }`}
                         title={
                           user.isFixedMorningEmployee ? 'הסר עובד בוקר קבוע' : 'הגדר עובד בוקר קבוע'
                         }
                       >
-                        <span
-                          className={`block w-4 h-4 rounded-full bg-white shadow mx-0.5 transition-transform absolute top-0.5 ${
-                            user.isFixedMorningEmployee ? 'right-0.5' : 'left-0.5'
-                          }`}
-                        />
+                        {togglingMorningId === user._id ? (
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          </span>
+                        ) : (
+                          <span
+                            className={`block w-4 h-4 rounded-full bg-white shadow mx-0.5 transition-transform absolute top-0.5 ${
+                              user.isFixedMorningEmployee ? 'right-0.5' : 'left-0.5'
+                            }`}
+                          />
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => toggleStatus(user)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        disabled={togglingStatusId === user._id}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-1 ${
                           user.isActive
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
                             : 'bg-red-100 text-red-700 hover:bg-red-200'
                         }`}
                       >
-                        {user.isActive ? 'פעיל' : 'מושהה'}
+                        {togglingStatusId === user._id ? (
+                          <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          user.isActive ? 'פעיל' : 'מושהה'
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-center">

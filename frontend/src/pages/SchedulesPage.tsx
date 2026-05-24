@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { PageLoader } from '../components/ui/PageLoader';
 import {
   scheduleApi,
   shiftApi,
@@ -140,12 +141,14 @@ function ActionBtn({
   onClick,
   variant = 'default',
   disabled,
+  isLoading,
 }: {
   icon: string;
   title: string;
   onClick: () => void;
   variant?: 'default' | 'primary' | 'danger';
   disabled?: boolean;
+  isLoading?: boolean;
 }) {
   const base = 'p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
   const cls =
@@ -156,8 +159,12 @@ function ActionBtn({
         : `${base} text-outline hover:bg-surface-variant hover:text-primary`;
 
   return (
-    <button className={cls} title={title} onClick={onClick} disabled={disabled}>
-      <MaterialIcon name={icon} />
+    <button className={cls} title={title} onClick={onClick} disabled={disabled || isLoading}>
+      {isLoading ? (
+        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <MaterialIcon name={icon} />
+      )}
     </button>
   );
 }
@@ -173,6 +180,9 @@ interface ScheduleCardProps {
   onView: (s: Schedule) => void;
   onEdit: (s: Schedule) => void;
   onExport: () => void;
+  isCloning?: boolean;
+  isDeleting?: boolean;
+  isPublishing?: boolean;
 }
 
 function ScheduleCard({
@@ -184,7 +194,11 @@ function ScheduleCard({
   onView,
   onEdit,
   onExport,
+  isCloning,
+  isDeleting,
+  isPublishing,
 }: ScheduleCardProps) {
+  const anyBusy = isCloning || isDeleting || isPublishing;
   const { status } = schedule;
 
   const cardCls =
@@ -224,10 +238,26 @@ function ScheduleCard({
         </div>
 
         <div className="flex gap-1">
-          <ActionBtn icon="visibility" title="צפייה" onClick={() => onView(schedule)} />
-          <ActionBtn icon="edit" title="עריכה" onClick={() => onEdit(schedule)} />
-          <ActionBtn icon="file_copy" title="שכפול" onClick={() => onClone(schedule)} />
-          <ActionBtn icon="download" title="ייצוא" onClick={onExport} />
+          <ActionBtn
+            icon="visibility"
+            title="צפייה"
+            onClick={() => onView(schedule)}
+            disabled={anyBusy}
+          />
+          <ActionBtn
+            icon="edit"
+            title="עריכה"
+            onClick={() => onEdit(schedule)}
+            disabled={anyBusy}
+          />
+          <ActionBtn
+            icon="file_copy"
+            title="שכפול"
+            onClick={() => onClone(schedule)}
+            disabled={anyBusy}
+            isLoading={isCloning}
+          />
+          <ActionBtn icon="download" title="ייצוא" onClick={onExport} disabled={anyBusy} />
 
           {status === 'draft' && (
             <>
@@ -236,12 +266,16 @@ function ScheduleCard({
                 title="פרסום"
                 variant="primary"
                 onClick={() => onPublish(schedule)}
+                disabled={anyBusy}
+                isLoading={isPublishing}
               />
               <ActionBtn
                 icon="delete"
                 title="מחיקה"
                 variant="danger"
                 onClick={() => onDelete(schedule)}
+                disabled={anyBusy}
+                isLoading={isDeleting}
               />
             </>
           )}
@@ -499,6 +533,10 @@ export default function SchedulesPage() {
   const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
   const [pendingPublishSchedule, setPendingPublishSchedule] = useState<Schedule | null>(null);
 
+  const [cloningId, setCloningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+
   // ── Load schedules (runs once on mount; actions use optimistic updates) ──
 
   const refreshScheduleStats = useCallback((s: Schedule) => {
@@ -566,10 +604,13 @@ export default function SchedulesPage() {
       showToast('הסידור פורסם בהצלחה', 'success');
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'שגיאה בפרסום', 'error');
+    } finally {
+      setPublishingId(null);
     }
   }
 
   async function handlePublish(s: Schedule) {
+    setPublishingId(s._id);
     try {
       const [dashboard, defsRes, constraintsRes] = await Promise.all([
         adminApi.getDashboard(s.weekId),
@@ -590,7 +631,7 @@ export default function SchedulesPage() {
           setPublishWarnings(warnings);
           setPendingPublishSchedule(s);
           setShowPublishWarningsModal(true);
-          return;
+          return; // publishingId stays set until modal is confirmed or cancelled
         }
       }
     } catch (e) {
@@ -608,6 +649,7 @@ export default function SchedulesPage() {
   }
 
   async function handleDelete(s: Schedule) {
+    setDeletingId(s._id);
     try {
       await scheduleApi.deleteSchedule(s._id);
       setSchedules((prev) => prev.filter((x) => x._id !== s._id));
@@ -615,11 +657,13 @@ export default function SchedulesPage() {
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'שגיאה במחיקה', 'error');
     } finally {
+      setDeletingId(null);
       setConfirmDelete(null);
     }
   }
 
   async function handleClone(s: Schedule) {
+    setCloningId(s._id);
     const targetWeekId = getNextWeekId(s.weekId);
     try {
       const { schedule } = await scheduleApi.clone(s._id, targetWeekId);
@@ -627,6 +671,8 @@ export default function SchedulesPage() {
       showToast(`סידור שוכפל לשבוע ${parseWeekNumber(targetWeekId)}`, 'success');
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'שגיאה בשכפול', 'error');
+    } finally {
+      setCloningId(null);
     }
   }
 
@@ -705,14 +751,7 @@ export default function SchedulesPage() {
 
       {/* Cards grid */}
       {loading ? (
-        <div className="flex items-center justify-center h-48 text-on-surface-variant">
-          <div className="flex flex-col items-center gap-sm">
-            <span className="animate-spin text-[#056AE5]">
-              <MaterialIcon name="progress_activity" />
-            </span>
-            <span className="text-sm">טוען סידורים...</span>
-          </div>
-        </div>
+        <PageLoader text="טוען סידורים..." />
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-sm text-on-surface-variant">
           <MaterialIcon name="calendar_month" />
@@ -741,6 +780,9 @@ export default function SchedulesPage() {
               onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
               onEdit={(sched) => navigate(`/schedules/${sched.weekId}/edit`)}
               onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
+              isCloning={cloningId === s._id}
+              isDeleting={deletingId === s._id}
+              isPublishing={publishingId === s._id}
             />
           ))}
         </div>
@@ -781,7 +823,10 @@ export default function SchedulesPage() {
         <PublishWarningsDialog
           open={showPublishWarningsModal}
           warnings={publishWarnings}
-          onCancel={() => setShowPublishWarningsModal(false)}
+          onCancel={() => {
+            setShowPublishWarningsModal(false);
+            setPublishingId(null);
+          }}
           onConfirm={handleConfirmPublish}
         />
       )}

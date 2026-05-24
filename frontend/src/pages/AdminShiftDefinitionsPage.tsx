@@ -3,11 +3,14 @@ import { shiftDefinitionApi } from '../lib/api';
 import type { ShiftDefinition } from '../types/constraint';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { PageLoader } from '../components/ui/PageLoader';
 
 export default function AdminShiftDefinitionsPage() {
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -42,6 +45,7 @@ export default function AdminShiftDefinitionsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitting(true);
     try {
       if (editingId) {
         await shiftDefinitionApi.update(editingId, form);
@@ -64,30 +68,35 @@ export default function AdminShiftDefinitionsPage() {
       });
       loadDefinitions();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save definition');
+      alert(err instanceof Error ? err.message : 'שגיאה בשמירת ההגדרה');
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
     if (!id) {
-      alert('Cannot delete definition: missing definition id');
+      alert('לא ניתן למחוק הגדרה: מזהה חסר');
       return;
     }
-    if (!confirm('Are you sure you want to deactivate this shift type?')) return;
+    if (!confirm('האם למחוק סוג משמרת זה?')) return;
+    setDeletingId(id);
     try {
       await shiftDefinitionApi.delete(id);
       setDefinitions((prev) => prev.filter((definition) => definition._id !== id));
       await loadDefinitions();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete definition');
+      alert(err instanceof Error ? err.message : 'שגיאה במחיקת ההגדרה');
+    } finally {
+      setDeletingId(null);
     }
   }
 
   return (
-    <MainLayout title="Shift Definitions">
+    <MainLayout title="הגדרות משמרות">
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Shift Definitions</h1>
+          <h1 className="text-2xl font-bold">הגדרות משמרות</h1>
           <button
             onClick={() => {
               setEditingId(null);
@@ -107,18 +116,18 @@ export default function AdminShiftDefinitionsPage() {
             }}
             className="bg-[#101B79] text-white px-4 py-2 rounded shadow hover:bg-opacity-90 flex items-center gap-2"
           >
-            <MaterialIcon name="add" /> New Shift
+            <MaterialIcon name="add" /> משמרת חדשה
           </button>
         </div>
 
         {error && <p className="text-red-600 mb-4">{error}</p>}
-        {loading && <p className="text-gray-500">Loading definitions...</p>}
+        {loading && <PageLoader text="טוען הגדרות משמרות..." />}
 
         {!loading && definitions.length === 0 && (
           <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200 text-yellow-800 text-center">
             <MaterialIcon name="warning" className="text-4xl mb-2" />
-            <p className="font-medium">No active shift definitions found.</p>
-            <p className="text-sm mt-1">Shifts are needed to initialize new weekly schedules.</p>
+            <p className="font-medium">לא נמצאו הגדרות משמרות פעילות.</p>
+            <p className="text-sm mt-1">יש להגדיר משמרות כדי לאתחל לוחות שבועיים.</p>
           </div>
         )}
 
@@ -154,16 +163,22 @@ export default function AdminShiftDefinitionsPage() {
                     setShowForm(true);
                   }}
                   className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-                  title="Edit"
+                  title="ערוך"
+                  disabled={deletingId === def._id}
                 >
                   <MaterialIcon name="edit" />
                 </button>
                 <button
                   onClick={() => handleDelete(def._id)}
-                  className="p-2 text-error hover:bg-error/10 rounded-full transition-colors"
-                  title="Delete"
+                  disabled={deletingId === def._id}
+                  className="p-2 text-error hover:bg-error/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait"
+                  title="מחק"
                 >
-                  <MaterialIcon name="delete" />
+                  {deletingId === def._id ? (
+                    <div className="w-4 h-4 border-2 border-error border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <MaterialIcon name="delete" />
+                  )}
                 </button>
               </div>
             </div>
@@ -174,22 +189,22 @@ export default function AdminShiftDefinitionsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md border border-outline-variant">
               <h2 className="text-xl font-bold mb-6 text-on-surface">
-                {editingId ? 'Edit Shift Definition' : 'New Shift Definition'}
+                {editingId ? 'עריכת הגדרת משמרת' : 'הגדרת משמרת חדשה'}
               </h2>
               <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                 <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                  Name
+                  שם
                   <input
                     className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
                     required
-                    placeholder="e.g., Morning Shift"
+                    placeholder="לדוגמה: משמרת בוקר"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    Start Time
+                    שעת התחלה
                     <input
                       type="time"
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
@@ -199,7 +214,7 @@ export default function AdminShiftDefinitionsPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    End Time
+                    שעת סיום
                     <input
                       type="time"
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
@@ -211,7 +226,7 @@ export default function AdminShiftDefinitionsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    Duration (mins)
+                    משך (דקות)
                     <input
                       type="number"
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
@@ -223,7 +238,7 @@ export default function AdminShiftDefinitionsPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    Order Number
+                    מספר סדר
                     <input
                       type="number"
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
@@ -235,7 +250,7 @@ export default function AdminShiftDefinitionsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    Required Staff
+                    כח אדם נדרש
                     <input
                       type="number"
                       className="border border-outline p-2.5 rounded-lg focus:ring-2 focus:ring-primary outline-none"
@@ -248,7 +263,7 @@ export default function AdminShiftDefinitionsPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                    Crosses Midnight
+                    חוצה חצות
                     <div className="flex items-center h-full">
                       <input
                         type="checkbox"
@@ -260,7 +275,7 @@ export default function AdminShiftDefinitionsPage() {
                   </label>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-on-surface-variant">Days of Week</span>
+                  <span className="text-sm font-medium text-on-surface-variant">ימי שבוע</span>
                   <div className="flex flex-wrap gap-2">
                     {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
                       <label
@@ -289,7 +304,7 @@ export default function AdminShiftDefinitionsPage() {
                   </div>
                 </div>
                 <label className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant">
-                  Color
+                  צבע
                   <div className="flex items-center gap-3">
                     <input
                       type="color"
@@ -305,15 +320,20 @@ export default function AdminShiftDefinitionsPage() {
                   <button
                     type="button"
                     onClick={() => setShowForm(false)}
-                    className="px-5 py-2.5 border border-outline rounded-lg text-sm font-semibold hover:bg-surface-container-low transition-colors"
+                    disabled={submitting}
+                    className="px-5 py-2.5 border border-outline rounded-lg text-sm font-semibold hover:bg-surface-container-low transition-colors disabled:opacity-50"
                   >
-                    Cancel
+                    ביטול
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-[#101B79] text-white rounded-lg text-sm font-semibold hover:bg-opacity-90 transition-all shadow-md"
+                    disabled={submitting}
+                    className="px-5 py-2.5 bg-[#101B79] text-white rounded-lg text-sm font-semibold hover:bg-opacity-90 transition-all shadow-md disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
                   >
-                    Save Definition
+                    {submitting && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    {submitting ? 'שומר...' : 'שמור'}
                   </button>
                 </div>
               </form>

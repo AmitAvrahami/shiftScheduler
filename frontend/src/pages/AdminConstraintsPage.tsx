@@ -1,5 +1,6 @@
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { ConstraintAvailabilityTable } from '../components/constraints/ConstraintAvailabilityTable';
 import { useAdminConstraints } from '../hooks/useAdminConstraints';
 import { WeekLabel } from '../components/WeekLabel';
@@ -30,6 +31,7 @@ export default function AdminConstraintsPage() {
     goPrevWeek,
     goNextWeek,
     toggleLock,
+    toggleLockLoading,
   } = useAdminConstraints();
 
   return (
@@ -48,8 +50,10 @@ export default function AdminConstraintsPage() {
               <span className="font-bold">{isLocked ? 'הגשה נעולה' : 'הגשה פתוחה'}</span>
               <button
                 onClick={toggleLock}
-                className="mr-2 px-3 py-1 bg-white border border-slate-300 rounded text-slate-800 text-xs hover:bg-slate-50 transition-colors"
+                disabled={toggleLockLoading}
+                className="mr-2 px-3 py-1 bg-white border border-slate-300 rounded text-slate-800 text-xs hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-1"
               >
+                {toggleLockLoading && <LoadingSpinner size="sm" color="current" />}
                 {isLocked ? 'בטל נעילה' : 'נעל הגשה'}
               </button>
             </div>
