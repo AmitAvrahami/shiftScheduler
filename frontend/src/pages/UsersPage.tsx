@@ -327,8 +327,10 @@ export default function UsersPage() {
                       >
                         {togglingStatusId === user._id ? (
                           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : user.isActive ? (
+                          'פעיל'
                         ) : (
-                          user.isActive ? 'פעיל' : 'מושהה'
+                          'מושהה'
                         )}
                       </button>
                     </td>
