@@ -10,7 +10,8 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "test": "jest --runInBand",
-    "seed": "ts-node src/scripts/seed.ts"
+    "seed": "ts-node src/scripts/seed.ts",
+    "import:week22-constraints": "ts-node src/scripts/importWeek22Constraints.ts"
   },
   "jest": {
     "preset": "ts-jest",
