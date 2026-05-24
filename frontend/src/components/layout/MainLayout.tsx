@@ -29,7 +29,7 @@ const MANAGER_NAV_ITEMS: NavItem[] = [
 interface MainLayoutProps {
   children: React.ReactNode;
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
 }
 

@@ -3,6 +3,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
+import { WeekLabel } from '../components/WeekLabel';
+import { getCurrentWeekId } from '../utils/weekUtils';
 
 /**
  * Hero card displayed at the top of the dashboard, highlighting the next
@@ -249,7 +251,9 @@ export default function DashboardPage() {
       actions={
         <div className="bg-surface-container px-4 py-2 rounded-full border border-outline-variant flex items-center gap-2 text-on-surface-variant">
           <MaterialIcon name="calendar_view_week" className="text-[18px]" />
-          <span className="text-sm font-bold">שבוע 43 (22.10 - 28.10)</span>
+          <span className="text-sm font-bold">
+            <WeekLabel weekId={getCurrentWeekId()} />
+          </span>
         </div>
       }
     >
