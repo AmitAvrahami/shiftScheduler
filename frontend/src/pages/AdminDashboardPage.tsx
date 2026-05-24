@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
@@ -12,16 +12,21 @@ import { QuickActionsPanel } from './admin/components/QuickActionsPanel';
 import { DashboardSummaryPanel } from './admin/components/DashboardSummaryPanel';
 import { MissingConstraintsPanel } from './admin/components/MissingConstraintsPanel';
 import { GeneratedSchedulePanel } from './admin/components/GeneratedSchedulePanel';
+import { GenerateScheduleWizard } from './admin/components/GenerateScheduleWizard';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
 import { QualityScorePanel } from './admin/components/QualityScorePanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
+import { scheduleApi } from '../lib/api';
+import type { GenerateResult } from '../lib/api';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboardPage() {
   const { weekId: paramWeekId } = useParams<{ weekId: string }>();
   const [toast, setToast] = useState<Toast | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardResult, setWizardResult] = useState<GenerateResult | null>(null);
 
   const weekId = paramWeekId || getCurrentWeekId();
   let weekNumber: number | null = null;
@@ -31,12 +36,24 @@ export default function AdminDashboardPage() {
   } catch {
     weekIdError = `מזהה שבוע לא תקין: ${weekId}`;
   }
-  const { dashboard, loading, error, actions, generateResult, clearGenerateResult, actionLoading } =
-    useAdminDashboard(weekId);
+  const {
+    dashboard,
+    loading,
+    error,
+    actions,
+    generateResult,
+    clearGenerateResult,
+    actionLoading,
+    refresh,
+  } = useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
+  const visibleResult = wizardResult ?? generateResult;
+  const handleCloseResult = wizardResult ? () => setWizardResult(null) : clearGenerateResult;
   const visibleGenerationScore =
-    generateResult?.generationScore ?? dashboard?.generationScore ?? null;
+    visibleResult?.generationScore ?? dashboard?.generationScore ?? null;
+
+  const handleWizardGenerate = useCallback((wid: string) => scheduleApi.generate(wid), []);
 
   return (
     <MainLayout
@@ -56,17 +73,16 @@ export default function AdminDashboardPage() {
             <QuickActionsPanel
               weekId={weekId}
               onToast={setToast}
-              onGenerate={actions.generateSchedule}
+              onOpenGenerateWizard={() => setWizardOpen(true)}
               onGenerateDemo={actions.generateDemoSchedule}
-              isGenerating={actionLoading.generating}
               isGeneratingDemo={actionLoading.generatingDemo}
             />
 
-            {generateResult && (
+            {visibleResult && (
               <GeneratedSchedulePanel
-                result={generateResult}
+                result={visibleResult}
                 employees={employees}
-                onClose={clearGenerateResult}
+                onClose={handleCloseResult}
               />
             )}
 
@@ -90,7 +106,7 @@ export default function AdminDashboardPage() {
                     shifts={dashboard.shifts}
                     assignments={dashboard.assignments}
                     employees={employees}
-                    warnings={generateResult?.warnings ?? dashboard.generationWarnings}
+                    warnings={visibleResult?.warnings ?? dashboard.generationWarnings}
                   />
                 )}
                 <ShiftOverviewPanel
@@ -119,6 +135,19 @@ export default function AdminDashboardPage() {
           </>
         )}
       </div>
+
+      <GenerateScheduleWizard
+        open={wizardOpen}
+        initialWeekId={weekId}
+        onClose={() => setWizardOpen(false)}
+        onGenerate={handleWizardGenerate}
+        onGenerated={(result) => {
+          setWizardResult(result);
+          setWizardOpen(false);
+          setToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
+          refresh();
+        }}
+      />
 
       {/* Toast Notification */}
       {toast && (

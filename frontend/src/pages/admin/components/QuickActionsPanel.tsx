@@ -6,29 +6,19 @@ import type { Toast } from '../types';
 interface QuickActionsPanelProps {
   weekId: string;
   onToast: (t: Toast) => void;
-  onGenerate: () => Promise<GenerateResult | undefined>;
+  onOpenGenerateWizard: () => void;
   onGenerateDemo: () => Promise<GenerateResult | undefined>;
-  isGenerating: boolean;
   isGeneratingDemo: boolean;
 }
 
 export function QuickActionsPanel({
   weekId,
   onToast,
-  onGenerate,
+  onOpenGenerateWizard,
   onGenerateDemo,
-  isGenerating,
   isGeneratingDemo,
 }: QuickActionsPanelProps) {
   const navigate = useNavigate();
-
-  async function handleGenerate() {
-    if (isGenerating) return;
-    const result = await onGenerate();
-    if (result) {
-      onToast({ message: 'לוח שיבוץ הופק בהצלחה!', type: 'success' });
-    }
-  }
 
   async function handleGenerateDemo() {
     if (isGeneratingDemo) return;
@@ -43,7 +33,7 @@ export function QuickActionsPanel({
       id: 'generate',
       label: 'ייצור סידור עבודה',
       icon: 'bolt',
-      onClick: handleGenerate,
+      onClick: onOpenGenerateWizard,
       subtitle: 'אוטומציה מלאה',
       isPrimary: true,
     },
@@ -95,7 +85,7 @@ export function QuickActionsPanel({
             const isGenerate = a.id === 'generate';
             const isGenerateDemo = a.id === 'generate-demo';
             const isEmergency = a.id === 'emergency';
-            const isLoading = (isGenerate && isGenerating) || (isGenerateDemo && isGeneratingDemo);
+            const isLoading = isGenerateDemo && isGeneratingDemo;
 
             return (
               <button
