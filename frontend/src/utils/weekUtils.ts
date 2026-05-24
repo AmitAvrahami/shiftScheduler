@@ -88,6 +88,37 @@ export function toDateKey(d: Date): string {
 }
 
 /**
+ * Formats a Date as local-time DD/MM/YYYY (no toISOString, to avoid TZ off-by-one).
+ */
+function formatLocalDMY(d: Date): string {
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getFullYear()}`;
+}
+
+export interface WeekLabelParts {
+  weekNumber: number;
+  startDate: string; // DD/MM/YYYY
+  endDate: string; // DD/MM/YYYY
+  dateRange: string; // "{startDate}–{endDate}" — an LTR run; render with dir="ltr"
+  label: string; // "שבוע {N} · {dateRange}" — plain-text fallback only
+}
+
+/**
+ * Canonical parts for the current/selected week label.
+ * Range uses getWeekDates (Sun–Sat), the app's established convention, so the
+ * displayed range matches everything else keyed off the same weekId.
+ */
+export function getWeekLabelParts(weekId: string): WeekLabelParts {
+  const { week } = parseWeekId(weekId);
+  const dates = getWeekDates(weekId);
+  const startDate = formatLocalDMY(dates[0]);
+  const endDate = formatLocalDMY(dates[6]);
+  const dateRange = `${startDate}–${endDate}`;
+  return { weekNumber: week, startDate, endDate, dateRange, label: `שבוע ${week} · ${dateRange}` };
+}
+
+/**
  * Backend GET serializes constraint dates as ISO (e.g. "2026-05-24T00:00:00.000Z"),
  * but PUT validation expects strict YYYY-MM-DD. Normalize loaded dates before using
  * them as cell keys or in the save payload. Idempotent for already-normalized strings.

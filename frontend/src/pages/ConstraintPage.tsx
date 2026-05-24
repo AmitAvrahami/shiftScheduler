@@ -12,6 +12,7 @@ import {
   normalizeConstraintDate,
   toDateKey,
 } from '../utils/weekUtils';
+import { WeekLabel } from '../components/WeekLabel';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -219,7 +220,7 @@ export default function ConstraintPage() {
     : null;
 
   return (
-    <MainLayout title="הגשת אילוצים שבועית" subtitle="שבוע נוכחי">
+    <MainLayout title="הגשת אילוצים שבועית" subtitle={<WeekLabel weekId={weekId} />}>
       <div className="max-w-[1200px] mx-auto pb-12">
         {/* Deadline Banner */}
         {isLocked ? (

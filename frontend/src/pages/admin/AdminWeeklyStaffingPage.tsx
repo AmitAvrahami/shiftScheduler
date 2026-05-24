@@ -16,6 +16,7 @@ import {
   type Shift,
   type Schedule,
 } from '../../lib/api';
+import { WeekLabel } from '../../components/WeekLabel';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -48,14 +49,6 @@ export default function AdminWeeklyStaffingPage() {
   const isReadOnly = scheduleStatus !== null && READ_ONLY_STATUSES.includes(scheduleStatus);
 
   const weekDates = getWeekDates(weekId);
-
-  const formattedWeekLabel = (() => {
-    if (weekDates.length < 7) return weekId;
-    const start = weekDates[0];
-    const end = weekDates[6];
-    const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'numeric' };
-    return `${start.toLocaleDateString('he-IL', opts)} – ${end.toLocaleDateString('he-IL', opts)}`;
-  })();
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -177,7 +170,7 @@ export default function AdminWeeklyStaffingPage() {
   }
 
   return (
-    <MainLayout title="תקן משמרות שבועי" subtitle={formattedWeekLabel}>
+    <MainLayout title="תקן משמרות שבועי" subtitle={<WeekLabel weekId={weekId} />}>
       {/* Week navigation */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-full border border-slate-200">

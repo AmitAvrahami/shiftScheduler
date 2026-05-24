@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import { getCurrentWeekId, parseWeekId } from '../utils/weekUtils';
+import { WeekLabel } from '../components/WeekLabel';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import type { Toast } from './admin/types';
 import { AuditLogPanel } from './admin/components/AuditLogPanel';
@@ -38,7 +39,10 @@ export default function AdminDashboardPage() {
     generateResult?.generationScore ?? dashboard?.generationScore ?? null;
 
   return (
-    <MainLayout title="דאשבורד מנהל" subtitle={weekNumber !== null ? `שבוע ${weekNumber}` : ''}>
+    <MainLayout
+      title="דאשבורד מנהל"
+      subtitle={weekNumber !== null ? <WeekLabel weekId={weekId} /> : ''}
+    >
       <div className="space-y-6">
         {weekIdError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">

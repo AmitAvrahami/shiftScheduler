@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import { ConstraintAvailabilityTable } from '../components/constraints/ConstraintAvailabilityTable';
 import { useAdminConstraints } from '../hooks/useAdminConstraints';
+import { WeekLabel } from '../components/WeekLabel';
 
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
@@ -31,15 +31,6 @@ export default function AdminConstraintsPage() {
     goNextWeek,
     toggleLock,
   } = useAdminConstraints();
-
-  const formattedWeekRange = useMemo(() => {
-    if (weekDates.length < 7) return '';
-    const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
-    return `${weekDates[0].toLocaleDateString('he-IL', opts)} - ${weekDates[6].toLocaleDateString(
-      'he-IL',
-      opts
-    )}, ${weekDates[0].getFullYear()}`;
-  }, [weekDates]);
 
   return (
     <MainLayout title="אילוצי עובדים">
@@ -85,7 +76,9 @@ export default function AdminConstraintsPage() {
           <div className="text-right order-1 md:order-2">
             <h2 className="text-2xl font-black text-[#000654]">אילוצי עובדים</h2>
             <div className="flex items-center justify-end gap-2 text-slate-500 text-sm mt-1">
-              <span>{formattedWeekRange}</span>
+              <span>
+                <WeekLabel weekId={currentViewWeek} />
+              </span>
               <MaterialIcon name="calendar_today" className="text-sm" />
             </div>
           </div>

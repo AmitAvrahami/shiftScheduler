@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { getCurrentWeekId, getNextWeekId, getPrevWeekId, getWeekDates } from '../utils/weekUtils';
+import { getCurrentWeekId, getNextWeekId, getPrevWeekId } from '../utils/weekUtils';
+import { WeekLabel } from '../components/WeekLabel';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
@@ -22,16 +23,7 @@ export default function ScheduleBoardPage() {
   const [publishWarnings, setPublishWarnings] = useState<PublishWarning[]>([]);
   const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
 
-  const weekDates = useMemo(() => getWeekDates(weekId), [weekId]);
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
-
-  const formattedWeekRange = useMemo(() => {
-    if (weekDates.length < 7) return '';
-    const start = weekDates[0];
-    const end = weekDates[6];
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
-    return `${start.toLocaleDateString('he-IL', options)} - ${end.toLocaleDateString('he-IL', options)}, ${start.getFullYear()}`;
-  }, [weekDates]);
 
   async function handleGenerate() {
     await actions.generateSchedule();
@@ -116,7 +108,7 @@ export default function ScheduleBoardPage() {
   return (
     <MainLayout
       title="סידור עבודה"
-      subtitle={`שבוע ${weekId.split('-W')[1]} (${formattedWeekRange})`}
+      subtitle={<WeekLabel weekId={weekId} />}
       actions={
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-100 p-1 rounded-full border border-slate-200">
