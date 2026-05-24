@@ -122,4 +122,10 @@ class SolveResult(BaseModel):
     assignments: list[AssignmentOut]
     violations: list[Violation]
     warnings: list[Warning]
+    # PR10 — schedule quality score. ``total_penalty`` is the summed soft-quality
+    # penalty contribution at the solved values; ``penalty_breakdown`` maps each
+    # soft category to its contribution. Hard-relaxation (coverage/load) penalties
+    # are excluded. Additive + defaulted so an older Node consumer still parses.
+    total_penalty: int = 0
+    penalty_breakdown: dict[str, int] = Field(default_factory=dict)
     solve_time_ms: int

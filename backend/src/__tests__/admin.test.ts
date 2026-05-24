@@ -254,6 +254,44 @@ describe('GET /api/v1/admin/dashboard — data accuracy', () => {
     expect(res.body.data.currentWeek.stats.scheduleStatus).toBe('draft');
   });
 
+  it('modular dashboard returns persisted generationScore for an existing generated schedule', async () => {
+    const { token, admin } = await seedAdmin();
+    const weekId = getCurrentWeekId();
+    const generatedAt = new Date('2026-05-10T09:30:00.000Z');
+
+    await WeeklySchedule.create({
+      weekId,
+      startDate: new Date('2026-05-10T00:00:00.000Z'),
+      endDate: new Date('2026-05-16T00:00:00.000Z'),
+      status: 'draft',
+      generatedBy: 'auto',
+      createdBy: admin._id,
+      generationScore: {
+        totalPenalty: 150,
+        breakdown: {
+          NIGHT_OVERCAP: 100,
+          assignment_preference: 50,
+        },
+        generatedAt,
+      },
+      lastGeneratedAt: generatedAt,
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/admin/dashboard/${weekId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.generationScore).toEqual({
+      totalPenalty: 150,
+      breakdown: {
+        NIGHT_OVERCAP: 100,
+        assignment_preference: 50,
+      },
+      generatedAt: generatedAt.toISOString(),
+    });
+  });
+
   it('recentAuditLogs returns at most 8 entries', async () => {
     const { token, admin } = await seedAdmin();
     const logs = Array.from({ length: 12 }, (_, i) => ({

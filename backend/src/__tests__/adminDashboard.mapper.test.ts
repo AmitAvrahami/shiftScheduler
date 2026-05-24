@@ -162,6 +162,14 @@ describe('toAdminDashboardDTO', () => {
 
   it('copies persisted generation warnings/violations and lastGeneratedAt', () => {
     const generatedAt = new Date(2026, 4, 10, 9, 30);
+    const generationScore = {
+      totalPenalty: 150,
+      breakdown: {
+        NIGHT_OVERCAP: 100,
+        assignment_preference: 50,
+      },
+      generatedAt,
+    };
     const warning = {
       constraint_id: 'ASSIGNMENT_PREFERENCE',
       type: 'ASSIGNMENT_PREFERENCE',
@@ -187,6 +195,7 @@ describe('toAdminDashboardDTO', () => {
           endDate: new Date(2026, 4, 16),
           generationWarnings: [warning],
           generationViolations: [violation],
+          generationScore,
           lastGeneratedAt: generatedAt,
         },
       })
@@ -194,6 +203,7 @@ describe('toAdminDashboardDTO', () => {
 
     expect(dto.generationWarnings).toEqual([warning]);
     expect(dto.generationViolations).toEqual([violation]);
+    expect(dto.generationScore).toEqual(generationScore);
     expect(dto.lastGeneratedAt).toEqual(generatedAt);
   });
 
@@ -202,6 +212,7 @@ describe('toAdminDashboardDTO', () => {
 
     expect(dto.generationWarnings).toEqual([]);
     expect(dto.generationViolations).toEqual([]);
+    expect(dto.generationScore).toBeNull();
     expect(dto.lastGeneratedAt).toBeNull();
   });
 
@@ -212,6 +223,7 @@ describe('toAdminDashboardDTO', () => {
 
     expect(dto.generationWarnings).toEqual([]);
     expect(dto.generationViolations).toEqual([]);
+    expect(dto.generationScore).toBeNull();
     expect(dto.lastGeneratedAt).toBeNull();
   });
 });

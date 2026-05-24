@@ -96,6 +96,8 @@ function makeOptimalResult(shiftId: string, userId: string) {
     assignments: [{ shift_id: shiftId, worker_id: userId, assigned_by: 'algorithm' as const }],
     violations: [],
     warnings: [],
+    total_penalty: 0,
+    penalty_breakdown: {},
     solve_time_ms: 42,
   };
 }
@@ -250,6 +252,71 @@ describe('runScheduler — persists generation warnings/violations', () => {
     expect(stored!.generationViolations![0]).toMatchObject(violation);
     expect(stored!.lastGeneratedAt).toBeInstanceOf(Date);
     expect(stored!.lastGeneratedAt!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('runScheduler — persists generation quality score (PR10)', () => {
+  it('stores generationScore and returns it, sharing the lastGeneratedAt timestamp', async () => {
+    const { schedule, shift, user } = await seedFullScenario();
+    mockCallSolver.mockResolvedValueOnce({
+      status: 'OPTIMAL',
+      assignments: [
+        { shift_id: shift._id.toString(), worker_id: user._id.toString(), assigned_by: 'algorithm' },
+      ],
+      violations: [],
+      warnings: [],
+      total_penalty: 150,
+      penalty_breakdown: { NIGHT_OVERCAP: 100, assignment_preference: 50 },
+      solve_time_ms: 42,
+    });
+
+    const result = await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    // Returned to the caller
+    expect(result.generationScore.totalPenalty).toBe(150);
+    expect(result.generationScore.breakdown).toEqual({
+      NIGHT_OVERCAP: 100,
+      assignment_preference: 50,
+    });
+    expect(result.generationScore.generatedAt).toBeInstanceOf(Date);
+
+    // Persisted on the schedule document, sharing lastGeneratedAt's timestamp
+    const stored = await WeeklySchedule.findById(schedule._id).lean();
+    expect(stored!.generationScore!.totalPenalty).toBe(150);
+    expect(stored!.generationScore!.breakdown).toEqual({
+      NIGHT_OVERCAP: 100,
+      assignment_preference: 50,
+    });
+    expect(stored!.generationScore).not.toHaveProperty('qualityScore');
+    expect(new Date(stored!.generationScore!.generatedAt).getTime()).toBe(
+      stored!.lastGeneratedAt!.getTime()
+    );
+
+    // Recorded in the generation audit payload
+    const auditLog = await AuditLog.findOne({ action: 'schedule_generated' });
+    const after = auditLog!.after as Record<string, unknown>;
+    expect(after.score).toEqual({
+      totalPenalty: 150,
+      breakdown: { NIGHT_OVERCAP: 100, assignment_preference: 50 },
+    });
+  });
+
+  it('defaults to a zero score when the solver omits the fields', async () => {
+    const { shift, user } = await seedFullScenario();
+    mockCallSolver.mockResolvedValueOnce({
+      status: 'OPTIMAL',
+      assignments: [
+        { shift_id: shift._id.toString(), worker_id: user._id.toString(), assigned_by: 'algorithm' },
+      ],
+      violations: [],
+      warnings: [],
+      solve_time_ms: 42,
+    });
+
+    const result = await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
+
+    expect(result.generationScore.totalPenalty).toBe(0);
+    expect(result.generationScore.breakdown).toEqual({});
   });
 });
 

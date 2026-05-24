@@ -15,5 +15,10 @@
       "message": "Contract test warning"
     }
   ],
+  "total_penalty": 150,
+  "penalty_breakdown": {
+    "NIGHT_OVERCAP": 100,
+    "assignment_preference": 50
+  },
   "solve_time_ms": 12
 }

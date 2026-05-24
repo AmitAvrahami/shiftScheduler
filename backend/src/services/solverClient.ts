@@ -81,6 +81,12 @@ export interface SolveResult {
   assignments: SolverAssignment[];
   violations: SolverViolation[];
   warnings: SolverWarning[];
+  // PR10 — schedule quality score. `total_penalty` is the summed soft-quality
+  // penalty at the solved values; `penalty_breakdown` maps each soft category to
+  // its contribution. Hard-relaxation (coverage/load) penalties are excluded.
+  // Optional so an older solver response shape still parses.
+  total_penalty?: number;
+  penalty_breakdown?: Record<string, number>;
   solve_time_ms: number;
 }
 

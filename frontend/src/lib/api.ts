@@ -11,6 +11,7 @@ export interface Schedule {
   generatedBy: string;
   startDate: string;
   endDate: string;
+  generationScore?: GenerationScore | null;
 }
 
 export interface Shift {
@@ -75,6 +76,13 @@ export interface GenerateWarning {
   shift_ids?: string[];
 }
 
+export interface GenerationScore {
+  totalPenalty: number;
+  qualityScore?: number;
+  breakdown: Record<string, number>;
+  generatedAt: string;
+}
+
 export interface GenerateResult {
   success: boolean;
   status: string;
@@ -82,6 +90,7 @@ export interface GenerateResult {
   solveTimeMs: number;
   warnings: GenerateWarning[];
   violations: Array<{ message: string }>;
+  generationScore?: GenerationScore | null;
 }
 
 export class ApiError extends Error {

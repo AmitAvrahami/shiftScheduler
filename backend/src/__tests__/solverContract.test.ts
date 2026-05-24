@@ -131,6 +131,8 @@ describe('solver cross-runtime contract', () => {
     it('does not contain camelCase drift', () => {
       const root = result as unknown as Record<string, unknown>;
       expect(root).not.toHaveProperty('solveTimeMs');
+      expect(root).not.toHaveProperty('totalPenalty');
+      expect(root).not.toHaveProperty('penaltyBreakdown');
 
       const assignment = result.assignments[0] as unknown as Record<string, unknown>;
       expect(assignment).not.toHaveProperty('shiftId');
@@ -140,6 +142,17 @@ describe('solver cross-runtime contract', () => {
       const warning = result.warnings[0] as unknown as Record<string, unknown>;
       expect(warning).not.toHaveProperty('constraintId');
       expect(warning).not.toHaveProperty('workerId');
+    });
+
+    it('exposes the PR10 snake_case quality score fields', () => {
+      expect(result.total_penalty).toBe(150);
+      expect(result.penalty_breakdown).toEqual({
+        NIGHT_OVERCAP: 100,
+        assignment_preference: 50,
+      });
+      // total_penalty equals the sum of the breakdown contributions.
+      const summed = Object.values(result.penalty_breakdown ?? {}).reduce((a, b) => a + b, 0);
+      expect(result.total_penalty).toBe(summed);
     });
   });
 });

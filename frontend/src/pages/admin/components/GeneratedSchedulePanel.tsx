@@ -1,6 +1,7 @@
 import MaterialIcon from '../../../components/MaterialIcon';
 import type { GenerateResult } from '../../../lib/api';
 import type { AdminDashboardEmployee } from '../types';
+import { QualityScorePanel } from './QualityScorePanel';
 import {
   formatWarningMessage,
   getWarningLabel,
@@ -102,6 +103,10 @@ export function GeneratedSchedulePanel({
           <div className="text-xs text-slate-500 font-medium">אזהרות</div>
         </div>
       </div>
+
+      {result.generationScore && (
+        <QualityScorePanel score={result.generationScore} compact className="mb-4 shadow-none" />
+      )}
 
       {result.warnings.length > 0 && (
         <div className="rounded-xl px-4 py-3 mb-3 bg-amber-50 border border-amber-200">

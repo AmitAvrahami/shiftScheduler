@@ -1,4 +1,4 @@
-import type { GenerateWarning } from '../../lib/api';
+import type { GenerationScore, GenerateWarning } from '../../lib/api';
 
 export type WeekWorkflowState =
   | 'not_created'
@@ -81,5 +81,6 @@ export interface AdminDashboardDTO {
   // an older backend response (without these fields) still parses.
   generationWarnings?: GenerateWarning[];
   generationViolations?: Array<{ message: string }>;
+  generationScore?: GenerationScore | null;
   lastGeneratedAt?: string | null;
 }
