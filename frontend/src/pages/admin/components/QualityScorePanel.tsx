@@ -8,7 +8,11 @@ interface QualityScorePanelProps {
   className?: string;
 }
 
-export function QualityScorePanel({ score, compact = false, className = '' }: QualityScorePanelProps) {
+export function QualityScorePanel({
+  score,
+  compact = false,
+  className = '',
+}: QualityScorePanelProps) {
   if (!score) return null;
 
   const breakdown = getSortedPenaltyBreakdown(score.breakdown);
@@ -40,7 +44,9 @@ export function QualityScorePanel({ score, compact = false, className = '' }: Qu
           </div>
         </div>
         {generatedAtLabel && (
-          <span className="text-[10px] font-medium text-slate-400 shrink-0">{generatedAtLabel}</span>
+          <span className="text-[10px] font-medium text-slate-400 shrink-0">
+            {generatedAtLabel}
+          </span>
         )}
       </div>
 

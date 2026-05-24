@@ -261,7 +261,11 @@ describe('runScheduler — persists generation quality score (PR10)', () => {
     mockCallSolver.mockResolvedValueOnce({
       status: 'OPTIMAL',
       assignments: [
-        { shift_id: shift._id.toString(), worker_id: user._id.toString(), assigned_by: 'algorithm' },
+        {
+          shift_id: shift._id.toString(),
+          worker_id: user._id.toString(),
+          assigned_by: 'algorithm',
+        },
       ],
       violations: [],
       warnings: [],
@@ -306,7 +310,11 @@ describe('runScheduler — persists generation quality score (PR10)', () => {
     mockCallSolver.mockResolvedValueOnce({
       status: 'OPTIMAL',
       assignments: [
-        { shift_id: shift._id.toString(), worker_id: user._id.toString(), assigned_by: 'algorithm' },
+        {
+          shift_id: shift._id.toString(),
+          worker_id: user._id.toString(),
+          assigned_by: 'algorithm',
+        },
       ],
       violations: [],
       warnings: [],
