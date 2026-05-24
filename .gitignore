@@ -22,3 +22,24 @@ download_stitch_assets.sh
 design/
 .claude/settings.local.json
 .claude/
+
+# Runtime / local databases
+/agentdb.rvf
+/agentdb.rvf.lock
+/ruvector.db
+
+# Screenshots and local images at repo root
+/image.png
+
+# Playwright test-results artifacts
+/test-results/
+/backend/test-results/
+/frontend/test-results/
+
+# Debug and scratch QA specs at repo root
+/debug_auth.spec.ts
+/debug_storage.spec.ts
+/qa_focused.spec.ts
+/qa_pr07.spec.ts
+/qa_scratch.spec.ts
+/qa_test.spec.ts
