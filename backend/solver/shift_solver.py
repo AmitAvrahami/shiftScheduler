@@ -213,26 +213,34 @@ class ShiftSolver:
         self._enforce_fixed_morning_rule()
         self._enforce_minimum_rest()
 
-        penalty_terms: list[cp_model.LinearExprT] = []
-
+        # Hard-relaxation penalties (RELAXED mode only). Kept in the objective so
+        # the solver still minimises coverage/load shortfall, but excluded from
+        # the soft-quality score (total_penalty / penalty_breakdown).
+        relaxation_terms: list[cp_model.LinearExprT] = []
         if relaxed:
-            penalty_terms += self._enforce_weekly_shift_limit_soft()
-            penalty_terms += self._enforce_full_coverage_soft()
+            relaxation_terms += self._enforce_weekly_shift_limit_soft()
+            relaxation_terms += self._enforce_full_coverage_soft()
         else:
             self._enforce_weekly_shift_limit()
             self._enforce_full_coverage()
 
-        # Soft constraints
-        penalty_terms += self._penalize_shift_imbalance()
-        penalty_terms += self._penalize_type_concentration()
-        penalty_terms += self._penalize_poor_rest_transitions()
-        penalty_terms += self._penalize_weekend_concentration()
-        penalty_terms += self._penalize_night_overload()
-        penalty_terms += self._penalize_friday_saturday_cluster()
-        penalty_terms += self._penalize_assignment_preferences()
+        # Soft-quality penalties grouped by category. Invocation order matches the
+        # previous flat list so the model build (and solver behaviour) is identical.
+        soft_terms_by_category: dict[str, list[cp_model.LinearExprT]] = {
+            "SHIFT_BALANCE": self._penalize_shift_imbalance(),
+            "TYPE_DIVERSITY": self._penalize_type_concentration(),
+            "REST_OPTIMISATION": self._penalize_poor_rest_transitions(),
+            "WEEKEND_BALANCE": self._penalize_weekend_concentration(),
+            "NIGHT_OVERCAP": self._penalize_night_overload(),
+            "FRI_SAT_CLUSTER": self._penalize_friday_saturday_cluster(),
+            "assignment_preference": self._penalize_assignment_preferences(),
+        }
+        soft_terms: list[cp_model.LinearExprT] = [
+            term for terms in soft_terms_by_category.values() for term in terms
+        ]
 
-        if penalty_terms:
-            self.model.Minimize(sum(penalty_terms))
+        if relaxation_terms or soft_terms:
+            self.model.Minimize(sum(relaxation_terms + soft_terms))
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = SOLVER_TIMEOUT_SECONDS
@@ -243,6 +251,9 @@ class ShiftSolver:
             assignments = self._extract_assignments()
             violations = self._collect_violations(assignments, relaxed=relaxed)
             warnings = self._collect_warnings(assignments)
+            total_penalty, penalty_breakdown = self._compute_penalty_breakdown(
+                solver, soft_terms_by_category
+            )
             status_label: str
             if relaxed:
                 status_label = "RELAXED"
@@ -255,6 +266,8 @@ class ShiftSolver:
                 assignments=assignments,
                 violations=violations,
                 warnings=warnings,
+                total_penalty=total_penalty,
+                penalty_breakdown=penalty_breakdown,
                 solve_time_ms=0,
             )
 
@@ -486,7 +499,13 @@ class ShiftSolver:
             key = (penalty.worker_id, day_idx, slot.definition_id)
             var = self.shifts.get(key)
             if var is not None:
-                penalties.append(penalty.weight * var)
+                # Use an integer coefficient when the weight is integral (always
+                # the case for compiler-emitted weights). This keeps the objective
+                # value identical while letting the PR10 breakdown evaluate the
+                # term via solver.Value(), which only supports integer expressions.
+                weight = penalty.weight
+                coeff = int(weight) if float(weight).is_integer() else weight
+                penalties.append(coeff * var)
         return penalties
 
     def _penalize_shift_imbalance(self) -> list[cp_model.LinearExprT]:
@@ -695,6 +714,30 @@ class ShiftSolver:
     # ------------------------------------------------------------------
     # Result extraction
     # ------------------------------------------------------------------
+
+    def _compute_penalty_breakdown(
+        self,
+        solver: cp_model.CpSolver,
+        soft_terms_by_category: dict[str, list[cp_model.LinearExprT]],
+    ) -> tuple[int, dict[str, int]]:
+        """
+        Evaluate each soft-quality category at the solved values to produce the
+        PR10 schedule quality score.
+
+        Hard-relaxation (coverage/load) penalties are intentionally excluded —
+        they measure constraint relaxation, not schedule quality. Only categories
+        with a non-zero contribution are reported, and ``total_penalty`` is the
+        sum of those contributions.
+        """
+        breakdown: dict[str, int] = {}
+        for category, terms in soft_terms_by_category.items():
+            if not terms:
+                continue
+            value = int(solver.Value(sum(terms)))
+            if value:
+                breakdown[category] = value
+        total = sum(breakdown.values())
+        return total, breakdown
 
     def _extract_assignments(self) -> list[AssignmentOut]:
         assignments: list[AssignmentOut] = []

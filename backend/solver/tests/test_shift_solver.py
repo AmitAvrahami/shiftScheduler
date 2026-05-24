@@ -888,3 +888,81 @@ def test_assignment_preference_warning_absent_when_not_penalised():
 
     assert result.status in ("OPTIMAL", "FEASIBLE")
     assert not [w for w in result.warnings if w.type == "ASSIGNMENT_PREFERENCE"]
+
+
+# ---------------------------------------------------------------------------
+# PR10 — schedule quality score (total_penalty + penalty_breakdown)
+# ---------------------------------------------------------------------------
+
+
+def test_quality_score_reflects_assigned_assignment_preference():
+    """An assigned assignment_preference penalty contributes its weight to both
+    total_penalty and penalty_breakdown, and no other category fires."""
+    slot = ShiftSlotInput(
+        id="slot_pref",
+        date=WEEK_DATES[0],
+        definition_id=MORNING.id,
+        required_count=1,
+    )
+    # Single worker, single slot → the worker must take the penalised cell, so the
+    # assignment_preference term resolves to its weight.
+    req = make_request([make_worker("w1")], slots=[slot])
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=50,
+            worker_id="w1",
+            shift_id="slot_pref",
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert result.penalty_breakdown.get("assignment_preference") == 50
+    assert result.total_penalty == 50
+    # total_penalty equals the sum of the reported breakdown values.
+    assert result.total_penalty == sum(result.penalty_breakdown.values())
+
+
+def test_relaxed_quality_score_excludes_relaxation_penalties():
+    """RELAXED coverage/load penalties stay out of the PR10 soft-quality score."""
+    slot = ShiftSlotInput(
+        id="slot_relaxed_pref",
+        date=WEEK_DATES[0],
+        definition_id=MORNING.id,
+        required_count=2,
+    )
+    req = make_request([make_worker("w1")], slots=[slot])
+    req.penalties = [
+        PenaltyTerm(
+            category="assignment_preference",
+            weight=50,
+            worker_id="w1",
+            shift_id="slot_relaxed_pref",
+        )
+    ]
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status == "RELAXED"
+    assert any("FULL_COVERAGE" in v.constraint_id for v in result.violations)
+    assert result.penalty_breakdown == {"assignment_preference": 50}
+    assert result.total_penalty == 50
+
+
+def test_quality_score_zero_when_no_soft_penalties_fire():
+    """A clean single-slot solve has an empty breakdown and zero total."""
+    slot = ShiftSlotInput(
+        id="slot_clean",
+        date=WEEK_DATES[0],
+        definition_id=MORNING.id,
+        required_count=1,
+    )
+    req = make_request([make_worker("w1")], slots=[slot])
+
+    result = ShiftSolver(req).solve()
+
+    assert result.status in ("OPTIMAL", "FEASIBLE")
+    assert result.total_penalty == 0
+    assert result.penalty_breakdown == {}

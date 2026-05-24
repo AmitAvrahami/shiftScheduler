@@ -13,6 +13,7 @@ import { MissingConstraintsPanel } from './admin/components/MissingConstraintsPa
 import { GeneratedSchedulePanel } from './admin/components/GeneratedSchedulePanel';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
+import { QualityScorePanel } from './admin/components/QualityScorePanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -33,6 +34,8 @@ export default function AdminDashboardPage() {
     useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
+  const visibleGenerationScore =
+    generateResult?.generationScore ?? dashboard?.generationScore ?? null;
 
   return (
     <MainLayout title="דאשבורד מנהל" subtitle={weekNumber !== null ? `שבוע ${weekNumber}` : ''}>
@@ -105,6 +108,7 @@ export default function AdminDashboardPage() {
                   totalUsers={employees.length}
                   stats={scheduleStats}
                 />
+                <QualityScorePanel score={visibleGenerationScore} />
                 <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
               </div>
             </div>

@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import type { SolverViolation, SolverWarning } from '../../services/solverClient';
+import type { GenerationScore } from '../../models/WeeklySchedule';
 
 // ─── Workflow state ───────────────────────────────────────────────────────────
 // Canonical UI-facing state derived from WeeklySchedule.status.
@@ -88,6 +89,9 @@ export interface AdminDashboardDTO {
   // snake_case verbatim from the solver; null timestamp when never generated.
   generationWarnings: SolverWarning[];
   generationViolations: SolverViolation[];
+  // Persisted quality score from the last generation (PR10). Null when the
+  // schedule has never been generated.
+  generationScore: GenerationScore | null;
   lastGeneratedAt: Date | null;
 }
 
@@ -101,6 +105,7 @@ export interface RawScheduleDoc {
   endDate: Date;
   generationWarnings?: SolverWarning[];
   generationViolations?: SolverViolation[];
+  generationScore?: GenerationScore;
   lastGeneratedAt?: Date;
 }
 

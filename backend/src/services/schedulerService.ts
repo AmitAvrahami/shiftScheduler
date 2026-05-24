@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import WeeklySchedule from '../models/WeeklySchedule';
+import WeeklySchedule, { GenerationScore } from '../models/WeeklySchedule';
 import Shift from '../models/Shift';
 import ShiftDefinition from '../models/ShiftDefinition';
 import User from '../models/User';
@@ -19,6 +19,7 @@ export interface SchedulerResult {
   assignmentCount: number;
   warnings: SolverWarning[];
   violations: SolverViolation[];
+  generationScore: GenerationScore;
   solveTimeMs: number;
 }
 
@@ -132,7 +133,18 @@ export async function runScheduler(
     await Shift.bulkWrite(bulkOps);
   }
 
-  // 4d: audit log
+  // 4d: build the quality score (PR10). qualityScore is intentionally omitted
+  // until a normalized formula is defined; totalPenalty is the v1 metric and
+  // counts soft-constraint penalties only (relaxation penalties are excluded by
+  // the solver). Shares its timestamp with lastGeneratedAt below.
+  const generatedAt = new Date();
+  const generationScore: GenerationScore = {
+    totalPenalty: result.total_penalty ?? 0,
+    breakdown: result.penalty_breakdown ?? {},
+    generatedAt,
+  };
+
+  // 4e: audit log
   await AuditLog.create({
     performedBy: actorId,
     action: 'schedule_generated',
@@ -145,19 +157,24 @@ export async function runScheduler(
       solveTimeMs: result.solve_time_ms,
       warnings: result.warnings,
       violations: result.violations,
+      score: {
+        totalPenalty: generationScore.totalPenalty,
+        breakdown: generationScore.breakdown,
+      },
     },
     ip,
   });
 
-  // 4e: persist latest solver warnings/violations on the schedule so they
-  // survive reloads and stay visible on the board (non-blocking, display-only)
+  // 4f: persist latest solver warnings/violations and quality score on the
+  // schedule so they survive reloads and stay visible (non-blocking, display-only)
   await WeeklySchedule.updateOne(
     { _id: scheduleId },
     {
       $set: {
         generationWarnings: result.warnings,
         generationViolations: result.violations,
-        lastGeneratedAt: new Date(),
+        generationScore,
+        lastGeneratedAt: generatedAt,
       },
     }
   );
@@ -167,6 +184,7 @@ export async function runScheduler(
     assignmentCount: assignmentDocs.length,
     warnings: result.warnings,
     violations: result.violations,
+    generationScore,
     solveTimeMs: result.solve_time_ms,
   };
 }

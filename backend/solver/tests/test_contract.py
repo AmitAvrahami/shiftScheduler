@@ -91,6 +91,25 @@ def test_valid_solve_result_parses() -> None:
     assert result.assignments[0].assigned_by == "algorithm"
     assert result.warnings[0].constraint_id == "CONTRACT_TEST_WARNING"
     assert result.solve_time_ms == 12
+    # PR10 — quality score fields parse from the shared fixture.
+    assert result.total_penalty == 150
+    assert result.penalty_breakdown == {
+        "NIGHT_OVERCAP": 100,
+        "assignment_preference": 50,
+    }
+
+
+def test_legacy_result_without_score_fields_parses() -> None:
+    """A pre-PR10 result (no score fields) must still parse — defaults fill the
+    gap so the model stays backward-compatible."""
+    raw = _load("valid_solve_result.json")
+    raw.pop("total_penalty", None)
+    raw.pop("penalty_breakdown", None)
+
+    result = SolveResult.model_validate(raw)
+
+    assert result.total_penalty == 0
+    assert result.penalty_breakdown == {}
 
 
 def test_legacy_warning_without_structured_fields_parses() -> None:
