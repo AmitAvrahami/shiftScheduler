@@ -366,10 +366,7 @@ function CreateModal({
       }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.code === 'ERR_NO_SHIFT_TEMPLATES') {
-        showToast(
-          "It looks like you haven't defined your shifts yet. Please go to Settings > Shift Definitions to get started.",
-          'error'
-        );
+        showToast('לא הוגדרו משמרות במערכת. יש להגדיר משמרות בהגדרות המערכת', 'error');
         navigate('/admin/shift-definitions');
         return;
       }
@@ -379,7 +376,7 @@ function CreateModal({
       ) {
         showToast('טיוטה זו כבר אותחלה בעבר.', 'error');
       } else {
-        showToast(err instanceof Error ? err.message : 'שגיאה ביצירת הסידור', 'error');
+        showToast('שגיאה ביצירת הסידור', 'error');
       }
     } finally {
       setLoading(false);
@@ -563,8 +560,8 @@ export default function SchedulesPage() {
         setSchedules(all);
         all.forEach(refreshScheduleStats);
       })
-      .catch((err: unknown) => {
-        showToast(err instanceof Error ? err.message : 'שגיאה בטעינת הסידורים', 'error');
+      .catch(() => {
+        showToast('שגיאה בטעינת הסידורים', 'error');
       })
       .finally(() => setLoading(false));
   }, [refreshScheduleStats, showToast]);
@@ -602,8 +599,8 @@ export default function SchedulesPage() {
       const { schedule } = await scheduleApi.update(s._id, 'published', approvedWarnings);
       setSchedules((prev) => prev.map((x) => (x._id === s._id ? schedule : x)));
       showToast('הסידור פורסם בהצלחה', 'success');
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'שגיאה בפרסום', 'error');
+    } catch {
+      showToast('שגיאה בפרסום הסידור', 'error');
     } finally {
       setPublishingId(null);
     }
@@ -636,6 +633,7 @@ export default function SchedulesPage() {
       }
     } catch (e) {
       console.error('Failed to detect publish warnings:', e);
+      showToast('שגיאה בבדיקת אזהרות פרסום', 'error');
     }
 
     await proceedPublish(s);
@@ -654,8 +652,8 @@ export default function SchedulesPage() {
       await scheduleApi.deleteSchedule(s._id);
       setSchedules((prev) => prev.filter((x) => x._id !== s._id));
       showToast('הסידור נמחק', 'info');
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'שגיאה במחיקה', 'error');
+    } catch {
+      showToast('שגיאה במחיקת הסידור', 'error');
     } finally {
       setDeletingId(null);
       setConfirmDelete(null);
@@ -669,8 +667,8 @@ export default function SchedulesPage() {
       const { schedule } = await scheduleApi.clone(s._id, targetWeekId);
       setSchedules((prev) => [schedule, ...prev]);
       showToast(`סידור שוכפל לשבוע ${parseWeekNumber(targetWeekId)}`, 'success');
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'שגיאה בשכפול', 'error');
+    } catch {
+      showToast('שגיאה בשכפול הסידור', 'error');
     } finally {
       setCloningId(null);
     }

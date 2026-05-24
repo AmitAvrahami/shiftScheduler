@@ -51,12 +51,13 @@ export default function UsersPage() {
   });
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     userApi
       .getUsers()
       .then((res) => setUsers(res.users))
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'שגיאה בטעינת משתמשים'))
+      .catch(() => setLoadError('אירעה שגיאה בטעינת המשתמשים'))
       .finally(() => setPageLoading(false));
   }, []);
 
@@ -79,20 +80,21 @@ export default function UsersPage() {
         role: 'employee',
         isFixedMorningEmployee: false,
       });
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'שגיאה ביצירת משתמש');
+    } catch {
+      setFormError('אירעה שגיאה ביצירת המשתמש');
     } finally {
       setFormLoading(false);
     }
   }
 
   async function toggleStatus(user: User) {
+    setActionError('');
     setTogglingStatusId(user._id);
     try {
       const res = await userApi.setStatus(user._id, !user.isActive);
       setUsers((prev) => prev.map((u) => (u._id === user._id ? res.user : u)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'שגיאה בעדכון סטטוס');
+    } catch {
+      setActionError('שגיאה בעדכון סטטוס המשתמש');
     } finally {
       setTogglingStatusId(null);
     }
@@ -130,20 +132,21 @@ export default function UsersPage() {
       });
       setUsers((prev) => prev.map((u) => (u._id === editingId ? res.user : u)));
       setEditingId(null);
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'שגיאה בעדכון משתמש');
+    } catch {
+      setEditError('שגיאה בעדכון פרטי המשתמש');
     } finally {
       setEditLoading(false);
     }
   }
 
   async function toggleFixedMorning(user: User) {
+    setActionError('');
     setTogglingMorningId(user._id);
     try {
       const res = await userApi.setFixedMorning(user._id, !user.isFixedMorningEmployee);
       setUsers((prev) => prev.map((u) => (u._id === user._id ? res.user : u)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'שגיאה בעדכון הגדרת בוקר');
+    } catch {
+      setActionError('שגיאה בעדכון הגדרת עובד בוקר');
     } finally {
       setTogglingMorningId(null);
     }
@@ -254,6 +257,12 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 mb-4 text-sm">
+            {actionError}
           </div>
         )}
 

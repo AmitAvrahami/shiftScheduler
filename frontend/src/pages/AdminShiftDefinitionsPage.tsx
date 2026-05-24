@@ -9,6 +9,7 @@ export default function AdminShiftDefinitionsPage() {
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -36,8 +37,8 @@ export default function AdminShiftDefinitionsPage() {
     try {
       const res = await shiftDefinitionApi.getActive();
       setDefinitions(res.definitions.filter((definition) => definition.isActive));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load definitions');
+    } catch {
+      setError('אירעה שגיאה בטעינת הגדרות המשמרות');
     } finally {
       setLoading(false);
     }
@@ -45,6 +46,7 @@ export default function AdminShiftDefinitionsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setActionError('');
     setSubmitting(true);
     try {
       if (editingId) {
@@ -52,6 +54,7 @@ export default function AdminShiftDefinitionsPage() {
       } else {
         await shiftDefinitionApi.create(form);
       }
+      setActionError('');
       setShowForm(false);
       setEditingId(null);
       setForm({
@@ -67,26 +70,28 @@ export default function AdminShiftDefinitionsPage() {
         daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
       });
       loadDefinitions();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'שגיאה בשמירת ההגדרה');
+    } catch {
+      setActionError('לא ניתן לשמור את סוג המשמרת');
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
+    setActionError('');
     if (!id) {
-      alert('לא ניתן למחוק הגדרה: מזהה חסר');
+      setActionError('לא ניתן למחוק את סוג המשמרת');
       return;
     }
     if (!confirm('האם למחוק סוג משמרת זה?')) return;
     setDeletingId(id);
     try {
       await shiftDefinitionApi.delete(id);
+      setActionError('');
       setDefinitions((prev) => prev.filter((definition) => definition._id !== id));
       await loadDefinitions();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'שגיאה במחיקת ההגדרה');
+    } catch {
+      setActionError('לא ניתן למחוק את סוג המשמרת');
     } finally {
       setDeletingId(null);
     }
@@ -121,6 +126,7 @@ export default function AdminShiftDefinitionsPage() {
         </div>
 
         {error && <p className="text-red-600 mb-4">{error}</p>}
+        {actionError && <p className="text-red-600 mb-4">{actionError}</p>}
         {loading && <PageLoader text="טוען הגדרות משמרות..." />}
 
         {!loading && definitions.length === 0 && (

@@ -12,7 +12,6 @@ import {
   weeklyStaffingApi,
   constraintApi,
   shiftDefinitionApi,
-  ApiError,
   type Shift,
   type Schedule,
 } from '../../lib/api';
@@ -79,8 +78,8 @@ export default function AdminWeeklyStaffingPage() {
       ]);
       setShifts(shiftsRes.shifts);
       setScheduleStatus(statusRes.weekStatus ?? null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'שגיאה בטעינת הנתונים');
+    } catch {
+      setError('שגיאה בטעינת הנתונים');
     } finally {
       setLoading(false);
     }
@@ -98,8 +97,8 @@ export default function AdminWeeklyStaffingPage() {
       await weeklyStaffingApi.initializeWeekShifts(weekId);
       await loadData();
       showToast('המשמרות אותחלו בהצלחה', 'success');
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'שגיאה באתחול משמרות', 'error');
+    } catch {
+      showToast('אירעה שגיאה באתחול המשמרות לשבוע זה', 'error');
     } finally {
       setInitializing(false);
     }
@@ -147,12 +146,12 @@ export default function AdminWeeklyStaffingPage() {
 
     try {
       await weeklyStaffingApi.updateShiftRequirement(shiftId, parsed);
-    } catch (err) {
+    } catch {
       // Revert on failure
       setShifts((prev) =>
         prev.map((s) => (s._id === shiftId ? { ...s, requiredCount: shift.requiredCount } : s))
       );
-      showToast(err instanceof ApiError ? err.message : 'שגיאה בשמירה', 'error');
+      showToast('אירעה שגיאה בעדכון התקן למשמרת', 'error');
     } finally {
       setSavingId(null);
     }

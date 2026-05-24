@@ -22,6 +22,7 @@ export default function ScheduleBoardPage() {
   const [isVerifyingPublish, setIsVerifyingPublish] = useState(false);
   const [publishWarnings, setPublishWarnings] = useState<PublishWarning[]>([]);
   const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -31,6 +32,7 @@ export default function ScheduleBoardPage() {
 
   async function handlePublish() {
     if (!dashboard) return;
+    setPageError(null);
     try {
       setIsVerifyingPublish(true);
       const [defsRes, constraintsRes] = await Promise.all([
@@ -55,6 +57,7 @@ export default function ScheduleBoardPage() {
       }
     } catch (e) {
       console.error('Failed to detect publish warnings:', e);
+      setPageError('שגיאה בבדיקת אזהרות פרסום');
     } finally {
       setIsVerifyingPublish(false);
     }
@@ -172,6 +175,12 @@ export default function ScheduleBoardPage() {
           </div>
         )}
 
+        {pageError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+            {pageError}
+          </div>
+        )}
+
         {!hasSchedule && !loading && (
           <div className="p-12 bg-slate-50 border border-slate-200 border-dashed rounded-3xl text-center">
             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -198,7 +207,7 @@ export default function ScheduleBoardPage() {
             assignments={dashboard.assignments}
             employees={dashboard.employees}
             warnings={dashboard.generationWarnings}
-            onAssignEmployee={(shiftId) => alert(`הוספת עובד למשמרת ${shiftId} (בקרוב)`)}
+            onAssignEmployee={() => setPageError('פעולה זו עדיין לא זמינה')}
           />
         )}
       </div>

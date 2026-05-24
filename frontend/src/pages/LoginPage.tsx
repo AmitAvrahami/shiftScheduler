@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { ApiError } from '../lib/api';
 
 export default function LoginPage() {
   const { login, user, isLoading } = useAuth();
@@ -28,7 +29,9 @@ export default function LoginPage() {
       await login({ email, password });
       // navigation handled by useEffect when user state updates
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה בהתחברות');
+      const invalidCredentialsMessage = 'פרטי ההתחברות שגויים';
+      const generalLoginErrorMessage = 'אירעה שגיאה בתהליך ההתחברות. נסה שוב';
+      setError(err instanceof ApiError ? invalidCredentialsMessage : generalLoginErrorMessage);
       setLoading(false);
     }
   }

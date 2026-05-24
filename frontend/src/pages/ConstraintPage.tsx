@@ -125,7 +125,7 @@ export default function ConstraintPage() {
           setCells(initial);
         }
       })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים'));
+      .catch(() => setLoadError('שגיאה בטעינת האילוצים'));
   }, [weekId]);
 
   function handleCellChange(
@@ -300,7 +300,7 @@ export default function ConstraintPage() {
 
         {saveStatus === 'error' && !validationError && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
-            שגיאה בשמירת האילוצים. נסה שוב.
+            אירעה שגיאה בשמירת האילוצים. אנא נסה שוב
           </div>
         )}
 
