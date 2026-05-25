@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { PageLoader } from '../components/ui/PageLoader';
+import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 import {
   scheduleApi,
   shiftApi,
@@ -516,6 +516,7 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [statsMap, setStatsMap] = useState<Map<string, ScheduleStats>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<'all' | 'current' | 'last'>('all');
@@ -553,7 +554,9 @@ export default function SchedulesPage() {
       });
   }, []);
 
-  useEffect(() => {
+  const loadSchedules = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     scheduleApi
       .getAll()
       .then(({ schedules: all }) => {
@@ -561,10 +564,16 @@ export default function SchedulesPage() {
         all.forEach(refreshScheduleStats);
       })
       .catch(() => {
-        showToast('שגיאה בטעינת הסידורים', 'error');
+        setLoadError('שגיאה בטעינת הסידורים');
       })
       .finally(() => setLoading(false));
-  }, [refreshScheduleStats, showToast]);
+  }, [refreshScheduleStats]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    loadSchedules();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [loadSchedules]);
 
   // ── Filter ──
 
@@ -748,43 +757,48 @@ export default function SchedulesPage() {
       </div>
 
       {/* Cards grid */}
-      {loading ? (
-        <PageLoader text="טוען סידורים..." />
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 gap-sm text-on-surface-variant">
-          <MaterialIcon name="calendar_month" />
-          <p className="text-sm">לא נמצאו סידורים התואמים את הסינון</p>
-          <button
-            onClick={() => {
-              setSearch('');
-              setDateRange('all');
-              setStatusFilter('all');
-            }}
-            className="text-xs text-[#056AE5] hover:underline"
-          >
-            נקה סינון
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-          {filtered.map((s) => (
-            <ScheduleCard
-              key={s._id}
-              schedule={s}
-              stats={statsMap.get(s._id)}
-              onPublish={handlePublish}
-              onDelete={(sched) => setConfirmDelete(sched)}
-              onClone={handleClone}
-              onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
-              onEdit={(sched) => navigate(`/schedules/${sched.weekId}/edit`)}
-              onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
-              isCloning={cloningId === s._id}
-              isDeleting={deletingId === s._id}
-              isPublishing={publishingId === s._id}
-            />
-          ))}
-        </div>
-      )}
+      <PageDataBoundary
+        loading={loading}
+        error={loadError}
+        onRetry={loadSchedules}
+        loadingText="טוען סידורים..."
+      >
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-sm text-on-surface-variant">
+            <MaterialIcon name="calendar_month" />
+            <p className="text-sm">לא נמצאו סידורים התואמים את הסינון</p>
+            <button
+              onClick={() => {
+                setSearch('');
+                setDateRange('all');
+                setStatusFilter('all');
+              }}
+              className="text-xs text-[#056AE5] hover:underline"
+            >
+              נקה סינון
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            {filtered.map((s) => (
+              <ScheduleCard
+                key={s._id}
+                schedule={s}
+                stats={statsMap.get(s._id)}
+                onPublish={handlePublish}
+                onDelete={(sched) => setConfirmDelete(sched)}
+                onClone={handleClone}
+                onView={(sched) => navigate(`/schedules/${sched.weekId}`)}
+                onEdit={(sched) => navigate(`/schedules/${sched.weekId}/edit`)}
+                onExport={() => showToast('ייצוא Excel/PDF בקרוב...', 'info')}
+                isCloning={cloningId === s._id}
+                isDeleting={deletingId === s._id}
+                isPublishing={publishingId === s._id}
+              />
+            ))}
+          </div>
+        )}
+      </PageDataBoundary>
 
       {/* FAB */}
       <button

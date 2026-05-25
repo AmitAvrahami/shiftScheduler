@@ -3,7 +3,7 @@ import { shiftDefinitionApi } from '../lib/api';
 import type { ShiftDefinition } from '../types/constraint';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
-import { PageLoader } from '../components/ui/PageLoader';
+import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 
 export default function AdminShiftDefinitionsPage() {
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
@@ -34,6 +34,8 @@ export default function AdminShiftDefinitionsPage() {
   }, []);
 
   async function loadDefinitions() {
+    setLoading(true);
+    setError('');
     try {
       const res = await shiftDefinitionApi.getActive();
       setDefinitions(res.definitions.filter((definition) => definition.isActive));
@@ -125,71 +127,76 @@ export default function AdminShiftDefinitionsPage() {
           </button>
         </div>
 
-        {error && <p className="text-red-600 mb-4">{error}</p>}
         {actionError && <p className="text-red-600 mb-4">{actionError}</p>}
-        {loading && <PageLoader text="טוען הגדרות משמרות..." />}
 
-        {!loading && definitions.length === 0 && (
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200 text-yellow-800 text-center">
-            <MaterialIcon name="warning" className="text-4xl mb-2" />
-            <p className="font-medium">לא נמצאו הגדרות משמרות פעילות.</p>
-            <p className="text-sm mt-1">יש להגדיר משמרות כדי לאתחל לוחות שבועיים.</p>
-          </div>
-        )}
+        <PageDataBoundary
+          loading={loading}
+          error={error || null}
+          onRetry={loadDefinitions}
+          loadingText="טוען הגדרות משמרות..."
+        >
+          {definitions.length === 0 && (
+            <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200 text-yellow-800 text-center">
+              <MaterialIcon name="warning" className="text-4xl mb-2" />
+              <p className="font-medium">לא נמצאו הגדרות משמרות פעילות.</p>
+              <p className="text-sm mt-1">יש להגדיר משמרות כדי לאתחל לוחות שבועיים.</p>
+            </div>
+          )}
 
-        <div className="grid gap-4">
-          {definitions.map((def) => (
-            <div
-              key={def._id}
-              className="bg-white p-4 rounded-lg shadow-sm border border-outline-variant flex justify-between items-center border-l-8"
-              style={{ borderLeftColor: def.color }}
-            >
-              <div>
-                <h3 className="font-bold text-lg text-on-surface">{def.name}</h3>
-                <div className="flex items-center gap-4 text-sm text-on-surface-variant mt-1">
-                  <span className="flex items-center gap-1">
-                    <MaterialIcon name="schedule" className="text-xs" />
-                    {def.startTime} - {def.endTime}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <MaterialIcon name="timer" className="text-xs" />
-                    {def.durationMinutes} min
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <MaterialIcon name="sort" className="text-xs" />
-                    Order: {def.orderNumber}
-                  </span>
+          <div className="grid gap-4">
+            {definitions.map((def) => (
+              <div
+                key={def._id}
+                className="bg-white p-4 rounded-lg shadow-sm border border-outline-variant flex justify-between items-center border-l-8"
+                style={{ borderLeftColor: def.color }}
+              >
+                <div>
+                  <h3 className="font-bold text-lg text-on-surface">{def.name}</h3>
+                  <div className="flex items-center gap-4 text-sm text-on-surface-variant mt-1">
+                    <span className="flex items-center gap-1">
+                      <MaterialIcon name="schedule" className="text-xs" />
+                      {def.startTime} - {def.endTime}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MaterialIcon name="timer" className="text-xs" />
+                      {def.durationMinutes} min
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MaterialIcon name="sort" className="text-xs" />
+                      Order: {def.orderNumber}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setForm(def);
+                      setEditingId(def._id);
+                      setShowForm(true);
+                    }}
+                    className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
+                    title="ערוך"
+                    disabled={deletingId === def._id}
+                  >
+                    <MaterialIcon name="edit" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(def._id)}
+                    disabled={deletingId === def._id}
+                    className="p-2 text-error hover:bg-error/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    title="מחק"
+                  >
+                    {deletingId === def._id ? (
+                      <div className="w-4 h-4 border-2 border-error border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <MaterialIcon name="delete" />
+                    )}
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setForm(def);
-                    setEditingId(def._id);
-                    setShowForm(true);
-                  }}
-                  className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-                  title="ערוך"
-                  disabled={deletingId === def._id}
-                >
-                  <MaterialIcon name="edit" />
-                </button>
-                <button
-                  onClick={() => handleDelete(def._id)}
-                  disabled={deletingId === def._id}
-                  className="p-2 text-error hover:bg-error/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait"
-                  title="מחק"
-                >
-                  {deletingId === def._id ? (
-                    <div className="w-4 h-4 border-2 border-error border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <MaterialIcon name="delete" />
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </PageDataBoundary>
 
         {showForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

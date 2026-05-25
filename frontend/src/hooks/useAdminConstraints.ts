@@ -50,9 +50,12 @@ export function useAdminConstraints() {
   const [original, setOriginal] = useState<EntryMap>({});
   const [staged, setStaged] = useState<EntryMap>({});
   const [originalSource, setOriginalSource] = useState<SourceMap>({});
-  const [isLocked, setIsLocked] = useState(false);
+  // null until loaded — false must never represent "not loaded".
+  const [isLocked, setIsLocked] = useState<boolean | null>(null);
   const [weekStatus, setWeekStatus] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [toggleLockLoading, setToggleLockLoading] = useState(false);
@@ -80,40 +83,56 @@ export function useAdminConstraints() {
     return employees.filter((e) => e.name.toLowerCase().includes(q));
   }, [employees, searchQuery]);
 
-  const loadData = useCallback(async () => {
-    setError('');
-    try {
-      const [defsRes, constraintsRes, usersRes] = await Promise.all([
-        shiftDefinitionApi.getActive(),
-        constraintApi.getAllConstraints(currentViewWeek),
-        userApi.getUsers(),
-      ]);
+  const loadData = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      // Non-silent = initial load / retry → drive the page-level loader.
+      // Silent = post-save/toggle refresh → keep the table visible.
+      if (!opts?.silent) setLoading(true);
+      setLoadError(null);
+      setError('');
+      try {
+        const [defsRes, constraintsRes, usersRes] = await Promise.all([
+          shiftDefinitionApi.getActive(),
+          constraintApi.getAllConstraints(currentViewWeek),
+          userApi.getUsers(),
+        ]);
 
-      const orig: EntryMap = {};
-      const source: SourceMap = {};
-      constraintsRes.constraints.forEach((c) => {
-        // Skip orphaned constraints whose referenced user was deleted — populate
-        // returns null for the dangling ref, and typeof null === 'object'.
-        if (!c.userId) return;
-        const uid = typeof c.userId === 'object' ? c.userId._id : c.userId;
-        if (!uid) return;
-        orig[uid] = cloneEntries(c.entries);
-        source[uid] = c.submittedVia;
-      });
+        const orig: EntryMap = {};
+        const source: SourceMap = {};
+        constraintsRes.constraints.forEach((c) => {
+          // Skip orphaned constraints whose referenced user was deleted — populate
+          // returns null for the dangling ref, and typeof null === 'object'.
+          if (!c.userId) return;
+          const uid = typeof c.userId === 'object' ? c.userId._id : c.userId;
+          if (!uid) return;
+          orig[uid] = cloneEntries(c.entries);
+          source[uid] = c.submittedVia;
+        });
 
-      setDefinitions(defsRes.definitions);
-      setEmployees(
-        usersRes.users.filter((u) => (u.role === 'employee' || u.role === 'manager') && u.isActive)
-      );
-      setOriginal(orig);
-      setStaged(structuredClone(orig));
-      setOriginalSource(source);
-      setIsLocked(constraintsRes.isLocked);
-      setWeekStatus(constraintsRes.weekStatus ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתונים');
-    }
-  }, [currentViewWeek]);
+        setDefinitions(defsRes.definitions);
+        setEmployees(
+          usersRes.users.filter(
+            (u) => (u.role === 'employee' || u.role === 'manager') && u.isActive
+          )
+        );
+        setOriginal(orig);
+        setStaged(structuredClone(orig));
+        setOriginalSource(source);
+        setIsLocked(constraintsRes.isLocked);
+        setWeekStatus(constraintsRes.weekStatus ?? null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'שגיאה בטעינת נתונים';
+        // On a silent refresh failure keep the loaded table; surface inline.
+        if (opts?.silent) setError(msg);
+        else setLoadError(msg);
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [currentViewWeek]
+  );
+
+  const reload = useCallback(() => loadData(), [loadData]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -229,7 +248,7 @@ export function useAdminConstraints() {
           constraintApi.upsertForUser(currentViewWeek, uid, staged[uid] ?? [])
         )
       );
-      await loadData();
+      await loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בשמירת השינויים');
     } finally {
@@ -264,7 +283,7 @@ export function useAdminConstraints() {
         currentViewWeek,
         isLocked ? 'force_unlocked' : 'force_locked'
       );
-      await loadData();
+      await loadData({ silent: true });
     } catch {
       setError('שגיאה בשינוי מצב הנעילה');
     } finally {
@@ -281,6 +300,9 @@ export function useAdminConstraints() {
     filteredEmployees,
     searchQuery,
     setSearchQuery,
+    loading,
+    loadError,
+    reload,
     isLocked,
     weekStatus,
     isScheduleFinalized,
