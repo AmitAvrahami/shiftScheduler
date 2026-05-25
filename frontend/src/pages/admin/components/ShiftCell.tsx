@@ -17,6 +17,8 @@ export interface ShiftCellProps {
   assignments: AdminDashboardAssignment[];
   employees: AdminDashboardEmployee[];
   shiftType: ShiftType;
+  // Density: 'full' for the editing page, 'compact' for the dashboard preview.
+  variant?: 'full' | 'compact';
   // Non-blocking soft-constraint warnings indexed by `${shiftId}|${employeeId}`
   // (PR09). Display-only — never affects assignment or publish behavior.
   warningsByCell?: Map<string, GenerateWarning[]>;
@@ -44,6 +46,7 @@ export function ShiftCell({
   assignments,
   employees,
   shiftType,
+  variant = 'full',
   warningsByCell,
   onShiftClick,
   onAssignEmployee,
@@ -57,19 +60,31 @@ export function ShiftCell({
   const canInteractWithShift = Boolean(shift && onShiftClick);
   const canAssignEmployee = Boolean(shift && onAssignEmployee);
 
+  // Static class strings selected by density (not constructed) so Tailwind emits them.
+  const isCompact = variant === 'compact';
+  const cellPad = isCompact ? 'min-h-24 p-2' : 'min-h-36 p-3';
+  const headerGap = isCompact ? 'gap-1.5' : 'gap-3';
+  const labelText = isCompact ? 'text-xs' : 'text-sm';
+  const subText = isCompact ? 'text-[10px]' : 'text-xs';
+  const badgeClass = isCompact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs';
+  const listClass = isCompact ? 'mt-2 space-y-1' : 'mt-3 space-y-2';
+  const rowClass = isCompact ? 'px-1.5 py-1 text-xs' : 'px-2 py-1.5 text-sm';
+  const emptyClass = isCompact ? 'py-2 text-[10px]' : 'py-3 text-xs';
+  const missingClass = isCompact ? 'py-1.5 text-[10px]' : 'py-2 text-xs';
+
   if (!shift) {
     return (
       <div
-        className={`min-h-36 rounded-lg border border-dashed p-3 ${STATUS_CLASSES.unknown}`}
+        className={`${cellPad} rounded-lg border border-dashed ${STATUS_CLASSES.unknown}`}
         dir="rtl"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-bold text-slate-600">{shiftLabel}</div>
-            <div className="mt-1 text-xs text-slate-400">לא הוגדרה משמרת</div>
+        <div className={`flex items-start justify-between ${headerGap}`}>
+          <div className="min-w-0">
+            <div className={`${labelText} font-bold text-slate-600 truncate`}>{shiftLabel}</div>
+            <div className={`mt-1 ${subText} text-slate-400`}>לא הוגדרה משמרת</div>
           </div>
           <span
-            className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES.unknown}`}
+            className={`shrink-0 rounded-full ${badgeClass} font-bold ${STATUS_BADGE_CLASSES.unknown}`}
           >
             חסר
           </span>
@@ -80,7 +95,7 @@ export function ShiftCell({
 
   return (
     <div
-      className={`min-h-36 rounded-lg border p-3 shadow-sm transition ${STATUS_CLASSES[status]} ${
+      className={`${cellPad} rounded-lg border shadow-sm transition ${STATUS_CLASSES[status]} ${
         canInteractWithShift ? 'cursor-pointer hover:shadow-md' : ''
       }`}
       dir="rtl"
@@ -95,21 +110,21 @@ export function ShiftCell({
         }
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-bold">{shiftLabel}</div>
-          <div className="mt-1 text-xs opacity-75">
+      <div className={`flex items-start justify-between ${headerGap}`}>
+        <div className="min-w-0">
+          <div className={`${labelText} font-bold truncate`}>{shiftLabel}</div>
+          <div className={`mt-1 ${subText} opacity-75`}>
             {assignedCount}/{requiredCount} משובצים
           </div>
         </div>
         <span
-          className={`rounded-full px-2 py-1 text-xs font-bold ${STATUS_BADGE_CLASSES[status]}`}
+          className={`shrink-0 rounded-full ${badgeClass} font-bold ${STATUS_BADGE_CLASSES[status]}`}
         >
           {getStatusLabel(status)}
         </span>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className={listClass}>
         {employees.length > 0 ? (
           employees.map((employee) => {
             const assignment = assignments.find((item) => item.employeeId === employee.id);
@@ -127,7 +142,7 @@ export function ShiftCell({
             return (
               <div
                 key={`${shift.id}-${employee.id}`}
-                className="flex items-center justify-between gap-2 rounded-md border border-white/70 bg-white/75 px-2 py-1.5 text-sm text-slate-700"
+                className={`flex items-center justify-between gap-2 rounded-md border border-white/70 bg-white/75 ${rowClass} text-slate-700`}
               >
                 <span className="flex min-w-0 items-center gap-1">
                   {warningTooltip && (
@@ -158,7 +173,9 @@ export function ShiftCell({
             );
           })
         ) : (
-          <div className="rounded-md border border-dashed border-current/20 bg-white/50 px-2 py-3 text-center text-xs font-medium opacity-70">
+          <div
+            className={`rounded-md border border-dashed border-current/20 bg-white/50 px-2 ${emptyClass} text-center font-medium opacity-70`}
+          >
             אין עובדים משובצים
           </div>
         )}
@@ -168,7 +185,7 @@ export function ShiftCell({
             key={`${shift.id}-missing-${index}`}
             type="button"
             disabled={!canAssignEmployee}
-            className="flex w-full items-center justify-center rounded-md border border-dashed border-red-300 bg-white/70 px-2 py-2 text-xs font-bold text-red-600 transition enabled:hover:bg-red-100 disabled:cursor-default"
+            className={`flex w-full items-center justify-center rounded-md border border-dashed border-red-300 bg-white/70 px-2 ${missingClass} font-bold text-red-600 transition enabled:hover:bg-red-100 disabled:cursor-default`}
             onClick={(event) => {
               event.stopPropagation();
               onAssignEmployee?.(shift.id);

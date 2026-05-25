@@ -1,32 +1,19 @@
 import { useNavigate } from 'react-router-dom';
 import MaterialIcon from '../../../components/MaterialIcon';
-import type { GenerateResult } from '../../../lib/api';
 import type { Toast } from '../types';
 
 interface QuickActionsPanelProps {
   weekId: string;
   onToast: (t: Toast) => void;
   onOpenGenerateWizard: () => void;
-  onGenerateDemo: () => Promise<GenerateResult | undefined>;
-  isGeneratingDemo: boolean;
 }
 
 export function QuickActionsPanel({
   weekId,
   onToast,
   onOpenGenerateWizard,
-  onGenerateDemo,
-  isGeneratingDemo,
 }: QuickActionsPanelProps) {
   const navigate = useNavigate();
-
-  async function handleGenerateDemo() {
-    if (isGeneratingDemo) return;
-    const result = await onGenerateDemo();
-    if (result) {
-      onToast({ message: 'סידור דמו נוצר בהצלחה', type: 'success' });
-    }
-  }
 
   const actions = [
     {
@@ -36,14 +23,6 @@ export function QuickActionsPanel({
       onClick: onOpenGenerateWizard,
       subtitle: 'אוטומציה מלאה',
       isPrimary: true,
-    },
-    {
-      id: 'generate-demo',
-      label: 'צור סידור דמו',
-      icon: 'auto_awesome',
-      onClick: handleGenerateDemo,
-      subtitle: 'הפקה באמצעות אלגוריתם CSP',
-      isPrimary: false,
     },
     {
       id: 'view_week',
@@ -83,46 +62,35 @@ export function QuickActionsPanel({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {actions.map((a) => {
             const isGenerate = a.id === 'generate';
-            const isGenerateDemo = a.id === 'generate-demo';
             const isEmergency = a.id === 'emergency';
-            const isLoading = isGenerateDemo && isGeneratingDemo;
 
             return (
               <button
                 key={a.id}
                 onClick={a.onClick}
-                disabled={isLoading}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all border font-bold min-h-[56px] ${
-                  isLoading
-                    ? 'bg-[#056AE5]/80 text-white border-transparent cursor-wait'
-                    : isGenerate
-                      ? 'bg-[#056AE5] text-white border-transparent hover:bg-[#0457B8] shadow-md'
-                      : isEmergency
-                        ? 'bg-white text-error border-error/40 hover:bg-error/5 hover:border-error'
-                        : 'bg-white text-[#2B358F] border-[#e2e8f0] hover:bg-[#F1F8FF] hover:border-[#056AE5]'
+                  isGenerate
+                    ? 'bg-[#056AE5] text-white border-transparent hover:bg-[#0457B8] shadow-md'
+                    : isEmergency
+                      ? 'bg-white text-error border-error/40 hover:bg-error/5 hover:border-error'
+                      : 'bg-white text-[#2B358F] border-[#e2e8f0] hover:bg-[#F1F8FF] hover:border-[#056AE5]'
                 }`}
               >
                 <div
                   className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                    isLoading || isGenerate
+                    isGenerate
                       ? 'bg-white/20 text-white'
                       : isEmergency
                         ? 'bg-error/10 text-error'
                         : 'bg-[#056AE5]/10 text-[#056AE5]'
                   }`}
                 >
-                  {isLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <MaterialIcon name={a.icon} className="text-[18px]" />
-                  )}
+                  <MaterialIcon name={a.icon} className="text-[18px]" />
                 </div>
                 <div className="flex flex-col items-start text-right overflow-hidden">
-                  <span className="text-sm font-bold whitespace-nowrap">
-                    {isLoading ? 'מעבד...' : a.label}
-                  </span>
+                  <span className="text-sm font-bold whitespace-nowrap">{a.label}</span>
                   <span
-                    className={`text-[10px] font-medium opacity-70 ${isGenerate && !isLoading ? 'text-white' : 'text-on-surface-variant'}`}
+                    className={`text-[10px] font-medium opacity-70 ${isGenerate ? 'text-white' : 'text-on-surface-variant'}`}
                   >
                     {a.subtitle}
                   </span>

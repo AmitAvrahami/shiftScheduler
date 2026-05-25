@@ -17,6 +17,7 @@ import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
 import { QualityScorePanel } from './admin/components/QualityScorePanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
+import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 import { scheduleApi } from '../lib/api';
 import type { GenerateResult } from '../lib/api';
 
@@ -36,16 +37,8 @@ export default function AdminDashboardPage() {
   } catch {
     weekIdError = `מזהה שבוע לא תקין: ${weekId}`;
   }
-  const {
-    dashboard,
-    loading,
-    error,
-    actions,
-    generateResult,
-    clearGenerateResult,
-    actionLoading,
-    refresh,
-  } = useAdminDashboard(weekId);
+  const { dashboard, loading, error, generateResult, clearGenerateResult, refresh } =
+    useAdminDashboard(weekId);
   const employees = (dashboard?.employees ?? []).filter((u) => u.isActive);
   const scheduleStats = dashboard ? getScheduleStats(dashboard) : null;
   const visibleResult = wizardResult ?? generateResult;
@@ -69,69 +62,71 @@ export default function AdminDashboardPage() {
 
         {!weekIdError && (
           <>
-            {/* Quick Actions at the top */}
-            <QuickActionsPanel
-              weekId={weekId}
-              onToast={setToast}
-              onOpenGenerateWizard={() => setWizardOpen(true)}
-              onGenerateDemo={actions.generateDemoSchedule}
-              isGeneratingDemo={actionLoading.generatingDemo}
-            />
-
-            {visibleResult && (
-              <GeneratedSchedulePanel
-                result={visibleResult}
-                employees={employees}
-                onClose={handleCloseResult}
+            <PageDataBoundary
+              loading={loading && !dashboard}
+              error={!dashboard ? error : null}
+              onRetry={refresh}
+              loadingText="טוען נתוני דאשבורד..."
+            >
+              {/* Quick Actions at the top */}
+              <QuickActionsPanel
+                weekId={weekId}
+                onToast={setToast}
+                onOpenGenerateWizard={() => setWizardOpen(true)}
               />
-            )}
 
-            {loading && !dashboard && (
-              <div className="bg-white border border-[#e2e8f0] rounded-xl p-6 text-sm text-on-surface-variant shadow-bezeq-card">
-                טוען נתוני דאשבורד...
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Main content column */}
-              <div className="xl:col-span-2 space-y-6">
-                {dashboard && (
-                  <ScheduleBoard
-                    shifts={dashboard.shifts}
-                    assignments={dashboard.assignments}
-                    employees={employees}
-                    warnings={visibleResult?.warnings ?? dashboard.generationWarnings}
-                  />
-                )}
-                <ShiftOverviewPanel
-                  weekId={weekId}
+              {visibleResult && (
+                <GeneratedSchedulePanel
+                  result={visibleResult}
                   employees={employees}
-                  shifts={dashboard?.shifts ?? []}
-                  assignments={dashboard?.assignments ?? []}
+                  onClose={handleCloseResult}
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <BroadcastCenterPanel recipientCount={employees.length} onToast={setToast} />
-                  <MissingConstraintsPanel missingUsers={dashboard?.missingConstraints ?? null} />
+              )}
+
+              {/* Refresh failure while data is already loaded — surface inline,
+                  keep the board visible. */}
+              {error && dashboard && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                {/* Main content column */}
+                <div className="xl:col-span-2 space-y-6">
+                  {dashboard && (
+                    <ScheduleBoard
+                      shifts={dashboard.shifts}
+                      assignments={dashboard.assignments}
+                      employees={employees}
+                      warnings={visibleResult?.warnings ?? dashboard.generationWarnings}
+                      variant="compact"
+                    />
+                  )}
+                  <ShiftOverviewPanel
+                    weekId={weekId}
+                    employees={employees}
+                    shifts={dashboard?.shifts ?? []}
+                    assignments={dashboard?.assignments ?? []}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <BroadcastCenterPanel recipientCount={employees.length} onToast={setToast} />
+                    <MissingConstraintsPanel missingUsers={dashboard?.missingConstraints ?? null} />
+                  </div>
+                </div>
+
+                {/* Side content column */}
+                <div className="xl:col-span-1 space-y-6">
+                  <DashboardSummaryPanel
+                    weekNumber={weekNumber ?? 0}
+                    totalUsers={employees.length}
+                    stats={scheduleStats}
+                  />
+                  <QualityScorePanel score={visibleGenerationScore} />
+                  <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
                 </div>
               </div>
-
-              {/* Side content column */}
-              <div className="xl:col-span-1 space-y-6">
-                <DashboardSummaryPanel
-                  weekNumber={weekNumber ?? 0}
-                  totalUsers={employees.length}
-                  stats={scheduleStats}
-                />
-                <QualityScorePanel score={visibleGenerationScore} />
-                <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
-              </div>
-            </div>
+            </PageDataBoundary>
           </>
         )}
       </div>
