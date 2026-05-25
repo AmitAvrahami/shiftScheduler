@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import MaterialIcon from '../../../components/MaterialIcon';
 import { formatIsraelTime } from '../../../utils/weekUtils';
 import type { AdminDashboardDTO } from '../types';
+
+const COLLAPSED_COUNT = 5;
 
 type DashboardAuditLog = AdminDashboardDTO['auditLogs'][number];
 
@@ -43,6 +46,10 @@ const AUDIT_ICONS: Record<AuditType, string> = {
 
 export function AuditLogPanel({ logs }: { logs: DashboardAuditLog[] | null }) {
   const loading = logs === null;
+  const [expanded, setExpanded] = useState(false);
+
+  const canToggle = !loading && logs.length > COLLAPSED_COUNT;
+  const visibleLogs = loading ? [] : expanded ? logs : logs.slice(0, COLLAPSED_COUNT);
 
   return (
     <section className="flex flex-col h-full">
@@ -50,9 +57,14 @@ export function AuditLogPanel({ logs }: { logs: DashboardAuditLog[] | null }) {
         <h2 className="text-xl font-bold text-[#010636] border-r-4 border-[#056AE5] pr-3">
           פעילות אחרונה
         </h2>
-        <button className="text-[12px] text-secondary hover:underline font-bold transition-colors">
-          צפה בהכל
-        </button>
+        {canToggle && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-[12px] text-secondary hover:underline font-bold transition-colors"
+          >
+            {expanded ? 'הצג פחות' : 'צפה בהכל'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-bezeq-card">
@@ -74,15 +86,15 @@ export function AuditLogPanel({ logs }: { logs: DashboardAuditLog[] | null }) {
             אין פעילות עדיין
           </div>
         ) : (
-          logs.map((entry, i) => {
+          visibleLogs.map((entry, i) => {
             const type = actionToType(entry.action);
-            const label = ACTION_LABELS[entry.action] ?? entry.action;
+            const label = ACTION_LABELS[entry.action] ?? 'פעולה במערכת';
             const performer = 'מערכת';
             const timeStr = formatIsraelTime(entry.createdAt);
             return (
               <div
                 key={entry.id}
-                className={`flex items-center gap-3 px-md py-3 hover:bg-surface-container-low transition-colors ${i < logs.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
+                className={`flex items-center gap-3 px-md py-3 hover:bg-surface-container-low transition-colors ${i < visibleLogs.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
               >
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
