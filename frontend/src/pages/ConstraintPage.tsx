@@ -5,6 +5,7 @@ import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import ShiftCardConstraint, { type PartialValue } from '../components/ShiftCardConstraint';
 import SuccessOverlay from '../components/SuccessOverlay';
+import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 import { validatePartialRange } from '../utils/availabilityPreview';
 import {
   getAllowedWeekId,
@@ -25,6 +26,49 @@ type CellValue = {
 
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
+// Demo fallback shown when no shift definitions exist yet.
+const MOCK_DEFINITIONS: ShiftDefinition[] = [
+  {
+    _id: 'mock-1',
+    name: 'משמרת בוקר',
+    startTime: '08:00',
+    endTime: '16:00',
+    color: '#E3F2FD',
+    orderNumber: 1,
+    durationMinutes: 480,
+    crossesMidnight: false,
+    isActive: true,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    requiredStaffCount: 2,
+  },
+  {
+    _id: 'mock-2',
+    name: 'משמרת צהריים',
+    startTime: '16:00',
+    endTime: '00:00',
+    color: '#FFF3E0',
+    orderNumber: 2,
+    durationMinutes: 480,
+    crossesMidnight: false,
+    isActive: true,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    requiredStaffCount: 2,
+  },
+  {
+    _id: 'mock-3',
+    name: 'משמרת לילה',
+    startTime: '00:00',
+    endTime: '08:00',
+    color: '#F3E5F5',
+    orderNumber: 3,
+    durationMinutes: 480,
+    crossesMidnight: false,
+    isActive: true,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    requiredStaffCount: 1,
+  },
+];
+
 export default function ConstraintPage() {
   const weekId = getAllowedWeekId();
   const weekDates = getWeekDates(weekId);
@@ -32,100 +76,72 @@ export default function ConstraintPage() {
   const [definitions, setDefinitions] = useState<ShiftDefinition[]>([]);
   // key = "definitionId:YYYY-MM-DD". Absence of a key means available (default).
   const [cells, setCells] = useState<Record<string, CellValue>>({});
-  const [isLocked, setIsLocked] = useState(false);
+  // null until loaded — false must never represent "not loaded".
+  const [isLocked, setIsLocked] = useState<boolean | null>(null);
   const [lockReason, setLockReason] = useState<'deadline' | 'schedule' | null>(null);
   const [deadline, setDeadline] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [validationError, setValidationError] = useState('');
   const [notes, setNotes] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  useEffect(() => {
-    Promise.all([shiftDefinitionApi.getActive(), constraintApi.getConstraints(weekId)])
-      .then(([defsRes, constraintRes]) => {
-        let definitions = defsRes.definitions;
+  async function loadData() {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const [defsRes, constraintRes] = await Promise.all([
+        shiftDefinitionApi.getActive(),
+        constraintApi.getConstraints(weekId),
+      ]);
 
-        // If no definitions exist, inject mock data for testing/demo purposes
-        if (definitions.length === 0) {
-          definitions = [
-            {
-              _id: 'mock-1',
-              name: 'משמרת בוקר',
-              startTime: '08:00',
-              endTime: '16:00',
-              color: '#E3F2FD',
-              orderNumber: 1,
-              durationMinutes: 480,
-              crossesMidnight: false,
-              isActive: true,
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-              requiredStaffCount: 2,
-            },
-            {
-              _id: 'mock-2',
-              name: 'משמרת צהריים',
-              startTime: '16:00',
-              endTime: '00:00',
-              color: '#FFF3E0',
-              orderNumber: 2,
-              durationMinutes: 480,
-              crossesMidnight: false,
-              isActive: true,
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-              requiredStaffCount: 2,
-            },
-            {
-              _id: 'mock-3',
-              name: 'משמרת לילה',
-              startTime: '00:00',
-              endTime: '08:00',
-              color: '#F3E5F5',
-              orderNumber: 3,
-              durationMinutes: 480,
-              crossesMidnight: false,
-              isActive: true,
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-              requiredStaffCount: 1,
-            },
-          ];
-        }
+      // Fall back to demo definitions when none are configured yet.
+      const definitions = defsRes.definitions.length === 0 ? MOCK_DEFINITIONS : defsRes.definitions;
 
-        setDefinitions(definitions);
-        setIsLocked(constraintRes.isLocked);
-        if (constraintRes.isLocked) {
-          setLockReason(
-            constraintRes.weekStatus && constraintRes.weekStatus !== 'open'
-              ? 'schedule'
-              : 'deadline'
-          );
-        } else {
-          setLockReason(null);
-        }
-        setDeadline(new Date(constraintRes.deadline));
+      setDefinitions(definitions);
+      setIsLocked(constraintRes.isLocked);
+      if (constraintRes.isLocked) {
+        setLockReason(
+          constraintRes.weekStatus && constraintRes.weekStatus !== 'open' ? 'schedule' : 'deadline'
+        );
+      } else {
+        setLockReason(null);
+      }
+      setDeadline(new Date(constraintRes.deadline));
 
-        if (constraintRes.constraint) {
-          const initial: Record<string, CellValue> = {};
-          for (const entry of constraintRes.constraint.entries) {
-            // GET returns ISO dates; normalize so keys match render keys (toDateKey).
-            const key = `${entry.definitionId}:${normalizeConstraintDate(entry.date)}`;
-            if (entry.availabilityType === 'partial') {
-              initial[key] = {
-                status: 'partial',
-                startTime: entry.startTime,
-                endTime: entry.endTime,
-                note: entry.note,
-              };
-            } else if (!entry.canWork) {
-              // Legacy entries (no availabilityType) and explicit unavailable both load as unavailable.
-              initial[key] = { status: 'unavailable' };
-            }
-            // Available entries (canWork true, not partial) are omitted — absence = available.
+      if (constraintRes.constraint) {
+        const initial: Record<string, CellValue> = {};
+        for (const entry of constraintRes.constraint.entries) {
+          // GET returns ISO dates; normalize so keys match render keys (toDateKey).
+          const key = `${entry.definitionId}:${normalizeConstraintDate(entry.date)}`;
+          if (entry.availabilityType === 'partial') {
+            initial[key] = {
+              status: 'partial',
+              startTime: entry.startTime,
+              endTime: entry.endTime,
+              note: entry.note,
+            };
+          } else if (!entry.canWork) {
+            // Legacy entries (no availabilityType) and explicit unavailable both load as unavailable.
+            initial[key] = { status: 'unavailable' };
           }
-          setCells(initial);
+          // Available entries (canWork true, not partial) are omitted — absence = available.
         }
-      })
-      .catch(() => setLoadError('שגיאה בטעינת האילוצים'));
+        setCells(initial);
+      }
+    } catch {
+      setLoadError('שגיאה בטעינת האילוצים');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    loadData();
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekId]);
 
   function handleCellChange(
@@ -221,149 +237,150 @@ export default function ConstraintPage() {
 
   return (
     <MainLayout title="הגשת אילוצים שבועית" subtitle={<WeekLabel weekId={weekId} />}>
-      <div className="max-w-[1200px] mx-auto pb-12">
-        {/* Deadline Banner */}
-        {isLocked ? (
-          <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-5 py-4 flex items-center gap-3">
-            <MaterialIcon name="lock" className="text-red-600" />
-            <div>
-              <p className="font-semibold text-red-700">הגשת האילוצים נעולה</p>
-              {lockReason === 'schedule' ? (
-                <p className="text-sm text-red-500">
-                  השבוע עבר לשלב הבא — לא ניתן עוד לשנות אילוצים
-                </p>
-              ) : (
-                formattedDeadline && (
-                  <p className="text-sm text-red-500">הדדליין עבר: {formattedDeadline}</p>
-                )
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 px-5 py-4 flex items-center gap-3 shadow-sm">
-            <MaterialIcon name="info" className="text-blue-600" />
-            <div>
-              <p className="font-semibold text-blue-700">הגשת אילוצים פתוחה</p>
-              {formattedDeadline && (
-                <p className="text-sm text-blue-500">יש להגיש עד: {formattedDeadline}</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Header Section */}
-        <div className="mb-xl flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-on-surface mb-xs">סמן את זמינותך למשמרות</h2>
-            <p className="text-on-surface-variant opacity-70">
-              לכל משמרת בחר/י: זמין, לא זמין או זמין חלקית לשבוע הקרוב.
-            </p>
-          </div>
-          <div className="flex gap-sm w-full md:w-auto">
-            <button
-              onClick={handleClear}
-              disabled={isLocked}
-              className="flex-1 md:flex-none bg-surface-container-high hover:bg-surface-variant text-on-surface font-bold py-sm px-md rounded-lg transition-colors h-12 disabled:opacity-50"
-            >
-              ניקוי בחירות
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={isLocked || saveStatus === 'saving'}
-              className="flex-1 md:flex-none bg-gradient-to-r from-[#101B79] to-[#056AE5] hover:opacity-90 text-white font-bold py-sm px-lg rounded-lg transition-all shadow-bezeq-float h-12 flex items-center justify-center gap-xs disabled:opacity-50"
-            >
-              <MaterialIcon name="send" />
-              {saveStatus === 'saving' ? 'שולח...' : 'שלח אילוצים'}
-            </button>
-          </div>
-        </div>
-
-        {loadError && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
-            {loadError}
-          </div>
-        )}
-
-        {saveStatus === 'saved' && (
-          <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-700 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-            <MaterialIcon name="check_circle" className="text-green-600" />
-            האילוצים נשמרו בהצלחה
-          </div>
-        )}
-
-        {validationError && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm flex items-center gap-2">
-            <MaterialIcon name="error" className="text-red-600" />
-            {validationError}
-          </div>
-        )}
-
-        {saveStatus === 'error' && !validationError && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
-            אירעה שגיאה בשמירת האילוצים. אנא נסה שוב
-          </div>
-        )}
-
-        {/* Vertical Day Cards Layout */}
-        <div className="flex flex-col gap-md">
-          {weekDates.map((date, dayIdx) => {
-            const dateKey = toDateKey(date);
-            return (
-              <div
-                key={dateKey}
-                className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg"
-              >
-                <div className="w-full md:w-32 shrink-0 border-b md:border-b-0 md:border-l border-outline-variant pb-md md:pb-0 md:pl-md">
-                  <h3 className="text-lg font-black text-primary">{DAY_LABELS[dayIdx]}</h3>
-                  <p className="text-xs text-on-surface-variant font-bold opacity-60">
-                    {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(
-                      date
-                    )}
+      <PageDataBoundary
+        loading={loading}
+        error={loadError || null}
+        onRetry={loadData}
+        loadingText="טוען אילוצים..."
+      >
+        <div className="max-w-[1200px] mx-auto pb-12">
+          {/* Deadline Banner */}
+          {isLocked ? (
+            <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-5 py-4 flex items-center gap-3">
+              <MaterialIcon name="lock" className="text-red-600" />
+              <div>
+                <p className="font-semibold text-red-700">הגשת האילוצים נעולה</p>
+                {lockReason === 'schedule' ? (
+                  <p className="text-sm text-red-500">
+                    השבוע עבר לשלב הבא — לא ניתן עוד לשנות אילוצים
                   </p>
-                </div>
-                <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">
-                  {definitions.map((def) => {
-                    const cellKey = `${def._id}:${dateKey}`;
-                    const cell = cells[cellKey];
-                    return (
-                      <ShiftCardConstraint
-                        key={def._id}
-                        def={def}
-                        status={cell?.status ?? 'available'}
-                        partial={
-                          cell?.status === 'partial'
-                            ? {
-                                startTime: cell.startTime ?? def.startTime,
-                                endTime: cell.endTime ?? def.endTime,
-                                note: cell.note,
-                              }
-                            : undefined
-                        }
-                        isLocked={isLocked}
-                        onChange={(status, partial) =>
-                          handleCellChange(def._id, dateKey, status, partial)
-                        }
-                      />
-                    );
-                  })}
-                </div>
+                ) : (
+                  formattedDeadline && (
+                    <p className="text-sm text-red-500">הדדליין עבר: {formattedDeadline}</p>
+                  )
+                )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          ) : (
+            <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 px-5 py-4 flex items-center gap-3 shadow-sm">
+              <MaterialIcon name="info" className="text-blue-600" />
+              <div>
+                <p className="font-semibold text-blue-700">הגשת אילוצים פתוחה</p>
+                {formattedDeadline && (
+                  <p className="text-sm text-blue-500">יש להגיש עד: {formattedDeadline}</p>
+                )}
+              </div>
+            </div>
+          )}
 
-        {/* Remarks Section */}
-        <div className="mt-xl bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-lg">
-          <h3 className="text-lg font-black text-on-surface mb-md">הערות לבקשה</h3>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={isLocked}
-            className="w-full bg-surface-container-low border border-outline-variant rounded-xl p-md text-on-surface focus:ring-4 focus:ring-[#056AE5]/20 focus:border-[#056AE5] transition-all resize-none h-24 disabled:opacity-50"
-            placeholder="הוסף הערות מיוחדות כאן (למשל: אירוע משפחתי, לימודים...)"
-          />
+          {/* Header Section */}
+          <div className="mb-xl flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-on-surface mb-xs">סמן את זמינותך למשמרות</h2>
+              <p className="text-on-surface-variant opacity-70">
+                לכל משמרת בחר/י: זמין, לא זמין או זמין חלקית לשבוע הקרוב.
+              </p>
+            </div>
+            <div className="flex gap-sm w-full md:w-auto">
+              <button
+                onClick={handleClear}
+                disabled={!!isLocked}
+                className="flex-1 md:flex-none bg-surface-container-high hover:bg-surface-variant text-on-surface font-bold py-sm px-md rounded-lg transition-colors h-12 disabled:opacity-50"
+              >
+                ניקוי בחירות
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={isLocked || saveStatus === 'saving'}
+                className="flex-1 md:flex-none bg-gradient-to-r from-[#101B79] to-[#056AE5] hover:opacity-90 text-white font-bold py-sm px-lg rounded-lg transition-all shadow-bezeq-float h-12 flex items-center justify-center gap-xs disabled:opacity-50"
+              >
+                <MaterialIcon name="send" />
+                {saveStatus === 'saving' ? 'שולח...' : 'שלח אילוצים'}
+              </button>
+            </div>
+          </div>
+
+          {saveStatus === 'saved' && (
+            <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-700 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+              <MaterialIcon name="check_circle" className="text-green-600" />
+              האילוצים נשמרו בהצלחה
+            </div>
+          )}
+
+          {validationError && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm flex items-center gap-2">
+              <MaterialIcon name="error" className="text-red-600" />
+              {validationError}
+            </div>
+          )}
+
+          {saveStatus === 'error' && !validationError && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
+              אירעה שגיאה בשמירת האילוצים. אנא נסה שוב
+            </div>
+          )}
+
+          {/* Vertical Day Cards Layout */}
+          <div className="flex flex-col gap-md">
+            {weekDates.map((date, dayIdx) => {
+              const dateKey = toDateKey(date);
+              return (
+                <div
+                  key={dateKey}
+                  className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg"
+                >
+                  <div className="w-full md:w-32 shrink-0 border-b md:border-b-0 md:border-l border-outline-variant pb-md md:pb-0 md:pl-md">
+                    <h3 className="text-lg font-black text-primary">{DAY_LABELS[dayIdx]}</h3>
+                    <p className="text-xs text-on-surface-variant font-bold opacity-60">
+                      {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(
+                        date
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">
+                    {definitions.map((def) => {
+                      const cellKey = `${def._id}:${dateKey}`;
+                      const cell = cells[cellKey];
+                      return (
+                        <ShiftCardConstraint
+                          key={def._id}
+                          def={def}
+                          status={cell?.status ?? 'available'}
+                          partial={
+                            cell?.status === 'partial'
+                              ? {
+                                  startTime: cell.startTime ?? def.startTime,
+                                  endTime: cell.endTime ?? def.endTime,
+                                  note: cell.note,
+                                }
+                              : undefined
+                          }
+                          isLocked={!!isLocked}
+                          onChange={(status, partial) =>
+                            handleCellChange(def._id, dateKey, status, partial)
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Remarks Section */}
+          <div className="mt-xl bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-lg">
+            <h3 className="text-lg font-black text-on-surface mb-md">הערות לבקשה</h3>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={!!isLocked}
+              className="w-full bg-surface-container-low border border-outline-variant rounded-xl p-md text-on-surface focus:ring-4 focus:ring-[#056AE5]/20 focus:border-[#056AE5] transition-all resize-none h-24 disabled:opacity-50"
+              placeholder="הוסף הערות מיוחדות כאן (למשל: אירוע משפחתי, לימודים...)"
+            />
+          </div>
         </div>
-      </div>
+      </PageDataBoundary>
       {showSuccessModal && <SuccessOverlay onClose={() => setShowSuccessModal(false)} />}
     </MainLayout>
   );

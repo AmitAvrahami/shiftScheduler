@@ -16,6 +16,7 @@ import {
   type Schedule,
 } from '../../lib/api';
 import { WeekLabel } from '../../components/WeekLabel';
+import { PageDataBoundary } from '../../components/ui/PageDataBoundary';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export default function AdminWeeklyStaffingPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [scheduleStatus, setScheduleStatus] = useState<Schedule['status'] | null>(null);
   const [definitionNames, setDefinitionNames] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -199,109 +200,95 @@ export default function AdminWeeklyStaffingPage() {
         )}
       </div>
 
-      {/* Read-only banner */}
-      {isReadOnly && (
-        <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex items-center gap-2">
-          <MaterialIcon name="lock" className="text-amber-500 text-base shrink-0" />
-          לא ניתן לערוך תקן משמרות לשבוע שנמצא בתהליך יצירה, פורסם או הועבר לארכיון
-        </div>
-      )}
+      <PageDataBoundary
+        loading={loading}
+        error={error}
+        onRetry={loadData}
+        loadingText="טוען משמרות..."
+      >
+        {/* Read-only banner */}
+        {isReadOnly && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex items-center gap-2">
+            <MaterialIcon name="lock" className="text-amber-500 text-base shrink-0" />
+            לא ניתן לערוך תקן משמרות לשבוע שנמצא בתהליך יצירה, פורסם או הועבר לארכיון
+          </div>
+        )}
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-10 h-10 border-4 border-[#056AE5] border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
+        {/* Empty state */}
+        {shifts.length === 0 && !isReadOnly && (
+          <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 rounded-2xl gap-4">
+            <MaterialIcon name="calendar_today" className="text-slate-300 text-5xl" />
+            <p className="text-slate-500 font-medium">לא נמצאו משמרות לשבוע זה</p>
+            <button
+              onClick={handleInitialize}
+              disabled={initializing}
+              className="flex items-center gap-2 px-5 py-2 bg-[#056AE5] text-white rounded-full font-bold hover:bg-[#0457B8] transition-colors text-sm disabled:opacity-60 disabled:cursor-wait"
+            >
+              {initializing ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <MaterialIcon name="add_circle" />
+              )}
+              אתחל משמרות לשבוע
+            </button>
+          </div>
+        )}
 
-      {/* Error */}
-      {!loading && error && (
-        <div className="p-6 bg-red-50 border border-red-100 rounded-2xl text-center">
-          <MaterialIcon name="error" className="text-red-400 text-4xl mb-2" />
-          <p className="text-red-700 mb-4">{error}</p>
-          <button
-            onClick={loadData}
-            className="px-4 py-2 bg-red-600 text-white rounded-full font-bold hover:bg-red-700 transition-colors text-sm"
-          >
-            נסה שוב
-          </button>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && !error && shifts.length === 0 && !isReadOnly && (
-        <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 rounded-2xl gap-4">
-          <MaterialIcon name="calendar_today" className="text-slate-300 text-5xl" />
-          <p className="text-slate-500 font-medium">לא נמצאו משמרות לשבוע זה</p>
-          <button
-            onClick={handleInitialize}
-            disabled={initializing}
-            className="flex items-center gap-2 px-5 py-2 bg-[#056AE5] text-white rounded-full font-bold hover:bg-[#0457B8] transition-colors text-sm disabled:opacity-60 disabled:cursor-wait"
-          >
-            {initializing ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <MaterialIcon name="add_circle" />
-            )}
-            אתחל משמרות לשבוע
-          </button>
-        </div>
-      )}
-
-      {/* Shift grid */}
-      {!loading && !error && shifts.length > 0 && (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid grid-cols-7 min-w-[700px]">
-            {weekDates.map((date, i) => {
-              const dateKey = toDateKey(date);
-              const dayShifts = shiftsByDate[dateKey] ?? [];
-              const isWeekend = i === 5 || i === 6;
-              return (
-                <div
-                  key={dateKey}
-                  className={`${i < 6 ? 'border-l border-slate-100' : ''} ${isWeekend ? 'bg-blue-50/30' : ''}`}
-                >
-                  {/* Day header */}
+        {/* Shift grid */}
+        {shifts.length > 0 && (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="grid grid-cols-7 min-w-[700px]">
+              {weekDates.map((date, i) => {
+                const dateKey = toDateKey(date);
+                const dayShifts = shiftsByDate[dateKey] ?? [];
+                const isWeekend = i === 5 || i === 6;
+                return (
                   <div
-                    className={`p-3 text-center border-b border-slate-100 ${isWeekend ? 'bg-blue-50' : 'bg-slate-50'}`}
+                    key={dateKey}
+                    className={`${i < 6 ? 'border-l border-slate-100' : ''} ${isWeekend ? 'bg-blue-50/30' : ''}`}
                   >
-                    <div className="text-xs font-bold text-slate-700">{HEBREW_DAYS[i]}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {date.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
+                    {/* Day header */}
+                    <div
+                      className={`p-3 text-center border-b border-slate-100 ${isWeekend ? 'bg-blue-50' : 'bg-slate-50'}`}
+                    >
+                      <div className="text-xs font-bold text-slate-700">{HEBREW_DAYS[i]}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {date.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}
+                      </div>
+                    </div>
+
+                    {/* Shift cells */}
+                    <div className="p-2 flex flex-col gap-2">
+                      {dayShifts.length === 0 ? (
+                        <div className="text-center text-[11px] text-slate-300 py-4">—</div>
+                      ) : (
+                        dayShifts.map((shift) => (
+                          <ShiftRequirementCell
+                            key={shift._id}
+                            shift={shift}
+                            name={definitionNames.get(shift.definitionId) ?? null}
+                            draft={drafts[shift._id]}
+                            isSaving={savingId === shift._id}
+                            isReadOnly={isReadOnly}
+                            onChange={(val) => setDrafts((prev) => ({ ...prev, [shift._id]: val }))}
+                            onFocus={() =>
+                              setDrafts((prev) => ({
+                                ...prev,
+                                [shift._id]: String(shift.requiredCount),
+                              }))
+                            }
+                            onSave={() => handleSave(shift._id)}
+                          />
+                        ))
+                      )}
                     </div>
                   </div>
-
-                  {/* Shift cells */}
-                  <div className="p-2 flex flex-col gap-2">
-                    {dayShifts.length === 0 ? (
-                      <div className="text-center text-[11px] text-slate-300 py-4">—</div>
-                    ) : (
-                      dayShifts.map((shift) => (
-                        <ShiftRequirementCell
-                          key={shift._id}
-                          shift={shift}
-                          name={definitionNames.get(shift.definitionId) ?? null}
-                          draft={drafts[shift._id]}
-                          isSaving={savingId === shift._id}
-                          isReadOnly={isReadOnly}
-                          onChange={(val) => setDrafts((prev) => ({ ...prev, [shift._id]: val }))}
-                          onFocus={() =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [shift._id]: String(shift.requiredCount),
-                            }))
-                          }
-                          onSave={() => handleSave(shift._id)}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </PageDataBoundary>
 
       {/* Toast */}
       {toast && (
