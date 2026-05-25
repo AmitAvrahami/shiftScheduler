@@ -121,6 +121,7 @@ aligned with the real CSP scheduling flow:
   (AdminDashboardPage preview + ScheduleBoardPage).
 
 Decisions / notes:
+
 - Backend demo endpoint (`scheduleApi.generateDemo`) and the hook wrapper
   `generateDemoSchedule` were intentionally left in place — only the dashboard UI button
   was removed, per scope.
