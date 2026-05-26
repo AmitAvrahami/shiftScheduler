@@ -10,6 +10,7 @@ import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import { shiftDefinitionApi, constraintApi } from '../lib/api';
 import { detectPublishWarnings, type PublishWarning } from '../utils/partialAvailabilityWarnings';
 import { PublishWarningsDialog } from './admin/components/PublishWarningsDialog';
+import { ShiftAssignmentModal } from './admin/components/ShiftAssignmentModal';
 import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ export default function ScheduleBoardPage() {
   const [publishWarnings, setPublishWarnings] = useState<PublishWarning[]>([]);
   const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [assignTargetShiftId, setAssignTargetShiftId] = useState<string | null>(null);
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -190,7 +192,8 @@ export default function ScheduleBoardPage() {
               assignments={dashboard.assignments}
               employees={dashboard.employees}
               warnings={dashboard.generationWarnings}
-              onAssignEmployee={() => setPageError('פעולה זו עדיין לא זמינה')}
+              onAssignEmployee={(shiftId) => setAssignTargetShiftId(shiftId)}
+              onRemoveEmployee={(assignmentId) => actions.removeEmployee(assignmentId)}
             />
           )}
         </div>
@@ -234,6 +237,27 @@ export default function ScheduleBoardPage() {
         warnings={publishWarnings}
         onCancel={() => setShowPublishWarningsModal(false)}
         onConfirm={handleConfirmPublish}
+      />
+
+      <ShiftAssignmentModal
+        open={assignTargetShiftId !== null}
+        shift={dashboard?.shifts.find((shift) => shift.id === assignTargetShiftId) ?? null}
+        employees={dashboard?.employees ?? []}
+        assignedEmployeeIds={
+          new Set(
+            (dashboard?.assignments ?? [])
+              .filter((assignment) => assignment.shiftId === assignTargetShiftId)
+              .map((assignment) => assignment.employeeId)
+          )
+        }
+        busy={refreshing}
+        onCancel={() => setAssignTargetShiftId(null)}
+        onConfirm={async (userId) => {
+          if (!assignTargetShiftId) return;
+          const shiftId = assignTargetShiftId;
+          setAssignTargetShiftId(null);
+          await actions.assignEmployee(shiftId, userId);
+        }}
       />
     </MainLayout>
   );

@@ -423,6 +423,22 @@ export const assignmentApi = {
   getBySchedule(scheduleId: string): Promise<{ success: boolean; assignments: Assignment[] }> {
     return request(`/assignments?scheduleId=${scheduleId}`);
   },
+
+  create(body: {
+    shiftId: string;
+    userId: string;
+    scheduleId: string;
+    assignedBy: 'manager' | 'algorithm';
+  }): Promise<{ success: boolean; assignment: Assignment }> {
+    return request('/assignments', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  delete(id: string): Promise<{ success: boolean; message?: string }> {
+    return request(`/assignments/${id}`, { method: 'DELETE' });
+  },
 };
 
 // ─── Audit logs ───────────────────────────────────────────────────────────────
