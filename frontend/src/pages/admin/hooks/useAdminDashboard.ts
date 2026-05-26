@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { adminApi, scheduleApi } from '../../../lib/api';
+import { adminApi, assignmentApi, scheduleApi } from '../../../lib/api';
 import type { AdminDashboardDTO } from '../types';
 
 type GenerateResult = Awaited<ReturnType<typeof scheduleApi.generate>>;
@@ -156,6 +156,42 @@ export function useAdminDashboard(weekId: string) {
     [scheduleId, refresh]
   );
 
+  const assignEmployee = useCallback(
+    async (shiftId: string, userId: string) => {
+      if (!scheduleId) {
+        setError('הסידור לא נמצא לשבוע זה');
+        return;
+      }
+      try {
+        setRefreshing(true);
+        setError(null);
+        await assignmentApi.create({ shiftId, userId, scheduleId, assignedBy: 'manager' });
+        await refresh();
+      } catch {
+        setError(unexpectedErrorMessage);
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [scheduleId, refresh]
+  );
+
+  const removeEmployee = useCallback(
+    async (assignmentId: string) => {
+      try {
+        setRefreshing(true);
+        setError(null);
+        await assignmentApi.delete(assignmentId);
+        await refresh();
+      } catch {
+        setError(unexpectedErrorMessage);
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [refresh]
+  );
+
   return {
     dashboard,
     loading,
@@ -171,6 +207,8 @@ export function useAdminDashboard(weekId: string) {
       generateDemoSchedule,
       regenerateSchedule,
       publishSchedule,
+      assignEmployee,
+      removeEmployee,
     },
   };
 }
