@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
@@ -9,8 +9,11 @@ import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import { shiftDefinitionApi, constraintApi } from '../lib/api';
 import { detectPublishWarnings, type PublishWarning } from '../utils/partialAvailabilityWarnings';
+import { detectAssignmentConflicts, type AssignmentWarning } from '../utils/assignmentConflicts';
+import type { Constraint, ShiftDefinition } from '../types/constraint';
 import { PublishWarningsDialog } from './admin/components/PublishWarningsDialog';
 import { ShiftAssignmentModal } from './admin/components/ShiftAssignmentModal';
+import { AssignmentWarningsDialog } from './admin/components/AssignmentWarningsDialog';
 import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -26,8 +29,38 @@ export default function ScheduleBoardPage() {
   const [showPublishWarningsModal, setShowPublishWarningsModal] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [assignTargetShiftId, setAssignTargetShiftId] = useState<string | null>(null);
+  const [constraints, setConstraints] = useState<Constraint[]>([]);
+  const [shiftDefinitions, setShiftDefinitions] = useState<ShiftDefinition[]>([]);
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    shiftId: string;
+    userId: string;
+    warnings: AssignmentWarning[];
+  } | null>(null);
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [defsRes, constraintsRes] = await Promise.all([
+          shiftDefinitionApi.getActive(),
+          constraintApi.getAllConstraints(weekId),
+        ]);
+        if (cancelled) return;
+        setShiftDefinitions(defsRes.success ? defsRes.definitions : []);
+        setConstraints(constraintsRes.success ? constraintsRes.constraints : []);
+      } catch (e) {
+        if (cancelled) return;
+        console.error('Failed to prefetch constraints / shift definitions:', e);
+        setShiftDefinitions([]);
+        setConstraints([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [weekId]);
 
   async function handleGenerate() {
     await actions.generateSchedule();
@@ -38,18 +71,13 @@ export default function ScheduleBoardPage() {
     setPageError(null);
     try {
       setIsVerifyingPublish(true);
-      const [defsRes, constraintsRes] = await Promise.all([
-        shiftDefinitionApi.getActive(),
-        constraintApi.getAllConstraints(weekId),
-      ]);
-
-      if (defsRes.success && constraintsRes.success) {
+      if (shiftDefinitions.length > 0) {
         const warnings = detectPublishWarnings(
           dashboard.assignments,
           dashboard.shifts,
-          constraintsRes.constraints,
+          constraints,
           dashboard.employees,
-          defsRes.definitions
+          shiftDefinitions
         );
 
         if (warnings.length > 0) {
@@ -253,9 +281,39 @@ export default function ScheduleBoardPage() {
         busy={refreshing}
         onCancel={() => setAssignTargetShiftId(null)}
         onConfirm={async (userId) => {
-          if (!assignTargetShiftId) return;
+          if (!assignTargetShiftId || !dashboard) return;
           const shiftId = assignTargetShiftId;
+          const targetShift = dashboard.shifts.find((s) => s.id === shiftId);
+          if (!targetShift) {
+            setAssignTargetShiftId(null);
+            return;
+          }
+          const warnings = detectAssignmentConflicts({
+            targetShift,
+            candidateEmployeeId: userId,
+            employees: dashboard.employees,
+            shifts: dashboard.shifts,
+            assignments: dashboard.assignments,
+            constraints,
+            shiftDefinitions,
+          });
           setAssignTargetShiftId(null);
+          if (warnings.length === 0) {
+            await actions.assignEmployee(shiftId, userId);
+          } else {
+            setPendingAssignment({ shiftId, userId, warnings });
+          }
+        }}
+      />
+
+      <AssignmentWarningsDialog
+        open={pendingAssignment !== null}
+        warnings={pendingAssignment?.warnings ?? []}
+        onCancel={() => setPendingAssignment(null)}
+        onConfirm={async () => {
+          if (!pendingAssignment) return;
+          const { shiftId, userId } = pendingAssignment;
+          setPendingAssignment(null);
           await actions.assignEmployee(shiftId, userId);
         }}
       />
