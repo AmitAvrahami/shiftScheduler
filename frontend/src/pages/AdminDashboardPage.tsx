@@ -17,6 +17,7 @@ import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { ShiftOverviewPanel } from './admin/components/ShiftOverviewPanel';
 import { QualityScorePanel } from './admin/components/QualityScorePanel';
 import { getScheduleStats } from './admin/utils/scheduleStats';
+import { isScheduleManuallyEdited } from '../utils/scheduleManualEdit';
 import { PageDataBoundary } from '../components/ui/PageDataBoundary';
 import { scheduleApi } from '../lib/api';
 import type { GenerateResult } from '../lib/api';
@@ -45,6 +46,7 @@ export default function AdminDashboardPage() {
   const handleCloseResult = wizardResult ? () => setWizardResult(null) : clearGenerateResult;
   const visibleGenerationScore =
     visibleResult?.generationScore ?? dashboard?.generationScore ?? null;
+  const manuallyEdited = isScheduleManuallyEdited(dashboard?.auditLogs);
 
   const handleWizardGenerate = useCallback((wid: string) => scheduleApi.generate(wid), []);
 
@@ -122,7 +124,10 @@ export default function AdminDashboardPage() {
                     totalUsers={employees.length}
                     stats={scheduleStats}
                   />
-                  <QualityScorePanel score={visibleGenerationScore} />
+                  <QualityScorePanel
+                    score={visibleGenerationScore}
+                    manuallyEdited={manuallyEdited}
+                  />
                   <AuditLogPanel logs={dashboard?.auditLogs ?? null} />
                 </div>
               </div>

@@ -6,12 +6,14 @@ interface QualityScorePanelProps {
   score?: GenerationScore | null;
   compact?: boolean;
   className?: string;
+  manuallyEdited?: boolean;
 }
 
 export function QualityScorePanel({
   score,
   compact = false,
   className = '',
+  manuallyEdited = false,
 }: QualityScorePanelProps) {
   if (!score) return null;
 
@@ -43,17 +45,31 @@ export function QualityScorePanel({
             <div className="text-[10px] font-medium text-slate-500">נמוך יותר = טוב יותר</div>
           </div>
         </div>
-        {generatedAtLabel && (
-          <span className="text-[10px] font-medium text-slate-400 shrink-0">
-            {generatedAtLabel}
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {manuallyEdited && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+              נערך ידנית
+            </span>
+          )}
+          {generatedAtLabel && (
+            <span className="text-[10px] font-medium text-slate-400">{generatedAtLabel}</span>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl p-3 bg-slate-50 border border-slate-100 mb-3">
         <div className="text-2xl font-bold text-slate-800 leading-none">{score.totalPenalty}</div>
         <div className="text-xs text-slate-500 font-medium mt-1">סה״כ קנסות רכים</div>
       </div>
+
+      {manuallyEdited && (
+        <div className="rounded-xl px-3 py-2 mb-3 bg-amber-50 border border-amber-200 flex items-start gap-2">
+          <MaterialIcon name="warning" className="text-[14px] text-amber-500 mt-0.5 shrink-0" />
+          <span className="text-[11px] text-amber-800 font-medium leading-relaxed">
+            הסידור עבר שינוי ידני, לכן מדד האיכות המקורי עשוי לא לשקף את המצב הנוכחי.
+          </span>
+        </div>
+      )}
 
       <div>
         <div className="text-xs font-bold text-slate-700 mb-2">פירוט לפי אילוצים</div>
