@@ -45,6 +45,11 @@ export interface ScheduleBoardProps {
   // 'full' is the editing density used by ScheduleBoardPage; 'compact' is a
   // denser read-only preview used inside the dashboard's narrow content column.
   variant?: 'full' | 'compact';
+  // When true, the board renders as a view-only preview: drag-to-move,
+  // click-to-assign, and remove actions are all suppressed regardless of any
+  // callbacks passed in. Used by the Admin Dashboard preview; the dedicated
+  // editing page leaves this false.
+  readOnly?: boolean;
   onShiftClick?: (shiftId: string) => void;
   onAssignEmployee?: (shiftId: string) => void;
   onRemoveEmployee?: (assignmentId: string) => void;
@@ -62,6 +67,7 @@ export function ScheduleBoard({
   employees,
   warnings,
   variant = 'full',
+  readOnly = false,
   onShiftClick,
   onAssignEmployee,
   onRemoveEmployee,
@@ -70,6 +76,12 @@ export function ScheduleBoard({
 }: ScheduleBoardProps) {
   const shiftsByDay = groupShiftsByDay(shifts);
   const warningsByCell = buildWarningsByCell(warnings);
+
+  const effectiveOnShiftClick = readOnly ? undefined : onShiftClick;
+  const effectiveOnAssignEmployee = readOnly ? undefined : onAssignEmployee;
+  const effectiveOnRemoveEmployee = readOnly ? undefined : onRemoveEmployee;
+  const effectiveOnMoveAssignment = readOnly ? undefined : onMoveAssignment;
+  const effectiveDragDisabled = readOnly || dragDisabled;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -89,7 +101,7 @@ export function ScheduleBoard({
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveDrag(null);
-    if (!onMoveAssignment) return;
+    if (!effectiveOnMoveAssignment) return;
     const { active, over } = event;
     if (!over) return;
     const data = active.data.current as { sourceShiftId?: string; employeeId?: string } | undefined;
@@ -99,7 +111,12 @@ export function ScheduleBoard({
     const sourceAssignmentId = String(active.id);
     if (!sourceShiftId || !userId || !toShiftId) return;
     if (sourceShiftId === toShiftId) return;
-    onMoveAssignment({ sourceAssignmentId, fromShiftId: sourceShiftId, toShiftId, userId });
+    effectiveOnMoveAssignment({
+      sourceAssignmentId,
+      fromShiftId: sourceShiftId,
+      toShiftId,
+      userId,
+    });
   }
 
   function handleDragCancel() {
@@ -172,10 +189,10 @@ export function ScheduleBoard({
                       shiftType={shiftType}
                       variant={variant}
                       warningsByCell={warningsByCell}
-                      onShiftClick={onShiftClick}
-                      onAssignEmployee={onAssignEmployee}
-                      onRemoveEmployee={onRemoveEmployee}
-                      dragDisabled={dragDisabled}
+                      onShiftClick={effectiveOnShiftClick}
+                      onAssignEmployee={effectiveOnAssignEmployee}
+                      onRemoveEmployee={effectiveOnRemoveEmployee}
+                      dragDisabled={effectiveDragDisabled}
                     />
                   </div>
                 );
