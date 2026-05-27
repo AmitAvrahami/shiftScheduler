@@ -157,18 +157,25 @@ export function useAdminDashboard(weekId: string) {
   );
 
   const assignEmployee = useCallback(
-    async (shiftId: string, userId: string) => {
+    async (shiftId: string, userId: string): Promise<string | null> => {
       if (!scheduleId) {
         setError('הסידור לא נמצא לשבוע זה');
-        return;
+        return null;
       }
       try {
         setRefreshing(true);
         setError(null);
-        await assignmentApi.create({ shiftId, userId, scheduleId, assignedBy: 'manager' });
+        const res = await assignmentApi.create({
+          shiftId,
+          userId,
+          scheduleId,
+          assignedBy: 'manager',
+        });
         await refresh();
+        return res?.assignment?._id ?? null;
       } catch {
         setError(unexpectedErrorMessage);
+        return null;
       } finally {
         setRefreshing(false);
       }
@@ -177,14 +184,16 @@ export function useAdminDashboard(weekId: string) {
   );
 
   const removeEmployee = useCallback(
-    async (assignmentId: string) => {
+    async (assignmentId: string): Promise<boolean> => {
       try {
         setRefreshing(true);
         setError(null);
         await assignmentApi.delete(assignmentId);
         await refresh();
+        return true;
       } catch {
         setError(unexpectedErrorMessage);
+        return false;
       } finally {
         setRefreshing(false);
       }

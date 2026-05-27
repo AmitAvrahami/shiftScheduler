@@ -7,7 +7,7 @@ import { WeekLabel } from '../components/WeekLabel';
 import { ScheduleBoard } from './admin/components/ScheduleBoard';
 import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
-import { shiftDefinitionApi, constraintApi } from '../lib/api';
+import { shiftDefinitionApi, constraintApi, assignmentApi } from '../lib/api';
 import { detectPublishWarnings, type PublishWarning } from '../utils/partialAvailabilityWarnings';
 import { detectAssignmentConflicts, type AssignmentWarning } from '../utils/assignmentConflicts';
 import type { Constraint, ShiftDefinition } from '../types/constraint';
@@ -15,6 +15,33 @@ import { PublishWarningsDialog } from './admin/components/PublishWarningsDialog'
 import { ShiftAssignmentModal } from './admin/components/ShiftAssignmentModal';
 import { AssignmentWarningsDialog } from './admin/components/AssignmentWarningsDialog';
 import { PageDataBoundary } from '../components/ui/PageDataBoundary';
+import { UndoToast } from '../components/ui/UndoToast';
+import {
+  getDayLabel,
+  getShiftTypeLabel,
+  normalizeShiftDay,
+} from './admin/utils/scheduleBoardUtils';
+import type { AdminDashboardShift, AdminDashboardDTO } from './admin/types';
+
+type PendingUndo =
+  | { kind: 'assign'; assignmentId: string; message: string }
+  | {
+      kind: 'remove';
+      shiftId: string;
+      userId: string;
+      scheduleId: string;
+      message: string;
+    };
+
+function buildShiftLabel(shift: AdminDashboardShift): string {
+  const day = normalizeShiftDay(shift.day);
+  const dayLabel = day ? getDayLabel(day) : shift.day;
+  return `${getShiftTypeLabel(shift.type)}, ${dayLabel}`;
+}
+
+function findEmployeeName(dashboard: AdminDashboardDTO, employeeId: string): string {
+  return dashboard.employees.find((e) => e.id === employeeId)?.name ?? '';
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -36,6 +63,8 @@ export default function ScheduleBoardPage() {
     userId: string;
     warnings: AssignmentWarning[];
   } | null>(null);
+  const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -103,6 +132,70 @@ export default function ScheduleBoardPage() {
 
   async function handleInitialize() {
     await actions.initializeWeek();
+  }
+
+  async function performAssignWithUndo(shiftId: string, userId: string) {
+    if (!dashboard) return;
+    const shift = dashboard.shifts.find((s) => s.id === shiftId);
+    const employeeName = findEmployeeName(dashboard, userId);
+    const shiftLabel = shift ? buildShiftLabel(shift) : '';
+    const newAssignmentId = await actions.assignEmployee(shiftId, userId);
+    if (newAssignmentId) {
+      setPendingUndo({
+        kind: 'assign',
+        assignmentId: newAssignmentId,
+        message: `נוסף שיבוץ: ${employeeName} → ${shiftLabel}`,
+      });
+    }
+  }
+
+  async function performRemoveWithUndo(assignmentId: string) {
+    if (!dashboard || !dashboard.scheduleId) return;
+    const assignment = dashboard.assignments.find((a) => a.id === assignmentId);
+    if (!assignment) {
+      await actions.removeEmployee(assignmentId);
+      return;
+    }
+    const shift = dashboard.shifts.find((s) => s.id === assignment.shiftId);
+    const employeeName = findEmployeeName(dashboard, assignment.employeeId);
+    const shiftLabel = shift ? buildShiftLabel(shift) : '';
+    const snapshot = {
+      shiftId: assignment.shiftId,
+      userId: assignment.employeeId,
+      scheduleId: dashboard.scheduleId,
+    };
+    const ok = await actions.removeEmployee(assignmentId);
+    if (ok) {
+      setPendingUndo({
+        kind: 'remove',
+        ...snapshot,
+        message: `הוסר שיבוץ: ${employeeName} → ${shiftLabel}`,
+      });
+    }
+  }
+
+  async function handleUndo() {
+    if (!pendingUndo || undoBusy) return;
+    setUndoBusy(true);
+    setPageError(null);
+    try {
+      if (pendingUndo.kind === 'assign') {
+        await assignmentApi.delete(pendingUndo.assignmentId);
+      } else {
+        await assignmentApi.create({
+          shiftId: pendingUndo.shiftId,
+          userId: pendingUndo.userId,
+          scheduleId: pendingUndo.scheduleId,
+          assignedBy: 'manager',
+        });
+      }
+      await refresh();
+    } catch {
+      setPageError('הפעולה לא הצליחה');
+    } finally {
+      setPendingUndo(null);
+      setUndoBusy(false);
+    }
   }
 
   const hasSchedule = Boolean(dashboard?.scheduleId);
@@ -221,7 +314,7 @@ export default function ScheduleBoardPage() {
               employees={dashboard.employees}
               warnings={dashboard.generationWarnings}
               onAssignEmployee={(shiftId) => setAssignTargetShiftId(shiftId)}
-              onRemoveEmployee={(assignmentId) => actions.removeEmployee(assignmentId)}
+              onRemoveEmployee={(assignmentId) => performRemoveWithUndo(assignmentId)}
             />
           )}
         </div>
@@ -299,7 +392,7 @@ export default function ScheduleBoardPage() {
           });
           setAssignTargetShiftId(null);
           if (warnings.length === 0) {
-            await actions.assignEmployee(shiftId, userId);
+            await performAssignWithUndo(shiftId, userId);
           } else {
             setPendingAssignment({ shiftId, userId, warnings });
           }
@@ -314,9 +407,18 @@ export default function ScheduleBoardPage() {
           if (!pendingAssignment) return;
           const { shiftId, userId } = pendingAssignment;
           setPendingAssignment(null);
-          await actions.assignEmployee(shiftId, userId);
+          await performAssignWithUndo(shiftId, userId);
         }}
       />
+
+      {pendingUndo && (
+        <UndoToast
+          message={pendingUndo.message}
+          onUndo={handleUndo}
+          onDismiss={() => setPendingUndo(null)}
+          busy={undoBusy || refreshing}
+        />
+      )}
     </MainLayout>
   );
 }
