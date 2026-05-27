@@ -1,3 +1,4 @@
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import MaterialIcon from '../../../components/MaterialIcon';
 import type { GenerateWarning } from '../../../lib/api';
 import type { AdminDashboardDTO, ShiftType } from '../types';
@@ -25,6 +26,7 @@ export interface ShiftCellProps {
   onShiftClick?: (shiftId: string) => void;
   onAssignEmployee?: (shiftId: string) => void;
   onRemoveEmployee?: (assignmentId: string) => void;
+  dragDisabled?: boolean;
 }
 
 const STATUS_CLASSES: Record<ShiftFillStatus, string> = {
@@ -51,7 +53,12 @@ export function ShiftCell({
   onShiftClick,
   onAssignEmployee,
   onRemoveEmployee,
+  dragDisabled = false,
 }: ShiftCellProps) {
+  const droppable = useDroppable({
+    id: shift?.id ?? '__no_shift__',
+    disabled: !shift || dragDisabled,
+  });
   const status = getShiftFillStatus(shift, assignments);
   const requiredCount = Math.max(0, shift?.requiredEmployees ?? 0);
   const assignedCount = assignments.length;
@@ -93,11 +100,15 @@ export function ShiftCell({
     );
   }
 
+  /* eslint-disable react-hooks/refs -- dnd-kit's useDroppable returns non-ref props (isOver, setNodeRef callback) that the v7 rule flags by name. */
+  const dropRing = droppable.isOver ? 'ring-2 ring-[#056AE5] ring-offset-1' : '';
+
   return (
     <div
+      ref={droppable.setNodeRef}
       className={`${cellPad} rounded-lg border shadow-sm transition ${STATUS_CLASSES[status]} ${
         canInteractWithShift ? 'cursor-pointer hover:shadow-md' : ''
-      }`}
+      } ${dropRing}`}
       dir="rtl"
       role={canInteractWithShift ? 'button' : undefined}
       tabIndex={canInteractWithShift ? 0 : undefined}
@@ -129,8 +140,6 @@ export function ShiftCell({
           employees.map((employee) => {
             const assignment = assignments.find((item) => item.employeeId === employee.id);
             const cellWarnings = warningsByCell?.get(warningCellKey(shift.id, employee.id));
-            // The indicator is on this employee's row, so the warning's worker is
-            // this employee — resolve the id to their name for the fallback message.
             const nameById = new Map([[employee.id, employee.name]]);
             const warningTooltip = cellWarnings
               ?.map((warning) => {
@@ -140,36 +149,17 @@ export function ShiftCell({
               .join(' · ');
 
             return (
-              <div
+              <DraggableChip
                 key={`${shift.id}-${employee.id}`}
-                className={`flex items-center justify-between gap-2 rounded-md border border-white/70 bg-white/75 ${rowClass} text-slate-700`}
-              >
-                <span className="flex min-w-0 items-center gap-1">
-                  {warningTooltip && (
-                    <span
-                      className="shrink-0 leading-none"
-                      role="img"
-                      title={warningTooltip}
-                      aria-label={warningTooltip}
-                    >
-                      <MaterialIcon name="warning" className="text-amber-500 text-[16px]" />
-                    </span>
-                  )}
-                  <span className="truncate font-medium">{employee.name}</span>
-                </span>
-                {assignment && onRemoveEmployee && (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-red-600"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onRemoveEmployee(assignment.id);
-                    }}
-                  >
-                    הסר
-                  </button>
-                )}
-              </div>
+                shiftId={shift.id}
+                employeeId={employee.id}
+                employeeName={employee.name}
+                assignmentId={assignment?.id}
+                warningTooltip={warningTooltip}
+                rowClass={rowClass}
+                onRemoveEmployee={assignment && onRemoveEmployee ? onRemoveEmployee : undefined}
+                dragDisabled={dragDisabled}
+              />
             );
           })
         ) : (
@@ -210,4 +200,73 @@ function getStatusLabel(status: ShiftFillStatus): string {
     case 'unknown':
       return 'לא ידוע';
   }
+}
+
+interface DraggableChipProps {
+  shiftId: string;
+  employeeId: string;
+  employeeName: string;
+  assignmentId?: string;
+  warningTooltip?: string;
+  rowClass: string;
+  onRemoveEmployee?: (assignmentId: string) => void;
+  dragDisabled: boolean;
+}
+
+function DraggableChip({
+  shiftId,
+  employeeId,
+  employeeName,
+  assignmentId,
+  warningTooltip,
+  rowClass,
+  onRemoveEmployee,
+  dragDisabled,
+}: DraggableChipProps) {
+  const draggable = useDraggable({
+    id: assignmentId ?? `__no_assignment__${shiftId}_${employeeId}`,
+    data: { sourceShiftId: shiftId, employeeId, employeeName },
+    disabled: dragDisabled || !assignmentId,
+  });
+
+  /* eslint-disable react-hooks/refs -- dnd-kit's useDraggable returns non-ref props (isDragging, attributes, listeners, setNodeRef callback) that the v7 rule flags by name. */
+  const dragging = draggable.isDragging;
+
+  return (
+    <div
+      ref={draggable.setNodeRef}
+      {...draggable.attributes}
+      {...draggable.listeners}
+      className={`flex items-center justify-between gap-2 rounded-md border border-white/70 bg-white/75 ${rowClass} text-slate-700 ${
+        dragDisabled || !assignmentId ? '' : 'cursor-grab active:cursor-grabbing'
+      } ${dragging ? 'opacity-40' : ''}`}
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        {warningTooltip && (
+          <span
+            className="shrink-0 leading-none"
+            role="img"
+            title={warningTooltip}
+            aria-label={warningTooltip}
+          >
+            <MaterialIcon name="warning" className="text-amber-500 text-[16px]" />
+          </span>
+        )}
+        <span className="truncate font-medium">{employeeName}</span>
+      </span>
+      {assignmentId && onRemoveEmployee && (
+        <button
+          type="button"
+          className="shrink-0 rounded-md px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-red-600"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemoveEmployee(assignmentId);
+          }}
+        >
+          הסר
+        </button>
+      )}
+    </div>
+  );
 }

@@ -4,7 +4,7 @@ import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import { getCurrentWeekId, getNextWeekId, getPrevWeekId } from '../utils/weekUtils';
 import { WeekLabel } from '../components/WeekLabel';
-import { ScheduleBoard } from './admin/components/ScheduleBoard';
+import { ScheduleBoard, type MoveAssignmentArgs } from './admin/components/ScheduleBoard';
 import { WeeklyStaffingEditor } from './admin/components/WeeklyStaffingEditor';
 import { useAdminDashboard } from './admin/hooks/useAdminDashboard';
 import { shiftDefinitionApi, constraintApi, assignmentApi } from '../lib/api';
@@ -31,7 +31,23 @@ type PendingUndo =
       userId: string;
       scheduleId: string;
       message: string;
+    }
+  | {
+      kind: 'move';
+      revertAssignmentId: string;
+      fromShiftId: string;
+      userId: string;
+      scheduleId: string;
+      message: string;
     };
+
+type PendingMove = {
+  sourceAssignmentId: string;
+  fromShiftId: string;
+  toShiftId: string;
+  userId: string;
+  warnings: AssignmentWarning[];
+};
 
 function buildShiftLabel(shift: AdminDashboardShift): string {
   const day = normalizeShiftDay(shift.day);
@@ -65,6 +81,7 @@ export default function ScheduleBoardPage() {
   } | null>(null);
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -174,6 +191,88 @@ export default function ScheduleBoardPage() {
     }
   }
 
+  async function performMoveWithUndo(
+    sourceAssignmentId: string,
+    fromShiftId: string,
+    toShiftId: string,
+    userId: string
+  ) {
+    if (!dashboard || !dashboard.scheduleId) return;
+    const scheduleId = dashboard.scheduleId;
+    const employeeName = findEmployeeName(dashboard, userId);
+    const toShift = dashboard.shifts.find((s) => s.id === toShiftId);
+    const toShiftLabel = toShift ? buildShiftLabel(toShift) : '';
+
+    let newAssignmentId: string | null = null;
+    try {
+      const createRes = await assignmentApi.create({
+        shiftId: toShiftId,
+        userId,
+        scheduleId,
+        assignedBy: 'manager',
+      });
+      newAssignmentId = createRes?.assignment?._id ?? null;
+    } catch {
+      setPageError('הפעולה לא הצליחה');
+      return;
+    }
+    if (!newAssignmentId) {
+      setPageError('הפעולה לא הצליחה');
+      await refresh();
+      return;
+    }
+
+    try {
+      await assignmentApi.delete(sourceAssignmentId);
+    } catch {
+      setPageError('הפעולה לא הצליחה');
+      await refresh();
+      return;
+    }
+
+    await refresh();
+    setPendingUndo({
+      kind: 'move',
+      revertAssignmentId: newAssignmentId,
+      fromShiftId,
+      userId,
+      scheduleId,
+      message: `הועבר שיבוץ: ${employeeName} → ${toShiftLabel}`,
+    });
+  }
+
+  function handleMoveAssignment({
+    sourceAssignmentId,
+    fromShiftId,
+    toShiftId,
+    userId,
+  }: MoveAssignmentArgs) {
+    if (!dashboard) return;
+    if (fromShiftId === toShiftId) return;
+    const targetShift = dashboard.shifts.find((s) => s.id === toShiftId);
+    if (!targetShift) return;
+    const alreadyOnTarget = dashboard.assignments.some(
+      (a) => a.shiftId === toShiftId && a.employeeId === userId
+    );
+    if (alreadyOnTarget) return;
+
+    const warnings = detectAssignmentConflicts({
+      targetShift,
+      candidateEmployeeId: userId,
+      employees: dashboard.employees,
+      shifts: dashboard.shifts,
+      assignments: dashboard.assignments.filter((a) => a.id !== sourceAssignmentId),
+      constraints,
+      shiftDefinitions,
+    });
+
+    if (warnings.length === 0) {
+      void performMoveWithUndo(sourceAssignmentId, fromShiftId, toShiftId, userId);
+    } else {
+      setPendingMove({ sourceAssignmentId, fromShiftId, toShiftId, userId, warnings });
+    }
+  }
+
   async function handleUndo() {
     if (!pendingUndo || undoBusy) return;
     setUndoBusy(true);
@@ -181,9 +280,17 @@ export default function ScheduleBoardPage() {
     try {
       if (pendingUndo.kind === 'assign') {
         await assignmentApi.delete(pendingUndo.assignmentId);
-      } else {
+      } else if (pendingUndo.kind === 'remove') {
         await assignmentApi.create({
           shiftId: pendingUndo.shiftId,
+          userId: pendingUndo.userId,
+          scheduleId: pendingUndo.scheduleId,
+          assignedBy: 'manager',
+        });
+      } else {
+        await assignmentApi.delete(pendingUndo.revertAssignmentId);
+        await assignmentApi.create({
+          shiftId: pendingUndo.fromShiftId,
           userId: pendingUndo.userId,
           scheduleId: pendingUndo.scheduleId,
           assignedBy: 'manager',
@@ -315,6 +422,8 @@ export default function ScheduleBoardPage() {
               warnings={dashboard.generationWarnings}
               onAssignEmployee={(shiftId) => setAssignTargetShiftId(shiftId)}
               onRemoveEmployee={(assignmentId) => performRemoveWithUndo(assignmentId)}
+              onMoveAssignment={handleMoveAssignment}
+              dragDisabled={refreshing}
             />
           )}
         </div>
@@ -408,6 +517,18 @@ export default function ScheduleBoardPage() {
           const { shiftId, userId } = pendingAssignment;
           setPendingAssignment(null);
           await performAssignWithUndo(shiftId, userId);
+        }}
+      />
+
+      <AssignmentWarningsDialog
+        open={pendingMove !== null}
+        warnings={pendingMove?.warnings ?? []}
+        onCancel={() => setPendingMove(null)}
+        onConfirm={async () => {
+          if (!pendingMove) return;
+          const { sourceAssignmentId, fromShiftId, toShiftId, userId } = pendingMove;
+          setPendingMove(null);
+          await performMoveWithUndo(sourceAssignmentId, fromShiftId, toShiftId, userId);
         }}
       />
 
