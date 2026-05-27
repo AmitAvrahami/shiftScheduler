@@ -103,6 +103,7 @@ export default function AdminDashboardPage() {
                       employees={employees}
                       warnings={visibleResult?.warnings ?? dashboard.generationWarnings}
                       variant="compact"
+                      readOnly
                     />
                   )}
                   <ShiftOverviewPanel
