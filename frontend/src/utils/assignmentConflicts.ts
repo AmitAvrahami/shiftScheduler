@@ -15,7 +15,8 @@ import {
 export type AssignmentWarningKind =
   | 'already_assigned_same_day'
   | 'unavailable_constraint'
-  | 'partial_availability';
+  | 'partial_availability'
+  | 'fixed_morning_violation';
 
 export interface AssignmentWarning {
   kind: AssignmentWarningKind;
@@ -124,6 +125,16 @@ export function detectAssignmentConflicts(
         }
       }
     }
+  }
+
+  // 3. Fixed-morning employee check (soft confirmation for non-morning shifts).
+  if (employee.isFixedMorningEmployee && targetShift.type !== 'morning') {
+    warnings.push({
+      kind: 'fixed_morning_violation',
+      title: 'קבוע בוקר',
+      explanation:
+        'שים לב, העובד הזה מוגדר כקבוע בוקר. האם אתה בטוח שברצונך להעביר אותו למשמרת שאינה בוקר?',
+    });
   }
 
   return warnings;
