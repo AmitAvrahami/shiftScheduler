@@ -137,7 +137,7 @@ export function useAdminDashboard(weekId: string) {
     async (approvedWarnings?: unknown[]) => {
       if (!scheduleId) {
         setError('הסידור לא נמצא לשבוע זה');
-        return;
+        return false;
       }
 
       try {
@@ -146,8 +146,10 @@ export function useAdminDashboard(weekId: string) {
         setError(null);
         await scheduleApi.update(scheduleId, 'published', approvedWarnings);
         await refresh();
+        return true;
       } catch {
-        setError(unexpectedErrorMessage);
+        setError('שגיאה בפרסום הסידור');
+        return false;
       } finally {
         setActionLoading((current) => ({ ...current, publishing: false }));
         setRefreshing(false);

@@ -138,6 +138,69 @@ describe('GET /api/v1/assignments', () => {
     expect(res.body.assignments.length).toBe(1);
     expect(String(res.body.assignments[0].userId)).toBe(String(employee._id));
   });
+
+  it('employee can fetch own assignment from a published schedule', async () => {
+    const { manager, employee, shift, schedule, employeeToken } = await seedAll();
+    await Assignment.create({
+      shiftId: shift._id,
+      userId: employee._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+    await Assignment.create({
+      shiftId: shift._id,
+      userId: manager._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/assignments?scheduleId=${schedule._id}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.assignments.length).toBe(1);
+    expect(String(res.body.assignments[0].userId)).toBe(String(employee._id));
+  });
+
+  it('employee cannot fetch own assignment from a draft schedule', async () => {
+    const { employee, shift, schedule, employeeToken } = await seedAll();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'draft' });
+    await Assignment.create({
+      shiftId: shift._id,
+      userId: employee._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/assignments?scheduleId=${schedule._id}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('manager can fetch assignments from a draft schedule', async () => {
+    const { employee, shift, schedule, managerToken } = await seedAll();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'draft' });
+    await Assignment.create({
+      shiftId: shift._id,
+      userId: employee._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/assignments?scheduleId=${schedule._id}`)
+      .set('Authorization', `Bearer ${managerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.assignments.length).toBe(1);
+  });
 });
 
 describe('POST /api/v1/assignments', () => {

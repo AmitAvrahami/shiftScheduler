@@ -4,6 +4,7 @@ import Assignment from '../models/Assignment';
 import Shift from '../models/Shift';
 import User from '../models/User';
 import AuditLog from '../models/AuditLog';
+import WeeklySchedule from '../models/WeeklySchedule';
 import AppError from '../utils/AppError';
 import { logger } from '../utils/logger';
 
@@ -34,7 +35,19 @@ export async function getAssignments(
 
     const filter: Record<string, unknown> = isManagerOrAdmin ? {} : { userId: req.user!._id };
 
-    if (req.query.scheduleId) filter.scheduleId = req.query.scheduleId;
+    if (req.query.scheduleId) {
+      const scheduleId = String(req.query.scheduleId);
+
+      if (!isManagerOrAdmin) {
+        const schedule = await WeeklySchedule.findById(scheduleId);
+        if (!schedule) return next(new AppError('Schedule not found', 404));
+        if (schedule.status !== 'published') {
+          return next(new AppError('Forbidden — schedule is not published', 403));
+        }
+      }
+
+      filter.scheduleId = scheduleId;
+    }
     if (req.query.userId && isManagerOrAdmin) filter.userId = req.query.userId;
 
     const assignments = await Assignment.find(filter).sort({ createdAt: -1 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
@@ -59,6 +59,47 @@ function findEmployeeName(dashboard: AdminDashboardDTO, employeeId: string): str
   return dashboard.employees.find((e) => e.id === employeeId)?.name ?? '';
 }
 
+interface ToastMsg {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+let toastSeq = 0;
+
+function useToast() {
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+
+  const show = useCallback((message: string, type: ToastMsg['type'] = 'info') => {
+    const id = ++toastSeq;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+  }, []);
+
+  return { toasts, show };
+}
+
+function ToastStack({ toasts }: { toasts: ToastMsg[] }) {
+  const colors: Record<ToastMsg['type'], string> = {
+    success: 'bg-green-600',
+    error: 'bg-red-600',
+    info: 'bg-[#101B79]',
+  };
+
+  return (
+    <div className="fixed bottom-24 left-4 z-50 flex flex-col gap-2" dir="rtl">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={`${colors[toast.type]} text-white text-sm font-semibold px-md py-sm rounded-lg shadow-xl`}
+        >
+          {toast.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ScheduleBoardPage() {
@@ -82,6 +123,7 @@ export default function ScheduleBoardPage() {
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  const { toasts, show: showToast } = useToast();
 
   const { dashboard, loading, error, refreshing, refresh, actions } = useAdminDashboard(weekId);
 
@@ -139,12 +181,14 @@ export default function ScheduleBoardPage() {
       setIsVerifyingPublish(false);
     }
 
-    await actions.publishSchedule();
+    const published = await actions.publishSchedule();
+    if (published) showToast('הסידור פורסם בהצלחה', 'success');
   }
 
   async function handleConfirmPublish() {
     setShowPublishWarningsModal(false);
-    await actions.publishSchedule(publishWarnings);
+    const published = await actions.publishSchedule(publishWarnings);
+    if (published) showToast('הסידור פורסם בהצלחה', 'success');
   }
 
   async function handleInitialize() {
@@ -540,6 +584,8 @@ export default function ScheduleBoardPage() {
           busy={undoBusy || refreshing}
         />
       )}
+
+      <ToastStack toasts={toasts} />
     </MainLayout>
   );
 }
