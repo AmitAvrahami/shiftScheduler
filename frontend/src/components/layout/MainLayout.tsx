@@ -13,9 +13,7 @@ interface NavItem {
 
 const EMPLOYEE_NAV_ITEMS: NavItem[] = [
   { icon: 'dashboard', label: 'לוח בקרה', path: '/dashboard' },
-  { icon: 'calendar_today', label: 'משמרות שלי', path: '/my-shifts' },
   { icon: 'event_busy', label: 'הגשת אילוצים', path: '/constraints' },
-  { icon: 'history', label: 'היסטוריית בקשות', path: '/history' },
 ];
 
 const MANAGER_NAV_ITEMS: NavItem[] = [
