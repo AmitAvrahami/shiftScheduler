@@ -5,6 +5,7 @@ import { LoadingButton } from '../../../components/ui/LoadingButton';
 import { LoadingSpinner } from '../../../components/ui/LoadingSpinner';
 import { adminApi } from '../../../lib/api';
 import type { GenerateResult } from '../../../lib/api';
+import { isScheduleManuallyEdited } from '../../../utils/scheduleManualEdit';
 import { getNextWeekId, getPrevWeekId } from '../../../utils/weekUtils';
 
 interface GenerateScheduleWizardProps {
@@ -20,6 +21,7 @@ type ReviewSummary = {
   missingConstraintsCount: number;
   warnings: string[];
   hasExistingSchedule: boolean;
+  hasManualEdits: boolean;
 };
 
 export function GenerateScheduleWizard({
@@ -62,6 +64,7 @@ export function GenerateScheduleWizard({
         missingConstraintsCount: dto.missingConstraints.length,
         warnings: dto.readiness.warnings,
         hasExistingSchedule: dto.scheduleId !== null,
+        hasManualEdits: isScheduleManuallyEdited(dto.auditLogs),
       });
     } catch {
       setReviewError('לא ניתן לטעון נתוני שבוע. נסה שנית.');
@@ -283,16 +286,29 @@ export function GenerateScheduleWizard({
                 </div>
               </div>
 
-              {reviewSummary?.hasExistingSchedule && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              {reviewSummary?.hasManualEdits ? (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
                   <MaterialIcon
-                    name="info"
-                    className="text-amber-600 text-[16px] mt-0.5 shrink-0"
+                    name="warning"
+                    className="text-red-600 text-[16px] mt-0.5 shrink-0"
                   />
-                  <p className="text-xs text-amber-800">
-                    שים לב: קיים כבר סידור לשבוע זה. מומלץ לבדוק לפני יצירה מחדש.
+                  <p className="text-xs text-red-800 font-medium leading-relaxed">
+                    בסידור הקיים יש שינויים ידניים. יצירה מחדש תמחק את כל השיבוצים — כולל השינויים
+                    הידניים — ותחליף אותם בסידור חדש מהמערכת.
                   </p>
                 </div>
+              ) : (
+                reviewSummary?.hasExistingSchedule && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+                    <MaterialIcon
+                      name="info"
+                      className="text-amber-600 text-[16px] mt-0.5 shrink-0"
+                    />
+                    <p className="text-xs text-amber-800">
+                      שים לב: קיים כבר סידור לשבוע זה. מומלץ לבדוק לפני יצירה מחדש.
+                    </p>
+                  </div>
+                )
               )}
 
               {generateError && (

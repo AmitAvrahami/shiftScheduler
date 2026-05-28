@@ -499,7 +499,7 @@ describe('runScheduler — dual-payload transport (PR #3)', () => {
 });
 
 describe('runScheduler — idempotency', () => {
-  it('replaces stale algorithm assignments on re-run, preserves manager assignments', async () => {
+  it('clears stale algorithm and manager assignments on re-run', async () => {
     const { schedule, shift, user } = await seedFullScenario();
 
     // Seed stale algorithm assignment from a previous run
@@ -511,7 +511,7 @@ describe('runScheduler — idempotency', () => {
       status: 'pending',
     });
 
-    // Seed a manager-assigned entry that must NOT be deleted
+    // Seed a manager-assigned entry that production regeneration must discard
     const managerEntry = await Assignment.create({
       shiftId: shift._id,
       userId: user._id,
@@ -527,11 +527,10 @@ describe('runScheduler — idempotency', () => {
     const result = await runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1');
     expect(result.assignmentCount).toBe(1);
 
-    // Manager-assigned entry must survive
-    const managerStillThere = await Assignment.findById(managerEntry._id);
-    expect(managerStillThere).not.toBeNull();
+    // Manager-assigned entry is discarded along with stale algorithm output
+    expect(await Assignment.findById(managerEntry._id)).toBeNull();
 
-    // Exactly 2 total: 1 manager + 1 new algorithm
-    expect(await Assignment.countDocuments({ scheduleId: schedule._id })).toBe(2);
+    // Exactly 1 total: the fresh algorithm assignment
+    expect(await Assignment.countDocuments({ scheduleId: schedule._id })).toBe(1);
   });
 });

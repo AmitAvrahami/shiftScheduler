@@ -259,6 +259,138 @@ describe('POST /api/v1/schedules/:weekId/generate', () => {
     expect(res.body.message).toContain('Cannot re-generate a published schedule');
     expect(mockCallSolver).not.toHaveBeenCalled();
   });
+
+  it('production regeneration clears manual assignments before writing solver output', async () => {
+    const manager = await User.create({
+      name: 'Regenerate Manager',
+      email: 'regenerate-manager@test.com',
+      password: 'Password123!',
+      role: 'manager',
+      isActive: true,
+    });
+    const employeeA = await User.create({
+      name: 'Regenerate Employee A',
+      email: 'regenerate-employee-a@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    const employeeB = await User.create({
+      name: 'Regenerate Employee B',
+      email: 'regenerate-employee-b@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    const employeeC = await User.create({
+      name: 'Regenerate Employee C',
+      email: 'regenerate-employee-c@test.com',
+      password: 'Password123!',
+      role: 'employee',
+      isActive: true,
+      isFixedMorningEmployee: false,
+    });
+    const morningDef = await ShiftDefinition.create({
+      name: 'בוקר',
+      startTime: '06:45',
+      endTime: '14:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFD700',
+      isActive: true,
+      orderNumber: 1,
+      createdBy: manager._id,
+      requiredStaffCount: 1,
+    });
+    const eveningDef = await ShiftDefinition.create({
+      name: 'ערב',
+      startTime: '14:45',
+      endTime: '22:45',
+      daysOfWeek: [0],
+      durationMinutes: 480,
+      crossesMidnight: false,
+      color: '#FFA500',
+      isActive: true,
+      orderNumber: 2,
+      createdBy: manager._id,
+      requiredStaffCount: 1,
+    });
+    const schedule = await WeeklySchedule.create({
+      weekId: '2026-W20',
+      startDate: new Date(2026, 4, 10),
+      endDate: new Date(2026, 4, 16),
+      status: 'draft',
+      generatedBy: 'auto',
+    });
+    const morningShift = await Shift.create({
+      scheduleId: schedule._id,
+      definitionId: morningDef._id,
+      date: new Date(2026, 4, 10),
+      requiredCount: 1,
+      status: 'filled',
+    });
+    const eveningShift = await Shift.create({
+      scheduleId: schedule._id,
+      definitionId: eveningDef._id,
+      date: new Date(2026, 4, 10),
+      requiredCount: 1,
+      status: 'filled',
+    });
+    await Assignment.create({
+      shiftId: morningShift._id,
+      userId: employeeA._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+    await Assignment.create({
+      shiftId: morningShift._id,
+      userId: employeeB._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'pending',
+    });
+
+    mockCallSolver.mockImplementationOnce(async (solveRequest) => ({
+      status: 'OPTIMAL',
+      assignments: [
+        {
+          shift_id: solveRequest.shifts.find((shift) => shift.id === String(morningShift._id))!.id,
+          worker_id: String(employeeC._id),
+          assigned_by: 'algorithm',
+        },
+        {
+          shift_id: solveRequest.shifts.find((shift) => shift.id === String(eveningShift._id))!.id,
+          worker_id: String(employeeA._id),
+          assigned_by: 'algorithm',
+        },
+      ],
+      violations: [],
+      warnings: [],
+      solve_time_ms: 10,
+    }));
+
+    const res = await request(app)
+      .post('/api/v1/schedules/2026-W20/generate')
+      .set('Authorization', `Bearer ${makeToken(manager)}`);
+
+    expect(res.status).toBe(200);
+    expect(
+      await Assignment.countDocuments({ scheduleId: schedule._id, assignedBy: 'manager' })
+    ).toBe(0);
+
+    const shifts = await Shift.find({ scheduleId: schedule._id }).lean();
+    for (const shift of shifts) {
+      const assignmentCount = await Assignment.countDocuments({
+        scheduleId: schedule._id,
+        shiftId: shift._id,
+      });
+      expect(assignmentCount).toBeLessThanOrEqual(shift.requiredCount);
+    }
+  });
 });
 
 describe('POST /api/v1/schedules/:weekId/generate-demo', () => {
