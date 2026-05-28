@@ -101,8 +101,9 @@ export async function runScheduler(
 
   // Phase 4: write — only reached on OPTIMAL, FEASIBLE, or RELAXED
 
-  // 4a: remove stale algorithm-generated assignments (idempotent re-run)
-  await Assignment.deleteMany({ scheduleId, assignedBy: 'algorithm' });
+  // 4a: regeneration starts from a clean schedule, clearing all prior
+  // assignments including manual edits before writing solver output.
+  await Assignment.deleteMany({ scheduleId });
 
   // 4b: insert new assignments
   const assignmentDocs = toAssignmentDocs(result, scheduleId.toString());
