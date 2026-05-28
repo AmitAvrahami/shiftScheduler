@@ -11,6 +11,14 @@ export const WARNING_TYPE_LABELS: Record<string, string> = {
   ASSIGNMENT_PREFERENCE: 'זמינות חלקית / העדפת שיבוץ',
 };
 
+type SolverShiftType = 'morning' | 'afternoon' | 'night';
+
+export const SHIFT_TYPE_LABELS_HE: Record<SolverShiftType, string> = {
+  morning: 'בוקר',
+  afternoon: 'צהריים',
+  night: 'לילה',
+};
+
 export function getWarningLabel(warning: GenerateWarning): string {
   const key = warning.type ?? warning.constraint_id;
   if (key && WARNING_TYPE_LABELS[key]) return WARNING_TYPE_LABELS[key];
@@ -44,6 +52,51 @@ export function formatWarningMessage(
   const name = nameById?.get(workerId);
   if (!name) return warning.message;
   return warning.message.split(workerId).join(name);
+}
+
+export function formatWarningDescription(
+  warning: GenerateWarning,
+  nameById?: Map<string, string>
+): string {
+  const workerName = getWarningWorkerName(warning, nameById) ?? 'עובד/ת';
+  const fallback = () => formatWarningMessage(warning, nameById);
+
+  switch (warning.type) {
+    case 'SHIFT_BALANCE': {
+      const match = warning.message.match(/has (\d+) shifts vs team avg ([\d.]+)\./);
+      if (!match) return fallback();
+      const [, count, average] = match;
+      return `${workerName} שובץ/ה ל-${count} משמרות לעומת ממוצע צוותי של ${average}.`;
+    }
+    case 'NIGHT_OVERCAP': {
+      const match = warning.message.match(/has (\d+) night shifts/);
+      if (!match) return fallback();
+      const [, count] = match;
+      return `${workerName} שובץ/ה ל-${count} משמרות לילה (מעל הסף של 2).`;
+    }
+    case 'FRI_SAT_CLUSTER':
+      return `${workerName} שובץ/ה גם ביום שישי וגם בשבת.`;
+    case 'WEEKEND_BALANCE': {
+      const match = warning.message.match(/has (\d+) weekend shifts vs team avg ([\d.]+)\./);
+      if (!match) return fallback();
+      const [, count, average] = match;
+      return `${workerName} שובץ/ה ל-${count} משמרות סוף שבוע לעומת ממוצע צוותי של ${average}.`;
+    }
+    case 'TYPE_DIVERSITY': {
+      const match = warning.message.match(
+        /(\d+)\/(\d+) shifts are (morning|afternoon|night) \((\d+)%\)/
+      );
+      if (!match) return fallback();
+      const [, count, total, shiftType, percentage] = match;
+      const shiftTypeLabel = SHIFT_TYPE_LABELS_HE[shiftType as SolverShiftType];
+      if (!shiftTypeLabel) return fallback();
+      return `${workerName}: ${count} מתוך ${total} משמרות הן ${shiftTypeLabel} (${percentage}%).`;
+    }
+    case 'ASSIGNMENT_PREFERENCE':
+      return `${workerName} שובץ/ה למשמרת עם זמינות חלקית או העדפת שיבוץ.`;
+    default:
+      return fallback();
+  }
 }
 
 export function warningCellKey(shiftId: string, employeeId: string): string {

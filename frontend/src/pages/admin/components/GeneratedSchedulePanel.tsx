@@ -3,7 +3,7 @@ import type { GenerateResult } from '../../../lib/api';
 import type { AdminDashboardEmployee } from '../types';
 import { QualityScorePanel } from './QualityScorePanel';
 import {
-  formatWarningMessage,
+  formatWarningDescription,
   getWarningLabel,
   getWarningSeverity,
   getWarningWorkerName,
@@ -121,7 +121,7 @@ export function GeneratedSchedulePanel({
               const hebrewLabel = getWarningLabel(w);
               const hasHebrew = hebrewLabel !== w.message;
               const workerName = getWarningWorkerName(w, nameById);
-              const detail = formatWarningMessage(w, nameById);
+              const detail = formatWarningDescription(w, nameById);
               return (
                 <div
                   key={i}
