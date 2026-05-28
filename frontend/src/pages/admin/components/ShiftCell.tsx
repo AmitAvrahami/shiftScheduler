@@ -7,7 +7,7 @@ import {
   getShiftTypeLabel,
   type ShiftFillStatus,
 } from '../utils/scheduleBoardUtils';
-import { formatWarningMessage, getWarningLabel, warningCellKey } from '../utils/warningUtils';
+import { formatWarningDescription, getWarningLabel, warningCellKey } from '../utils/warningUtils';
 
 type AdminDashboardShift = AdminDashboardDTO['shifts'][number];
 type AdminDashboardAssignment = AdminDashboardDTO['assignments'][number];
@@ -144,7 +144,9 @@ export function ShiftCell({
             const warningTooltip = cellWarnings
               ?.map((warning) => {
                 const label = getWarningLabel(warning);
-                return label === warning.message ? formatWarningMessage(warning, nameById) : label;
+                return label === warning.message
+                  ? formatWarningDescription(warning, nameById)
+                  : label;
               })
               .join(' · ');
 
