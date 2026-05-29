@@ -30,6 +30,10 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
+beforeEach(async () => {
+  await Shift.syncIndexes();
+});
+
 afterEach(async () => {
   await mongoose.connection.dropDatabase();
 });
@@ -437,6 +441,34 @@ describe('fillMissingTemplateShifts', () => {
     expect(first).toEqual({ created: 21, skipped: 0 });
     expect(second).toEqual({ created: 0, skipped: 21 });
     expect(await Shift.countDocuments()).toBe(21);
+  });
+
+  it('materializes template shifts safely under concurrent calls', async () => {
+    const { admin } = await seedAdmin();
+    const schedule = await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await expect(
+      Promise.all([
+        fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1'),
+        fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1'),
+      ])
+    ).resolves.toHaveLength(2);
+
+    const shifts = await Shift.find({ scheduleId: schedule._id }, 'definitionId date').lean();
+    const keys = shifts.map((shift) => `${String(shift.definitionId)}:${shift.date.toISOString()}`);
+
+    expect(shifts).toHaveLength(21);
+    expect(new Set(keys).size).toBe(21);
+
+    const repeated = await fillMissingTemplateShifts(
+      TEST_WEEK,
+      admin._id as mongoose.Types.ObjectId,
+      '127.0.0.1'
+    );
+
+    expect(repeated.created).toBe(0);
+    expect(await Shift.countDocuments({ scheduleId: schedule._id })).toBe(21);
   });
 
   it('fills only missing template shifts for a partial schedule', async () => {
