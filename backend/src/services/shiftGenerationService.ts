@@ -36,6 +36,43 @@ function getShiftDateTimes(
   return { startsAt, endsAt };
 }
 
+function getTemplateShiftKey(shift: { definitionId: unknown; date: Date }): string {
+  return `${String(shift.definitionId)}:${shift.date.toISOString()}`;
+}
+
+function isDuplicateKeyError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+
+  const maybeError = err as { code?: unknown; writeErrors?: unknown };
+  if (maybeError.code === 11000) return true;
+
+  if (!Array.isArray(maybeError.writeErrors)) return false;
+  return maybeError.writeErrors.some((writeError) => {
+    return (
+      typeof writeError === 'object' &&
+      writeError !== null &&
+      (writeError as { code?: unknown }).code === 11000
+    );
+  });
+}
+
+async function countMaterializedTemplateShifts(
+  scheduleId: mongoose.Types.ObjectId,
+  expectedShiftDocs: { definitionId: unknown; date: Date }[],
+  session?: mongoose.ClientSession
+): Promise<number> {
+  const expectedKeys = new Set(expectedShiftDocs.map(getTemplateShiftKey));
+  const existingShifts = await Shift.find({ scheduleId }, 'definitionId date')
+    .session(session || null)
+    .lean();
+
+  const existingKeys = new Set(
+    existingShifts.map((shift) => getTemplateShiftKey(shift)).filter((key) => expectedKeys.has(key))
+  );
+
+  return existingKeys.size;
+}
+
 export async function generateWeekFromBlueprints(
   organizationId: mongoose.Types.ObjectId | string,
   startOfWeekDate: Date,
@@ -190,19 +227,37 @@ export async function fillMissingTemplateShifts(
     })
   );
 
-  const existingShifts = await Shift.find({ scheduleId }, 'definitionId date')
-    .session(session || null)
-    .lean();
-  const existingKeys = new Set(
-    existingShifts.map((shift) => `${String(shift.definitionId)}:${shift.date.toISOString()}`)
-  );
-  const missingShiftDocs = expectedShiftDocs.filter(
-    (shift) => !existingKeys.has(`${String(shift.definitionId)}:${shift.date.toISOString()}`)
-  );
-  const skipped = expectedShiftDocs.length - missingShiftDocs.length;
+  let created = 0;
+  let skipped = expectedShiftDocs.length;
 
-  if (missingShiftDocs.length > 0) {
-    await Shift.insertMany(missingShiftDocs, { session });
+  try {
+    const result = await Shift.bulkWrite(
+      expectedShiftDocs.map((shift) => ({
+        updateOne: {
+          filter: {
+            scheduleId: shift.scheduleId,
+            definitionId: shift.definitionId,
+            date: shift.date,
+          },
+          update: { $setOnInsert: shift },
+          upsert: true,
+        },
+      })),
+      { ordered: false, session }
+    );
+
+    created = result.upsertedCount;
+    skipped = expectedShiftDocs.length - created;
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+    if (session?.inTransaction()) throw err;
+
+    const materializedCount = await countMaterializedTemplateShifts(
+      scheduleId,
+      expectedShiftDocs,
+      session
+    );
+    if (materializedCount !== expectedShiftDocs.length) throw err;
   }
 
   await AuditLog.create(
@@ -212,14 +267,14 @@ export async function fillMissingTemplateShifts(
         action: 'shifts_filled_from_template',
         refModel: 'WeeklySchedule',
         refId: scheduleId,
-        after: { weekId, created: missingShiftDocs.length, skipped },
+        after: { weekId, created, skipped },
         ip,
       },
     ],
     { session }
   );
 
-  return { created: missingShiftDocs.length, skipped };
+  return { created, skipped };
 }
 
 /**

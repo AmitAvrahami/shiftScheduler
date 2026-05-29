@@ -30,6 +30,10 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
+beforeEach(async () => {
+  await Shift.syncIndexes();
+});
+
 afterEach(async () => {
   await mongoose.connection.dropDatabase();
 });
@@ -437,6 +441,84 @@ describe('fillMissingTemplateShifts', () => {
     expect(first).toEqual({ created: 21, skipped: 0 });
     expect(second).toEqual({ created: 0, skipped: 21 });
     expect(await Shift.countDocuments()).toBe(21);
+  });
+
+  it('materializes template shifts safely under concurrent calls', async () => {
+    const { admin } = await seedAdmin();
+    const schedule = await seedSchedule('open');
+    await seedDefinitions(admin._id as mongoose.Types.ObjectId);
+
+    await expect(
+      Promise.all([
+        fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1'),
+        fillMissingTemplateShifts(TEST_WEEK, admin._id as mongoose.Types.ObjectId, '127.0.0.1'),
+      ])
+    ).resolves.toHaveLength(2);
+
+    const shifts = await Shift.find({ scheduleId: schedule._id }, 'definitionId date').lean();
+    const keys = shifts.map((shift) => `${String(shift.definitionId)}:${shift.date.toISOString()}`);
+
+    expect(shifts).toHaveLength(21);
+    expect(new Set(keys).size).toBe(21);
+
+    const repeated = await fillMissingTemplateShifts(
+      TEST_WEEK,
+      admin._id as mongoose.Types.ObjectId,
+      '127.0.0.1'
+    );
+
+    expect(repeated.created).toBe(0);
+    expect(await Shift.countDocuments({ scheduleId: schedule._id })).toBe(21);
+  });
+
+  it('rethrows duplicate-key errors inside an active transaction', async () => {
+    const scheduleId = new mongoose.Types.ObjectId();
+    const definitionId = new mongoose.Types.ObjectId();
+    const actorId = new mongoose.Types.ObjectId();
+    const session = {
+      inTransaction: jest.fn().mockReturnValue(true),
+    } as unknown as mongoose.ClientSession;
+    const duplicateKeyError = Object.assign(new Error('duplicate key'), { code: 11000 });
+
+    const scheduleQuery = {
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: scheduleId, status: 'open' }),
+    };
+    const definitionsQuery = {
+      session: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        {
+          _id: definitionId,
+          startTime: '06:45',
+          endTime: '14:45',
+          crossesMidnight: false,
+          daysOfWeek: [0],
+          requiredStaffCount: 1,
+        },
+      ]),
+    };
+
+    const scheduleFindSpy = jest
+      .spyOn(WeeklySchedule, 'findOne')
+      .mockReturnValue(scheduleQuery as never);
+    const definitionsFindSpy = jest
+      .spyOn(ShiftDefinition, 'find')
+      .mockReturnValue(definitionsQuery as never);
+    const bulkWriteSpy = jest.spyOn(Shift, 'bulkWrite').mockRejectedValueOnce(duplicateKeyError);
+    const findSpy = jest.spyOn(Shift, 'find');
+
+    try {
+      await expect(
+        fillMissingTemplateShifts(TEST_WEEK, actorId, '127.0.0.1', session)
+      ).rejects.toBe(duplicateKeyError);
+      expect(findSpy).not.toHaveBeenCalled();
+    } finally {
+      scheduleFindSpy.mockRestore();
+      definitionsFindSpy.mockRestore();
+      bulkWriteSpy.mockRestore();
+      findSpy.mockRestore();
+    }
   });
 
   it('fills only missing template shifts for a partial schedule', async () => {
