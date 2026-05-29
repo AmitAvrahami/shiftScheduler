@@ -12,10 +12,12 @@ import {
   initializeWeekShifts,
   getWeekShifts,
 } from '../controllers/scheduleController';
+import publishedScheduleRouter from '../modules/publishedSchedule/publishedSchedule.routes';
 
 const router = Router();
 
 router.get('/', verifyToken, getSchedules);
+router.use('/', publishedScheduleRouter);
 router.post('/', verifyToken, isManager, createSchedule);
 router.post('/:weekId/generate', verifyToken, isManager, generateSchedule);
 router.post('/:weekId/generate-demo', verifyToken, isManager, generateDemoSchedule);

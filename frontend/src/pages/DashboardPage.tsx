@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import MaterialIcon from '../components/MaterialIcon';
 import { WeekLabel } from '../components/WeekLabel';
@@ -174,6 +174,14 @@ function WeeklyOverviewCard({ days }: { days: EmployeeDashboardDay[] }) {
           );
         })}
       </div>
+
+      <Link
+        to="/schedule"
+        className="mt-4 h-11 w-full rounded-full bg-primary text-white font-bold transition-colors hover:bg-blue-800 flex items-center justify-center gap-2"
+      >
+        <MaterialIcon name="calendar_view_week" className="text-[18px]" />
+        צפה בסידור המלא
+      </Link>
     </div>
   );
 }

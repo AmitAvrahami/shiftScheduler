@@ -51,6 +51,23 @@ export interface Assignment {
   status: string;
 }
 
+export interface PublishedScheduleView {
+  schedule: {
+    id: string;
+    weekId: string;
+    startDate: string;
+    endDate: string;
+    status: 'published';
+    publishedAt?: string;
+  };
+  shifts: AdminDashboardDTO['shifts'];
+  assignments: AdminDashboardDTO['assignments'];
+  employees: Array<{
+    id: string;
+    name: string;
+  }>;
+}
+
 export interface AuditLogEntry {
   _id: string;
   action: string;
@@ -325,6 +342,10 @@ export const scheduleApi = {
 
   getAll(): Promise<{ success: boolean; schedules: Schedule[] }> {
     return request('/schedules');
+  },
+
+  getPublishedView(scheduleId: string): Promise<{ success: boolean; data: PublishedScheduleView }> {
+    return request(`/schedules/${scheduleId}/published-view`);
   },
 
   create(weekId: string): Promise<{ success: boolean; schedule: Schedule }> {

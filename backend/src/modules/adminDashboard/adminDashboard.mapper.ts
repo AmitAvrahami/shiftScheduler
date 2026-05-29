@@ -97,13 +97,7 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
   }));
 
   // ── Shifts ────────────────────────────────────────────────────────────────
-  const shifts = raw.shifts.map((s) => ({
-    id: String(s._id),
-    day: toDateKey(new Date(s.date)), // local-time YYYY-MM-DD, no ISO-string split
-    type: deriveShiftType(s, defById),
-    requiredEmployees: s.requiredCount,
-    definitionId: String(s.definitionId),
-  }));
+  const shifts = raw.shifts.map((s) => mapShiftToDTO(s, defById));
 
   // ── Assignments ───────────────────────────────────────────────────────────
   const assignments = raw.assignments.map((a) => ({
@@ -192,5 +186,15 @@ export function toAdminDashboardDTO(raw: AdminDashboardRaw): AdminDashboardDTO {
     generationViolations: raw.schedule?.generationViolations ?? [],
     generationScore: raw.schedule?.generationScore ?? null,
     lastGeneratedAt: raw.schedule?.lastGeneratedAt ?? null,
+  };
+}
+
+export function mapShiftToDTO(s: RawShiftDoc, defById: Map<string, RawShiftDefDoc>) {
+  return {
+    id: String(s._id),
+    day: toDateKey(new Date(s.date)), // local-time YYYY-MM-DD, no ISO-string split
+    type: deriveShiftType(s, defById),
+    requiredEmployees: s.requiredCount,
+    definitionId: String(s.definitionId),
   };
 }
