@@ -40,7 +40,9 @@ export async function getPublishedScheduleView(
     );
 
     const employeeIds = [...new Set(assignments.map((assignment) => String(assignment.userId)))];
-    const users = await User.find({ _id: { $in: employeeIds } }).select('_id name').lean();
+    const users = await User.find({ _id: { $in: employeeIds } })
+      .select('_id name')
+      .lean();
 
     const data: PublishedScheduleDTO = {
       schedule: {

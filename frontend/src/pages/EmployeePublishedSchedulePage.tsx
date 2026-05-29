@@ -69,8 +69,7 @@ export default function EmployeePublishedSchedulePage() {
       setData({
         weekId,
         view: viewRes.data,
-        emptyMessage:
-          viewRes.data.assignments.length === 0 ? EMPTY_ASSIGNMENTS : null,
+        emptyMessage: viewRes.data.assignments.length === 0 ? EMPTY_ASSIGNMENTS : null,
       });
     } catch {
       if (requestIdRef.current !== requestId) return;
@@ -84,10 +83,12 @@ export default function EmployeePublishedSchedulePage() {
   }, [user?.role]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     load();
     return () => {
       requestIdRef.current += 1;
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [load]);
 
   const weekId = data?.weekId ?? getCurrentWeekId();
@@ -95,12 +96,7 @@ export default function EmployeePublishedSchedulePage() {
 
   return (
     <MainLayout title="הסידור השבועי המלא" subtitle={<WeekLabel weekId={weekId} />}>
-      <PageDataBoundary
-        loading={loading}
-        error={error}
-        onRetry={load}
-        loadingText="טוען סידור..."
-      >
+      <PageDataBoundary loading={loading} error={error} onRetry={load} loadingText="טוען סידור...">
         <section className="space-y-4" dir="rtl">
           <div>
             <h2 className="text-2xl font-black text-[#010636]">הסידור השבועי המלא</h2>
