@@ -250,6 +250,7 @@ export async function fillMissingTemplateShifts(
     skipped = expectedShiftDocs.length - created;
   } catch (err) {
     if (!isDuplicateKeyError(err)) throw err;
+    if (session?.inTransaction()) throw err;
 
     const materializedCount = await countMaterializedTemplateShifts(
       scheduleId,

@@ -471,6 +471,56 @@ describe('fillMissingTemplateShifts', () => {
     expect(await Shift.countDocuments({ scheduleId: schedule._id })).toBe(21);
   });
 
+  it('rethrows duplicate-key errors inside an active transaction', async () => {
+    const scheduleId = new mongoose.Types.ObjectId();
+    const definitionId = new mongoose.Types.ObjectId();
+    const actorId = new mongoose.Types.ObjectId();
+    const session = {
+      inTransaction: jest.fn().mockReturnValue(true),
+    } as unknown as mongoose.ClientSession;
+    const duplicateKeyError = Object.assign(new Error('duplicate key'), { code: 11000 });
+
+    const scheduleQuery = {
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: scheduleId, status: 'open' }),
+    };
+    const definitionsQuery = {
+      session: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        {
+          _id: definitionId,
+          startTime: '06:45',
+          endTime: '14:45',
+          crossesMidnight: false,
+          daysOfWeek: [0],
+          requiredStaffCount: 1,
+        },
+      ]),
+    };
+
+    const scheduleFindSpy = jest
+      .spyOn(WeeklySchedule, 'findOne')
+      .mockReturnValue(scheduleQuery as never);
+    const definitionsFindSpy = jest
+      .spyOn(ShiftDefinition, 'find')
+      .mockReturnValue(definitionsQuery as never);
+    const bulkWriteSpy = jest.spyOn(Shift, 'bulkWrite').mockRejectedValueOnce(duplicateKeyError);
+    const findSpy = jest.spyOn(Shift, 'find');
+
+    try {
+      await expect(
+        fillMissingTemplateShifts(TEST_WEEK, actorId, '127.0.0.1', session)
+      ).rejects.toBe(duplicateKeyError);
+      expect(findSpy).not.toHaveBeenCalled();
+    } finally {
+      scheduleFindSpy.mockRestore();
+      definitionsFindSpy.mockRestore();
+      bulkWriteSpy.mockRestore();
+      findSpy.mockRestore();
+    }
+  });
+
   it('fills only missing template shifts for a partial schedule', async () => {
     const { admin } = await seedAdmin();
     const schedule = await seedSchedule('open');
