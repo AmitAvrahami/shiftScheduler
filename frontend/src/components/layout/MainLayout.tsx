@@ -14,6 +14,7 @@ interface NavItem {
 const EMPLOYEE_NAV_ITEMS: NavItem[] = [
   { icon: 'dashboard', label: 'לוח בקרה', path: '/dashboard' },
   { icon: 'event_busy', label: 'הגשת אילוצים', path: '/constraints' },
+  { icon: 'calendar_month', label: 'סידור מלא', path: '/schedule' },
 ];
 
 const MANAGER_NAV_ITEMS: NavItem[] = [

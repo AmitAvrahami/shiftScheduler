@@ -11,6 +11,7 @@ import AdminShiftDefinitionsPage from './pages/AdminShiftDefinitionsPage';
 import SchedulesPage from './pages/SchedulesPage';
 import ScheduleBoardPage from './pages/ScheduleBoardPage';
 import AdminWeeklyStaffingPage from './pages/admin/AdminWeeklyStaffingPage';
+import EmployeePublishedSchedulePage from './pages/EmployeePublishedSchedulePage';
 
 function App() {
   return (
@@ -41,6 +42,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConstraintPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/schedule"
+            element={
+              <ProtectedRoute>
+                <EmployeePublishedSchedulePage />
               </ProtectedRoute>
             }
           />
