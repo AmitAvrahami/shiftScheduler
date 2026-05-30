@@ -134,8 +134,10 @@ export default function ConstraintPage() {
     setValidationError('');
   }
 
+  const hasShiftDefinitions = definitions.length > 0;
+
   function handleSubmit() {
-    if (isLocked) return;
+    if (isLocked || !hasShiftDefinitions) return;
 
     const entries: ConstraintEntry[] = [];
     for (const [key, value] of Object.entries(cells)) {
@@ -238,14 +240,14 @@ export default function ConstraintPage() {
             <div className="flex gap-sm w-full md:w-auto">
               <button
                 onClick={handleClear}
-                disabled={!!isLocked}
+                disabled={!!isLocked || !hasShiftDefinitions}
                 className="flex-1 md:flex-none bg-surface-container-high hover:bg-surface-variant text-on-surface font-bold py-sm px-md rounded-lg transition-colors h-12 disabled:opacity-50"
               >
                 ניקוי בחירות
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={isLocked || saveStatus === 'saving'}
+                disabled={!!isLocked || saveStatus === 'saving' || !hasShiftDefinitions}
                 className="flex-1 md:flex-none bg-gradient-to-r from-[#101B79] to-[#056AE5] hover:opacity-90 text-white font-bold py-sm px-lg rounded-lg transition-all shadow-bezeq-float h-12 flex items-center justify-center gap-xs disabled:opacity-50"
               >
                 <MaterialIcon name="send" />
