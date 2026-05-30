@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
@@ -16,7 +16,7 @@ import AuditLog from '../models/AuditLog';
 import { runLockNow } from '../services/cronService';
 import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryReplSet;
 
 // Week 2026-W16: ISO Monday = 2026-04-13
 // Deadline UTC  = 2026-04-13T20:59:59.999Z  (Mon 23:59:59.999 IST)
@@ -26,7 +26,7 @@ const BEFORE_DEADLINE = new Date('2026-04-13T18:00:00.000Z').getTime(); // Mon 2
 const AFTER_DEADLINE = new Date('2026-04-13T21:00:00.000Z').getTime(); // Tue 00:00 IST
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongoServer.getUri());
   process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long';
 });

@@ -11,7 +11,7 @@ import {
   type EmployeeDashboardDay,
   type EmployeeDashboardShift,
 } from '../hooks/useEmployeeDashboardData';
-import { getCurrentWeekId } from '../utils/weekUtils';
+import { getCurrentWeekId, getWeekLabelParts } from '../utils/weekUtils';
 
 /**
  * Hero card displayed at the top of the dashboard, highlighting the next
@@ -68,11 +68,17 @@ function HeroShiftCard({ shift }: { shift: EmployeeDashboardShift | null }) {
 }
 
 /**
- * Card showing the countdown timer until the constraint submission deadline.
+ * Card showing the constraint submission section for the current week.
  *
  * Provides a direct CTA button to open the constraints form.
  */
-function ConstraintCountdownCard({ onClick }: { onClick: () => void }) {
+function ConstraintCountdownCard({
+  onClick,
+  weekNumber,
+}: {
+  onClick: () => void;
+  weekNumber: number;
+}) {
   return (
     <div
       className="bg-surface-container-lowest rounded-xl p-lg shadow-bezeq-card border border-surface-variant flex flex-col justify-between"
@@ -82,23 +88,14 @@ function ConstraintCountdownCard({ onClick }: { onClick: () => void }) {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h4 className="font-bold text-on-surface mb-1">הגשת אילוצים</h4>
-          <p className="text-xs text-on-surface-variant">לשבוע 44</p>
+          <p className="text-xs text-on-surface-variant">לשבוע {weekNumber}</p>
         </div>
         <MaterialIcon name="assignment_late" className="text-secondary text-[24px]" />
       </div>
 
-      {/* Countdown display */}
-      <div className="text-center py-4 bg-error-container/30 rounded-lg border border-error-container mb-4">
-        <p className="text-xs text-on-surface-variant mb-2">הזמן שנותר להגשה</p>
-        <div
-          className="text-error flex justify-center items-baseline gap-1"
-          style={{ fontSize: '32px', lineHeight: 1, fontWeight: 700 }}
-        >
-          <span>2</span>
-          <span className="text-lg font-semibold">ימים</span>
-          <span className="mr-2">14</span>
-          <span className="text-lg font-semibold">שעות</span>
-        </div>
+      {/* Deadline placeholder */}
+      <div className="text-center py-4 bg-surface-container-low rounded-lg border border-surface-variant mb-4">
+        <p className="text-sm text-on-surface-variant">מועד ההגשה יוצג לאחר פתיחת חלון האילוצים</p>
       </div>
 
       {/* CTA */}
@@ -186,48 +183,6 @@ function WeeklyOverviewCard({ days }: { days: EmployeeDashboardDay[] }) {
   );
 }
 
-/**
- * Right-column notifications panel with unread badge and message list.
- */
-export function NotificationsPanel() {
-  return (
-    <section
-      className="bg-surface-container-lowest rounded-xl p-lg shadow-bezeq-card border border-surface-variant"
-      aria-label="הודעות מערכת"
-    >
-      <div className="flex justify-between items-center mb-4 pb-3 border-b border-surface-variant">
-        <h4 className="font-bold text-on-surface flex items-center gap-2">
-          <MaterialIcon name="campaign" className="text-primary text-[22px]" />
-          הודעות מערכת
-        </h4>
-        <span className="bg-error text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-          2 חדשות
-        </span>
-      </div>
-
-      <div className="space-y-4">
-        {/* Unread message */}
-        <div className="p-3 bg-blue-50 rounded-lg border-r-4 border-secondary">
-          <p className="font-bold text-sm text-on-surface mb-1">עדכון נוהל משמרת ערב</p>
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            החל מיום ראשון הקרוב, שעת תחילת משמרת ערב תעודכן ל-15:30.
-          </p>
-          <p className="text-[10px] text-outline mt-2">לפני שעתיים</p>
-        </div>
-
-        {/* Read message */}
-        <div className="p-3 hover:bg-surface-container-low rounded-lg transition-colors border border-transparent">
-          <p className="font-bold text-sm text-on-surface mb-1">אילוצים לשבוע 44</p>
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            אנא זכרו להגיש אילוצים עד יום חמישי ב-12:00.
-          </p>
-          <p className="text-[10px] text-outline mt-2">אתמול</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function DashboardEmptyState({ message }: { message: string }) {
   return (
     <section className="bg-surface-container-lowest rounded-xl p-xl shadow-bezeq-card border border-surface-variant min-h-[160px] flex items-center justify-center text-center">
@@ -290,6 +245,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const dashboard = useEmployeeDashboardData(user?.role === 'employee');
   const emptyMessage = dashboard.data ? getEmptyMessage(dashboard.data) : null;
+  const { weekNumber } = getWeekLabelParts(getCurrentWeekId());
 
   // Redirect admin / manager users to the admin dashboard
   useEffect(() => {
@@ -333,7 +289,10 @@ export default function DashboardPage() {
 
             {/* Two-up bento row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <ConstraintCountdownCard onClick={() => navigate('/constraints')} />
+              <ConstraintCountdownCard
+                onClick={() => navigate('/constraints')}
+                weekNumber={weekNumber}
+              />
               {dashboard.data && !emptyMessage && (
                 <WeeklyOverviewCard days={dashboard.data.weekDays} />
               )}

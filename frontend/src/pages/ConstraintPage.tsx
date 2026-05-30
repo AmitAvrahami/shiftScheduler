@@ -26,49 +26,6 @@ type CellValue = {
 
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
-// Demo fallback shown when no shift definitions exist yet.
-const MOCK_DEFINITIONS: ShiftDefinition[] = [
-  {
-    _id: 'mock-1',
-    name: 'משמרת בוקר',
-    startTime: '08:00',
-    endTime: '16:00',
-    color: '#E3F2FD',
-    orderNumber: 1,
-    durationMinutes: 480,
-    crossesMidnight: false,
-    isActive: true,
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-    requiredStaffCount: 2,
-  },
-  {
-    _id: 'mock-2',
-    name: 'משמרת צהריים',
-    startTime: '16:00',
-    endTime: '00:00',
-    color: '#FFF3E0',
-    orderNumber: 2,
-    durationMinutes: 480,
-    crossesMidnight: false,
-    isActive: true,
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-    requiredStaffCount: 2,
-  },
-  {
-    _id: 'mock-3',
-    name: 'משמרת לילה',
-    startTime: '00:00',
-    endTime: '08:00',
-    color: '#F3E5F5',
-    orderNumber: 3,
-    durationMinutes: 480,
-    crossesMidnight: false,
-    isActive: true,
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-    requiredStaffCount: 1,
-  },
-];
-
 export default function ConstraintPage() {
   const weekId = getAllowedWeekId();
   const weekDates = getWeekDates(weekId);
@@ -96,10 +53,7 @@ export default function ConstraintPage() {
         constraintApi.getConstraints(weekId),
       ]);
 
-      // Fall back to demo definitions when none are configured yet.
-      const definitions = defsRes.definitions.length === 0 ? MOCK_DEFINITIONS : defsRes.definitions;
-
-      setDefinitions(definitions);
+      setDefinitions(defsRes.definitions);
       setIsLocked(constraintRes.isLocked);
       if (constraintRes.isLocked) {
         setLockReason(
@@ -321,52 +275,61 @@ export default function ConstraintPage() {
           )}
 
           {/* Vertical Day Cards Layout */}
-          <div className="flex flex-col gap-md">
-            {weekDates.map((date, dayIdx) => {
-              const dateKey = toDateKey(date);
-              return (
-                <div
-                  key={dateKey}
-                  className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg"
-                >
-                  <div className="w-full md:w-32 shrink-0 border-b md:border-b-0 md:border-l border-outline-variant pb-md md:pb-0 md:pl-md">
-                    <h3 className="text-lg font-black text-primary">{DAY_LABELS[dayIdx]}</h3>
-                    <p className="text-xs text-on-surface-variant font-bold opacity-60">
-                      {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(
-                        date
-                      )}
-                    </p>
+          {definitions.length === 0 ? (
+            <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 px-5 py-4 flex items-center gap-3">
+              <MaterialIcon name="info" className="text-amber-600" />
+              <p className="font-semibold text-amber-700">
+                אין הגדרות משמרות זמינות כרגע. יש לפנות למנהל המערכת.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-md">
+              {weekDates.map((date, dayIdx) => {
+                const dateKey = toDateKey(date);
+                return (
+                  <div
+                    key={dateKey}
+                    className="bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-md flex flex-col md:flex-row items-center gap-lg"
+                  >
+                    <div className="w-full md:w-32 shrink-0 border-b md:border-b-0 md:border-l border-outline-variant pb-md md:pb-0 md:pl-md">
+                      <h3 className="text-lg font-black text-primary">{DAY_LABELS[dayIdx]}</h3>
+                      <p className="text-xs text-on-surface-variant font-bold opacity-60">
+                        {new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' }).format(
+                          date
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">
+                      {definitions.map((def) => {
+                        const cellKey = `${def._id}:${dateKey}`;
+                        const cell = cells[cellKey];
+                        return (
+                          <ShiftCardConstraint
+                            key={def._id}
+                            def={def}
+                            status={cell?.status ?? 'available'}
+                            partial={
+                              cell?.status === 'partial'
+                                ? {
+                                    startTime: cell.startTime ?? def.startTime,
+                                    endTime: cell.endTime ?? def.endTime,
+                                    note: cell.note,
+                                  }
+                                : undefined
+                            }
+                            isLocked={!!isLocked}
+                            onChange={(status, partial) =>
+                              handleCellChange(def._id, dateKey, status, partial)
+                            }
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex-1 w-full flex flex-col sm:flex-row gap-md">
-                    {definitions.map((def) => {
-                      const cellKey = `${def._id}:${dateKey}`;
-                      const cell = cells[cellKey];
-                      return (
-                        <ShiftCardConstraint
-                          key={def._id}
-                          def={def}
-                          status={cell?.status ?? 'available'}
-                          partial={
-                            cell?.status === 'partial'
-                              ? {
-                                  startTime: cell.startTime ?? def.startTime,
-                                  endTime: cell.endTime ?? def.endTime,
-                                  note: cell.note,
-                                }
-                              : undefined
-                          }
-                          isLocked={!!isLocked}
-                          onChange={(status, partial) =>
-                            handleCellChange(def._id, dateKey, status, partial)
-                          }
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Remarks Section */}
           <div className="mt-xl bg-surface-container-lowest rounded-xl shadow-bezeq-card border border-outline-variant p-lg">
