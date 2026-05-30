@@ -138,6 +138,14 @@ async function seedPublishedScheduleView() {
 }
 
 describe('GET /api/v1/schedules/:id/published-view', () => {
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get(
+      `/api/v1/schedules/${new mongoose.Types.ObjectId()}/published-view`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
   it('allows an employee to view the full published schedule without expanded user fields', async () => {
     const {
       employee,
@@ -203,6 +211,9 @@ describe('GET /api/v1/schedules/:id/published-view', () => {
       ])
     );
     expect(res.body.data.employees).toHaveLength(2);
+    expect(
+      res.body.data.employees.map((returnedEmployee: { name: string }) => returnedEmployee.name)
+    ).not.toContain('Unassigned Employee');
     for (const returnedEmployee of res.body.data.employees) {
       expect(returnedEmployee).not.toHaveProperty('role');
       expect(returnedEmployee).not.toHaveProperty('isActive');
@@ -224,6 +235,17 @@ describe('GET /api/v1/schedules/:id/published-view', () => {
     }
   );
 
+  it('returns 403 for an archived schedule', async () => {
+    const { schedule, employeeToken } = await seedPublishedScheduleView();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'archived' });
+
+    const res = await request(app)
+      .get(`/api/v1/schedules/${schedule._id}/published-view`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
   it('returns 404 for a missing schedule', async () => {
     const { employeeToken } = await seedPublishedScheduleView();
 
@@ -232,6 +254,47 @@ describe('GET /api/v1/schedules/:id/published-view', () => {
       .set('Authorization', `Bearer ${employeeToken}`);
 
     expect(res.status).toBe(404);
+  });
+
+  it('includes publishedAt, startDate and endDate in the schedule payload', async () => {
+    const { schedule, employeeToken } = await seedPublishedScheduleView();
+
+    const res = await request(app)
+      .get(`/api/v1/schedules/${schedule._id}/published-view`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.schedule).toMatchObject({
+      publishedAt: '2026-06-06T12:00:00.000Z',
+      startDate: '2026-06-07T00:00:00.000Z',
+      endDate: '2026-06-13T00:00:00.000Z',
+    });
+  });
+
+  it('returns empty arrays for a published schedule with no shifts or assignments', async () => {
+    const employee = await User.create({
+      name: 'Employee',
+      email: 'employee@test.com',
+      password: 'pass12345',
+      role: 'employee',
+    });
+    const schedule = await WeeklySchedule.create({
+      weekId: '2026-W25',
+      startDate: new Date('2026-06-14'),
+      endDate: new Date('2026-06-20'),
+      status: 'published',
+      generatedBy: 'manual',
+      publishedAt: new Date('2026-06-13T12:00:00.000Z'),
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/schedules/${schedule._id}/published-view`)
+      .set('Authorization', `Bearer ${makeToken(employee)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.shifts).toEqual([]);
+    expect(res.body.data.assignments).toEqual([]);
+    expect(res.body.data.employees).toEqual([]);
   });
 
   it('allows a manager to view the same published payload shape', async () => {

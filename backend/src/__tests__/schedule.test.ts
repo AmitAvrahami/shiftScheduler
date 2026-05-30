@@ -11,6 +11,7 @@ import Assignment from '../models/Assignment';
 import ShiftDefinition from '../models/ShiftDefinition';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import SystemSettings from '../models/SystemSettings';
 import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
 let mongoServer: MongoMemoryReplSet;
@@ -261,6 +262,16 @@ describe('GET /api/v1/schedules/:id', () => {
 });
 
 describe('PATCH /api/v1/schedules/:id (status transitions)', () => {
+  it('returns 401 when publishing without a token', async () => {
+    const schedule = await seedDraftSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(401);
+  });
+
   it('returns 403 for employee', async () => {
     const { token } = await seedEmployee();
     const schedule = await seedDraftSchedule();
@@ -271,6 +282,17 @@ describe('PATCH /api/v1/schedules/:id (status transitions)', () => {
     expect(res.status).toBe(403);
   });
 
+  it('returns 404 when publishing a non-existent schedule', async () => {
+    const { token } = await seedManager();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${new mongoose.Types.ObjectId()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(404);
+  });
+
   it('returns 422 for invalid transition (published → draft)', async () => {
     const { token } = await seedManager();
     const schedule = await seedPublishedSchedule();
@@ -278,6 +300,49 @@ describe('PATCH /api/v1/schedules/:id (status transitions)', () => {
       .patch(`/api/v1/schedules/${schedule._id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'draft' });
+    expect(res.status).toBe(422);
+  });
+
+  it('sets publishedAt and publishedBy when a draft is published', async () => {
+    const { manager, token } = await seedManager();
+    const schedule = await seedDraftSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(200);
+
+    const publishedSchedule = await WeeklySchedule.findById(schedule._id);
+    expect(publishedSchedule?.publishedAt).toBeInstanceOf(Date);
+    expect(String(publishedSchedule?.publishedBy)).toBe(String(manager._id));
+  });
+
+  it('upserts workflow_state to schedule_published on publish', async () => {
+    const { token } = await seedManager();
+    const schedule = await seedDraftSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(200);
+
+    const setting = await SystemSettings.findOne({ key: 'workflow_state' });
+    expect(setting?.value).toBe('schedule_published');
+  });
+
+  it('returns 422 when publishing an already-published schedule', async () => {
+    const { token } = await seedManager();
+    const schedule = await seedPublishedSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
     expect(res.status).toBe(422);
   });
 
@@ -298,6 +363,97 @@ describe('PATCH /api/v1/schedules/:id (status transitions)', () => {
 
     const log = await AuditLog.findOne({ action: 'schedule_updated' });
     expect(log).not.toBeNull();
+  });
+
+  it('creates a schedule_published notification only for active employees', async () => {
+    const { token } = await seedManager();
+    const activeEmployee = await User.create({
+      name: 'Active Employee',
+      email: 'active@test.com',
+      password: 'pass12345',
+      role: 'employee',
+    });
+    const otherActiveEmployee = await User.create({
+      name: 'Other Active Employee',
+      email: 'other-active@test.com',
+      password: 'pass12345',
+      role: 'employee',
+    });
+    const inactiveEmployee = await User.create({
+      name: 'Inactive Employee',
+      email: 'inactive@test.com',
+      password: 'pass12345',
+      role: 'employee',
+      isActive: false,
+    });
+    const manager = await User.create({
+      name: 'Other Manager',
+      email: 'other-manager@test.com',
+      password: 'pass12345',
+      role: 'manager',
+    });
+    const admin = await User.create({
+      name: 'Admin',
+      email: 'admin@test.com',
+      password: 'pass12345',
+      role: 'admin',
+    });
+    const schedule = await seedDraftSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(200);
+
+    const notifications = await Notification.find({ type: 'schedule_published' }).lean();
+    expect(notifications).toHaveLength(2);
+    expect(notifications.map((notification) => String(notification.userId)).sort()).toEqual(
+      [String(activeEmployee._id), String(otherActiveEmployee._id)].sort()
+    );
+    expect(notifications.map((notification) => String(notification.userId))).not.toContain(
+      String(inactiveEmployee._id)
+    );
+    expect(notifications.map((notification) => String(notification.userId))).not.toContain(
+      String(manager._id)
+    );
+    expect(notifications.map((notification) => String(notification.userId))).not.toContain(
+      String(admin._id)
+    );
+  });
+
+  it('allows published → archived transition', async () => {
+    const { token } = await seedManager();
+    const schedule = await seedPublishedSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'archived' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.schedule.status).toBe('archived');
+  });
+
+  it('publishes with no active employees and creates no notifications', async () => {
+    const { token } = await seedManager();
+    await User.create({
+      name: 'Inactive Employee',
+      email: 'inactive@test.com',
+      password: 'pass12345',
+      role: 'employee',
+      isActive: false,
+    });
+    const schedule = await seedDraftSchedule();
+
+    const res = await request(app)
+      .patch(`/api/v1/schedules/${schedule._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published' });
+
+    expect(res.status).toBe(200);
+    expect(await Notification.countDocuments({ type: 'schedule_published' })).toBe(0);
   });
 });
 
