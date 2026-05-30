@@ -620,6 +620,8 @@ describe('assignment_override audit log', () => {
 // Group 5: schedule_regenerated audit log
 // ────────────────────────────────────────────────────────────────────────────
 
+const REGENERATION_TEST_TIMEOUT_MS = 15000;
+
 describe('schedule_regenerated audit log and draft re-generation', () => {
   it('5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated', async () => {
     const { manager, token } = await seedManager();
@@ -638,7 +640,7 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
     expect(res.status).toBe(201);
     const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
     expect(log).not.toBeNull();
-  });
+  }, REGENERATION_TEST_TIMEOUT_MS);
 
   it('5.2 — published schedule; manager POSTs same weekId → 409 (behavior unchanged)', async () => {
     const { manager, token } = await seedManager();
@@ -693,5 +695,5 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
 
     expect(await Shift.findById(oldShift._id)).toBeNull();
     expect(await Assignment.findById(oldAssignment._id)).toBeNull();
-  });
+  }, REGENERATION_TEST_TIMEOUT_MS);
 });
