@@ -1,4 +1,4 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import WeeklySchedule from '../models/WeeklySchedule';
 import Shift from '../models/Shift';
@@ -15,10 +15,10 @@ jest.mock('../services/solverClient');
 import { callSolver } from '../services/solverClient';
 const mockCallSolver = callSolver as jest.MockedFunction<typeof callSolver>;
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryReplSet;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongoServer.getUri());
 });
 
@@ -532,5 +532,56 @@ describe('runScheduler — idempotency', () => {
 
     // Exactly 1 total: the fresh algorithm assignment
     expect(await Assignment.countDocuments({ scheduleId: schedule._id })).toBe(1);
+  });
+});
+
+describe('runScheduler — atomic write (transaction)', () => {
+  it('rolls back all solver writes when a later write fails, leaving no partial output', async () => {
+    const { schedule, shift, user } = await seedFullScenario();
+
+    // A pre-existing manager assignment. A successful run would clear it; a
+    // failed run must leave it untouched (proves the deleteMany rolled back).
+    const priorAssignment = await Assignment.create({
+      shiftId: shift._id,
+      userId: user._id,
+      scheduleId: schedule._id,
+      assignedBy: 'manager',
+      status: 'confirmed',
+    });
+
+    mockCallSolver.mockResolvedValueOnce(
+      makeOptimalResult(shift._id.toString(), user._id.toString())
+    );
+
+    // Force a failure on the final write (schedule metadata update). Every
+    // earlier write (assignment delete/insert, shift bulkWrite, audit log) has
+    // already executed inside the transaction and must be rolled back on abort.
+    const updateSpy = jest
+      .spyOn(WeeklySchedule, 'updateOne')
+      .mockRejectedValueOnce(new Error('boom — simulated mid-write failure'));
+
+    await expect(runScheduler(WEEK_ID, ACTOR_ID, '127.0.0.1')).rejects.toThrow('boom');
+
+    updateSpy.mockRestore();
+
+    // Prior assignment survives — the deleteMany was rolled back.
+    expect(await Assignment.findById(priorAssignment._id)).not.toBeNull();
+
+    // No solver output persisted — the insertMany was rolled back.
+    const assignments = await Assignment.find({ scheduleId: schedule._id });
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0].assignedBy).toBe('manager');
+
+    // Shift status unchanged — the bulkWrite was rolled back.
+    const storedShift = await Shift.findById(shift._id);
+    expect(storedShift!.status).toBe('empty');
+
+    // No generation audit log persisted — the AuditLog.create was rolled back.
+    expect(await AuditLog.findOne({ action: 'schedule_generated' })).toBeNull();
+
+    // Schedule metadata untouched — no lastGeneratedAt / warnings written.
+    const storedSchedule = await WeeklySchedule.findById(schedule._id).lean();
+    expect(storedSchedule!.lastGeneratedAt).toBeUndefined();
+    expect(storedSchedule!.generationWarnings ?? []).toHaveLength(0);
   });
 });

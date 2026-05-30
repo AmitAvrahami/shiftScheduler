@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
@@ -36,13 +36,13 @@ import { startSolverStub, SolverStubHandle } from './helpers/solverStubServer';
 
 const WEEK_ID = '2026-W30';
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryReplSet;
 let solverStub: SolverStubHandle;
 let prevSolverUrl: string | undefined;
 let prevSchedulerEngine: string | undefined;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongoServer.getUri());
 
   process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long';

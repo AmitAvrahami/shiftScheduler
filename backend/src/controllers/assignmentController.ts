@@ -72,6 +72,17 @@ export async function createAssignment(
     const shift = await Shift.findById(parsed.data.shiftId);
     if (!shift) return next(new AppError('Shift not found', 404));
 
+    // Lifecycle guard: resolve the schedule through the shift and only allow
+    // new assignments on editable schedules (open/locked/draft). Published/
+    // archived (and the transient generating) are blocked.
+    const schedule = await WeeklySchedule.findById(shift.scheduleId);
+    if (!schedule) return next(new AppError('Schedule not found', 404));
+    if (!['open', 'locked', 'draft'].includes(schedule.status)) {
+      return next(
+        new AppError('לא ניתן להוסיף שיבוץ בסטטוס זה', 422, 'ERR_INVALID_SCHEDULE_STATUS')
+      );
+    }
+
     const user = await User.findById(parsed.data.userId);
     if (!user) return next(new AppError('User not found', 404));
 

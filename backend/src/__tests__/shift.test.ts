@@ -535,4 +535,60 @@ describe('DELETE /api/v1/shifts/:id', () => {
     const log = await AuditLog.findOne({ action: 'shift_deleted' });
     expect(log).not.toBeNull();
   });
+
+  it('rejects deleting a shift in a published schedule and preserves the shift + assignments', async () => {
+    const { manager, published, def, token } = await seedData();
+    const shift = await Shift.create({
+      scheduleId: published._id,
+      definitionId: def._id,
+      date: new Date('2026-05-31'),
+      requiredCount: 2,
+      status: 'filled',
+    });
+    const assignment = await Assignment.create({
+      shiftId: shift._id,
+      userId: manager._id,
+      scheduleId: published._id,
+      assignedBy: 'manager',
+      status: 'confirmed',
+    });
+
+    const res = await request(app)
+      .delete(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('ERR_INVALID_SCHEDULE_STATUS');
+
+    // Data preserved — nothing deleted.
+    expect(await Shift.findById(shift._id)).not.toBeNull();
+    expect(await Assignment.findById(assignment._id)).not.toBeNull();
+    expect(await AuditLog.findOne({ action: 'shift_deleted' })).toBeNull();
+  });
+
+  it('rejects deleting a shift in an archived schedule', async () => {
+    const { def, token } = await seedData();
+    const archived = await WeeklySchedule.create({
+      weekId: '2026-W21',
+      startDate: new Date('2026-05-17'),
+      endDate: new Date('2026-05-23'),
+      status: 'archived',
+      generatedBy: 'manual',
+    });
+    const shift = await Shift.create({
+      scheduleId: archived._id,
+      definitionId: def._id,
+      date: new Date('2026-05-17'),
+      requiredCount: 2,
+      status: 'filled',
+    });
+
+    const res = await request(app)
+      .delete(`/api/v1/shifts/${shift._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('ERR_INVALID_SCHEDULE_STATUS');
+    expect(await Shift.findById(shift._id)).not.toBeNull();
+  });
 });

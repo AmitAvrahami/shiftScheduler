@@ -232,8 +232,9 @@ describe('POST /api/v1/assignments', () => {
     expect(res.status).toBe(404);
   });
 
-  it('manager can create assignment and audit log is created', async () => {
+  it('manager can create assignment on a draft schedule and audit log is created', async () => {
     const { shift, schedule, employee, managerToken } = await seedAll();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'draft' });
     const res = await request(app)
       .post('/api/v1/assignments')
       .set('Authorization', `Bearer ${managerToken}`)
@@ -246,6 +247,41 @@ describe('POST /api/v1/assignments', () => {
     expect(res.status).toBe(201);
     const log = await AuditLog.findOne({ action: 'assignment_created' });
     expect(log).not.toBeNull();
+  });
+
+  it('rejects creating an assignment on a published schedule and writes nothing', async () => {
+    // seedAll() creates the schedule as 'published'.
+    const { shift, schedule, employee, managerToken } = await seedAll();
+    const res = await request(app)
+      .post('/api/v1/assignments')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        shiftId: String(shift._id),
+        userId: String(employee._id),
+        scheduleId: String(schedule._id),
+        assignedBy: 'manager',
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('ERR_INVALID_SCHEDULE_STATUS');
+    expect(await Assignment.countDocuments()).toBe(0);
+    expect(await AuditLog.findOne({ action: 'assignment_created' })).toBeNull();
+  });
+
+  it('rejects creating an assignment on an archived schedule', async () => {
+    const { shift, schedule, employee, managerToken } = await seedAll();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'archived' });
+    const res = await request(app)
+      .post('/api/v1/assignments')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        shiftId: String(shift._id),
+        userId: String(employee._id),
+        scheduleId: String(schedule._id),
+        assignedBy: 'manager',
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('ERR_INVALID_SCHEDULE_STATUS');
+    expect(await Assignment.countDocuments()).toBe(0);
   });
 });
 
