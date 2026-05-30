@@ -100,6 +100,12 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
   }
 }
 
+// Policy (Issue #98): soft-delete only flips `isActive: false`; it intentionally
+// does NOT touch the user's assignments. Historical assignments in published/
+// archived schedules MUST remain intact — the published-view shows historical
+// assignee names by design even after a user is deactivated. Cleaning up or
+// blocking a soft-deleted user's assignments on still-editable (draft) schedules
+// is deferred to a separate follow-up issue and is out of scope here.
 export async function softDeleteUser(
   req: Request,
   res: Response,

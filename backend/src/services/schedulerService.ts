@@ -99,19 +99,14 @@ export async function runScheduler(
     );
   }
 
-  // Phase 4: write — only reached on OPTIMAL, FEASIBLE, or RELAXED
+  // Phase 4: write — only reached on OPTIMAL, FEASIBLE, or RELAXED.
+  // All writes run inside a single transaction so a mid-write failure cannot
+  // leave partial solver output (e.g. assignments cleared but not re-inserted).
 
-  // 4a: regeneration starts from a clean schedule, clearing all prior
-  // assignments including manual edits before writing solver output.
-  await Assignment.deleteMany({ scheduleId });
-
-  // 4b: insert new assignments
+  // 4a (prep): map solver output to assignment docs.
   const assignmentDocs = toAssignmentDocs(result, scheduleId.toString());
-  if (assignmentDocs.length > 0) {
-    await Assignment.insertMany(assignmentDocs);
-  }
 
-  // 4c: update shift statuses
+  // 4b (prep): build shift status bulk ops.
   const countByShift = result.assignments.reduce<Record<string, number>>((acc, a) => {
     acc[a.shift_id] = (acc[a.shift_id] ?? 0) + 1;
     return acc;
@@ -130,14 +125,11 @@ export async function runScheduler(
       },
     },
   }));
-  if (bulkOps.length > 0) {
-    await Shift.bulkWrite(bulkOps);
-  }
 
-  // 4d: build the quality score (PR10). qualityScore is intentionally omitted
-  // until a normalized formula is defined; totalPenalty is the v1 metric and
-  // counts soft-constraint penalties only (relaxation penalties are excluded by
-  // the solver). Shares its timestamp with lastGeneratedAt below.
+  // 4c (prep): build the quality score (PR10). qualityScore is intentionally
+  // omitted until a normalized formula is defined; totalPenalty is the v1 metric
+  // and counts soft-constraint penalties only (relaxation penalties are excluded
+  // by the solver). Shares its timestamp with lastGeneratedAt below.
   const generatedAt = new Date();
   const generationScore: GenerationScore = {
     totalPenalty: result.total_penalty ?? 0,
@@ -145,40 +137,71 @@ export async function runScheduler(
     generatedAt,
   };
 
-  // 4e: audit log
-  await AuditLog.create({
-    performedBy: actorId,
-    action: 'schedule_generated',
-    refModel: 'WeeklySchedule',
-    refId: scheduleId,
-    after: {
-      weekId,
-      solverStatus: result.status,
-      assignmentCount: assignmentDocs.length,
-      solveTimeMs: result.solve_time_ms,
-      warnings: result.warnings,
-      violations: result.violations,
-      score: {
-        totalPenalty: generationScore.totalPenalty,
-        breakdown: generationScore.breakdown,
-      },
-    },
-    ip,
-  });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // 4d: regeneration starts from a clean schedule, clearing all prior
+    // assignments including manual edits before writing solver output.
+    await Assignment.deleteMany({ scheduleId }, { session });
 
-  // 4f: persist latest solver warnings/violations and quality score on the
-  // schedule so they survive reloads and stay visible (non-blocking, display-only)
-  await WeeklySchedule.updateOne(
-    { _id: scheduleId },
-    {
-      $set: {
-        generationWarnings: result.warnings,
-        generationViolations: result.violations,
-        generationScore,
-        lastGeneratedAt: generatedAt,
-      },
+    // 4e: insert new assignments
+    if (assignmentDocs.length > 0) {
+      await Assignment.insertMany(assignmentDocs, { session });
     }
-  );
+
+    // 4f: update shift statuses
+    if (bulkOps.length > 0) {
+      await Shift.bulkWrite(bulkOps, { session });
+    }
+
+    // 4g: audit log
+    await AuditLog.create(
+      [
+        {
+          performedBy: actorId,
+          action: 'schedule_generated',
+          refModel: 'WeeklySchedule',
+          refId: scheduleId,
+          after: {
+            weekId,
+            solverStatus: result.status,
+            assignmentCount: assignmentDocs.length,
+            solveTimeMs: result.solve_time_ms,
+            warnings: result.warnings,
+            violations: result.violations,
+            score: {
+              totalPenalty: generationScore.totalPenalty,
+              breakdown: generationScore.breakdown,
+            },
+          },
+          ip,
+        },
+      ],
+      { session }
+    );
+
+    // 4h: persist latest solver warnings/violations and quality score on the
+    // schedule so they survive reloads and stay visible (non-blocking, display-only)
+    await WeeklySchedule.updateOne(
+      { _id: scheduleId },
+      {
+        $set: {
+          generationWarnings: result.warnings,
+          generationViolations: result.violations,
+          generationScore,
+          lastGeneratedAt: generatedAt,
+        },
+      },
+      { session }
+    );
+
+    await session.commitTransaction();
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 
   return {
     status: result.status,

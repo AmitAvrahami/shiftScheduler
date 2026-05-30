@@ -1,4 +1,4 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import WeeklySchedule from '../models/WeeklySchedule';
 import Shift from '../models/Shift';
@@ -31,13 +31,13 @@ const ACTOR_ID = new mongoose.Types.ObjectId('000000000000000000000001');
 const SUNDAY_LOCAL = new Date(2026, 5, 14, 0, 0, 0, 0);
 const SUNDAY_DATE_KEY = '2026-06-14';
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryReplSet;
 let solverStub: SolverStubHandle;
 let prevSolverUrl: string | undefined;
 let prevSchedulerEngine: string | undefined;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongoServer.getUri());
 
   solverStub = await startSolverStub();

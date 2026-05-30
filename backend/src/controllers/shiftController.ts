@@ -433,6 +433,17 @@ export async function deleteShift(req: Request, res: Response, next: NextFunctio
     const shift = await Shift.findById(req.params.id);
     if (!shift) return next(new AppError('Shift not found', 404));
 
+    // Lifecycle guard: only editable schedules (open/locked/draft) may have
+    // shifts deleted. Published/archived (and the transient generating) are
+    // blocked. Mirrors updateShiftRequirement.
+    const schedule = await WeeklySchedule.findById(shift.scheduleId);
+    if (!schedule) return next(new AppError('Schedule not found', 404));
+    if (!['open', 'locked', 'draft'].includes(schedule.status)) {
+      return next(
+        new AppError('לא ניתן למחוק משמרת בסטטוס זה', 422, 'ERR_INVALID_SCHEDULE_STATUS')
+      );
+    }
+
     await Assignment.deleteMany({ shiftId: shift._id });
     await Shift.findByIdAndDelete(shift._id);
 
