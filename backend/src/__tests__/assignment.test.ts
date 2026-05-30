@@ -283,6 +283,36 @@ describe('POST /api/v1/assignments', () => {
     expect(res.body.code).toBe('ERR_INVALID_SCHEDULE_STATUS');
     expect(await Assignment.countDocuments()).toBe(0);
   });
+
+  it('rejects a body scheduleId that does not match the shift scheduleId', async () => {
+    // The shift lives on an editable (draft) schedule, but the body points at a
+    // different schedule. The mismatch must be rejected before anything is
+    // persisted, so a draft shift cannot be used to write under another schedule.
+    const { shift, schedule, employee, managerToken } = await seedAll();
+    await WeeklySchedule.findByIdAndUpdate(schedule._id, { status: 'draft' });
+    const otherSchedule = await WeeklySchedule.create({
+      weekId: '2026-W25',
+      startDate: new Date('2026-06-14'),
+      endDate: new Date('2026-06-20'),
+      status: 'published',
+      generatedBy: 'manual',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/assignments')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        shiftId: String(shift._id),
+        userId: String(employee._id),
+        scheduleId: String(otherSchedule._id),
+        assignedBy: 'manager',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ERR_ASSIGNMENT_SCHEDULE_MISMATCH');
+    expect(await Assignment.countDocuments()).toBe(0);
+    expect(await AuditLog.findOne({ action: 'assignment_created' })).toBeNull();
+  });
 });
 
 describe('GET /api/v1/assignments/:id', () => {

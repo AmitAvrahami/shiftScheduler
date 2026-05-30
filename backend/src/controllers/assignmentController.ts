@@ -72,6 +72,20 @@ export async function createAssignment(
     const shift = await Shift.findById(parsed.data.shiftId);
     if (!shift) return next(new AppError('Shift not found', 404));
 
+    // The shift is the source of truth for which schedule an assignment belongs
+    // to. Reject a request whose body scheduleId disagrees with the shift, so a
+    // client cannot pass the lifecycle guard via a draft shift while persisting
+    // the assignment under a published/archived schedule.
+    if (String(parsed.data.scheduleId) !== String(shift.scheduleId)) {
+      return next(
+        new AppError(
+          'Assignment scheduleId must match shift scheduleId',
+          400,
+          'ERR_ASSIGNMENT_SCHEDULE_MISMATCH'
+        )
+      );
+    }
+
     // Lifecycle guard: resolve the schedule through the shift and only allow
     // new assignments on editable schedules (open/locked/draft). Published/
     // archived (and the transient generating) are blocked.
@@ -86,15 +100,21 @@ export async function createAssignment(
     const user = await User.findById(parsed.data.userId);
     if (!user) return next(new AppError('User not found', 404));
 
-    const assignment = await Assignment.create(parsed.data);
+    // Persist with the shift's scheduleId as the source of truth.
+    const assignmentPayload = {
+      ...parsed.data,
+      scheduleId: shift.scheduleId,
+    };
+
+    const assignment = await Assignment.create(assignmentPayload);
 
     await AuditLog.create({
       performedBy: req.user!._id,
       action: 'assignment_created',
-      targetUserId: parsed.data.userId,
+      targetUserId: assignmentPayload.userId,
       refModel: 'Assignment',
       refId: assignment._id,
-      after: parsed.data,
+      after: assignmentPayload,
       ip: req.ip,
     });
 
