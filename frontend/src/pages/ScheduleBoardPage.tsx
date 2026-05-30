@@ -468,6 +468,7 @@ export default function ScheduleBoardPage() {
               onRemoveEmployee={(assignmentId) => performRemoveWithUndo(assignmentId)}
               onMoveAssignment={handleMoveAssignment}
               dragDisabled={refreshing}
+              readOnly={!isDraft}
             />
           )}
         </div>

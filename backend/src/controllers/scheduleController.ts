@@ -44,11 +44,35 @@ const updateSchema = z.object({
     .optional(),
 });
 
-async function cascadeDeleteSchedule(scheduleId: mongoose.Types.ObjectId): Promise<void> {
-  const shiftIds = await Shift.find({ scheduleId }, '_id').lean();
-  await Assignment.deleteMany({ shiftId: { $in: shiftIds.map((s) => s._id) } });
-  await Shift.deleteMany({ scheduleId });
-  await WeeklySchedule.findByIdAndDelete(scheduleId);
+async function cascadeDeleteSchedule(
+  scheduleId: mongoose.Types.ObjectId,
+  externalSession?: mongoose.ClientSession
+): Promise<void> {
+  const runDeletes = async (session: mongoose.ClientSession) => {
+    // Assignment.scheduleId is a required field on the model, so deleting by
+    // scheduleId also catches any orphaned assignments whose shiftId reference
+    // is already dangling — safer than filtering by Shift._id alone.
+    await Assignment.deleteMany({ scheduleId }, { session });
+    await Shift.deleteMany({ scheduleId }, { session });
+    await WeeklySchedule.findByIdAndDelete(scheduleId, { session });
+  };
+
+  if (externalSession) {
+    await runDeletes(externalSession);
+    return;
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await runDeletes(session);
+    await session.commitTransaction();
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 }
 
 async function assertActiveShiftTemplates(): Promise<void> {

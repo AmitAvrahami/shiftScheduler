@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
@@ -16,7 +16,7 @@ import AuditLog from '../models/AuditLog';
 import { runLockNow } from '../services/cronService';
 import { seedDefaultShiftDefinitions } from './helpers/shiftDefinitions';
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryReplSet;
 
 // Week 2026-W16: ISO Monday = 2026-04-13
 // Deadline UTC  = 2026-04-13T20:59:59.999Z  (Mon 23:59:59.999 IST)
@@ -26,7 +26,7 @@ const BEFORE_DEADLINE = new Date('2026-04-13T18:00:00.000Z').getTime(); // Mon 2
 const AFTER_DEADLINE = new Date('2026-04-13T21:00:00.000Z').getTime(); // Tue 00:00 IST
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongoServer.getUri());
   process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long';
 });
@@ -620,25 +620,31 @@ describe('assignment_override audit log', () => {
 // Group 5: schedule_regenerated audit log
 // ────────────────────────────────────────────────────────────────────────────
 
+const REGENERATION_TEST_TIMEOUT_MS = 15000;
+
 describe('schedule_regenerated audit log and draft re-generation', () => {
-  it('5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated', async () => {
-    const { manager, token } = await seedManager();
-    await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
-    await WeeklySchedule.create({
-      weekId: '2026-W20',
-      startDate: new Date('2026-05-10'),
-      endDate: new Date('2026-05-16'),
-      status: 'draft',
-      generatedBy: 'manual',
-    });
-    const res = await request(app)
-      .post('/api/v1/schedules')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ weekId: '2026-W20', generatedBy: 'auto' });
-    expect(res.status).toBe(201);
-    const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
-    expect(log).not.toBeNull();
-  });
+  it(
+    '5.1 — draft exists; manager POSTs same weekId → 201 and AuditLog schedule_regenerated',
+    async () => {
+      const { manager, token } = await seedManager();
+      await seedDefaultShiftDefinitions(manager._id as mongoose.Types.ObjectId);
+      await WeeklySchedule.create({
+        weekId: '2026-W20',
+        startDate: new Date('2026-05-10'),
+        endDate: new Date('2026-05-16'),
+        status: 'draft',
+        generatedBy: 'manual',
+      });
+      const res = await request(app)
+        .post('/api/v1/schedules')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ weekId: '2026-W20', generatedBy: 'auto' });
+      expect(res.status).toBe(201);
+      const log = await AuditLog.findOne({ action: 'schedule_regenerated' });
+      expect(log).not.toBeNull();
+    },
+    REGENERATION_TEST_TIMEOUT_MS
+  );
 
   it('5.2 — published schedule; manager POSTs same weekId → 409 (behavior unchanged)', async () => {
     const { manager, token } = await seedManager();
@@ -657,41 +663,45 @@ describe('schedule_regenerated audit log and draft re-generation', () => {
     expect(res.status).toBe(409);
   });
 
-  it('5.3 — regeneration cascades: old shift and assignment are gone from DB', async () => {
-    const { manager, token } = await seedManager();
-    const { morning: def } = await seedDefaultShiftDefinitions(
-      manager._id as mongoose.Types.ObjectId
-    );
-    const { employee } = await seedEmployee();
+  it(
+    '5.3 — regeneration cascades: old shift and assignment are gone from DB',
+    async () => {
+      const { manager, token } = await seedManager();
+      const { morning: def } = await seedDefaultShiftDefinitions(
+        manager._id as mongoose.Types.ObjectId
+      );
+      const { employee } = await seedEmployee();
 
-    const oldSchedule = await WeeklySchedule.create({
-      weekId: '2026-W20',
-      startDate: new Date('2026-05-10'),
-      endDate: new Date('2026-05-16'),
-      status: 'draft',
-      generatedBy: 'manual',
-    });
-    const oldShift = await Shift.create({
-      scheduleId: oldSchedule._id,
-      definitionId: def._id,
-      date: new Date('2026-05-10'),
-      requiredCount: 1,
-      status: 'empty',
-    });
-    const oldAssignment = await Assignment.create({
-      shiftId: oldShift._id,
-      userId: employee._id,
-      scheduleId: oldSchedule._id,
-      assignedBy: 'algorithm',
-      status: 'pending',
-    });
+      const oldSchedule = await WeeklySchedule.create({
+        weekId: '2026-W20',
+        startDate: new Date('2026-05-10'),
+        endDate: new Date('2026-05-16'),
+        status: 'draft',
+        generatedBy: 'manual',
+      });
+      const oldShift = await Shift.create({
+        scheduleId: oldSchedule._id,
+        definitionId: def._id,
+        date: new Date('2026-05-10'),
+        requiredCount: 1,
+        status: 'empty',
+      });
+      const oldAssignment = await Assignment.create({
+        shiftId: oldShift._id,
+        userId: employee._id,
+        scheduleId: oldSchedule._id,
+        assignedBy: 'algorithm',
+        status: 'pending',
+      });
 
-    await request(app)
-      .post('/api/v1/schedules')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ weekId: '2026-W20', generatedBy: 'auto' });
+      await request(app)
+        .post('/api/v1/schedules')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ weekId: '2026-W20', generatedBy: 'auto' });
 
-    expect(await Shift.findById(oldShift._id)).toBeNull();
-    expect(await Assignment.findById(oldAssignment._id)).toBeNull();
-  });
+      expect(await Shift.findById(oldShift._id)).toBeNull();
+      expect(await Assignment.findById(oldAssignment._id)).toBeNull();
+    },
+    REGENERATION_TEST_TIMEOUT_MS
+  );
 });
